@@ -84,12 +84,12 @@ if arquivo_excel:
                 break
         
         if not nome_aba_graficos:
-            nome_aba_graficos = lista_abas_reais[0]
+            nome_aba_graficos = lista_abas_reais
             
         df_raw = pd.read_excel(arquivo_excel, sheet_name=nome_aba_graficos, header=0, engine="openpyxl")
         df_raw.columns = df_raw.columns.astype(str).str.strip().str.upper()
         
-        # Mapeamento dinâmico das colunas para evitar erros de posição
+        # Mapeamento das colunas por índice
         df_base = pd.DataFrame()
         df_base["SIGLA"] = df_raw.iloc[:, 0]
         df_base["SETOR"] = df_raw.iloc[:, 1]
@@ -97,13 +97,13 @@ if arquivo_excel:
         df_base["STATUS"] = df_raw.iloc[:, 4] if df_raw.shape[1] > 4 else "Não Informado"
         df_base["SIT_PRAZO"] = df_raw.iloc[:, 5] if df_raw.shape[1] > 5 else "Não Informado"
         
-        # Limpeza de strings e remoção de valores inválidos/vazios
+        # Limpeza de strings e substituição de textos sem informação por valores nulos reais
         for col in df_base.columns:
             df_base[col] = df_base[col].astype(str).str.strip().replace(
                 ["0", "0.0", "nan", "None", "NAN", "", "nan nan", "NÃO INFORMADO"], None
             )
         
-        # REMOÇÃO ESTRITA DE LINHAS SEM INFORMAÇÃO CRUCIAL
+        # Remoção estrita de registros vazios nas colunas principais para limpar os gráficos
         df_base = df_base.dropna(subset=["STATUS", "SIGLA"], how="all")
         df_base = df_base[~df_base["STATUS"].astype(str).str.contains("#", na=False)]
         df_base = df_base[~df_base["SIT_PRAZO"].astype(str).str.contains("#", na=False)]
@@ -116,9 +116,9 @@ if not df_base.empty:
     st.sidebar.markdown("---")
     st.sidebar.subheader("🎛️ Filtros de Visualização")
     
-    # Filtrando responsáveis válidos
+    # Filtrando responsáveis e removendo os nulos
     responsaveis_validos = df_base["RESPONSAVEL"].dropna().unique()
-    lista_responsaveis = sorted([str(r) for r in responsveis_validos])
+    lista_responsaveis = sorted([str(r) for r in responsaveis_validos])
     lista_responsaveis.insert(0, "Todos")
     responsavel_selecionado = st.sidebar.selectbox("Selecione o Responsável:", lista_responsaveis)
     
@@ -126,14 +126,14 @@ if not df_base.empty:
     if responsavel_selecionado != "Todos":
         df_filtrado = df_base[df_base["RESPONSAVEL"] == responsavel_selecionado]
         
-    # Painel Lateral de contagem resumida
+    # Painel Lateral de contagem resumida por documento
     st.sidebar.markdown("---")
     st.sidebar.subheader("📋 Qtd por Documento (Sigla)")
-    df_lateral_contagem = df_filtrado["SIGLA"].value_counts().reset_index()
+    df_lateral_contagem = df_filtrado["SIGLA"].dropna().value_counts().reset_index()
     df_lateral_contagem.columns = ["Documento", "Qtd"]
     st.sidebar.dataframe(df_lateral_contagem, use_container_width=True, hide_index=True)
     
-    # Customização de cores e tipos de gráficos
+    # Customização de cores e tipos de gráficos na barra lateral
     st.sidebar.markdown("---")
     st.sidebar.subheader("🎨 Configuração dos Gráficos")
     
@@ -159,9 +159,9 @@ if not df_base.empty:
     kpi_col1, kpi_col2, kpi_col3, kpi_col4, kpi_col5 = st.columns(5)
     with kpi_col1: st.metric(label="📄 TOTAL DOCUMENTOS", value=f"{total_docs}")
     with kpi_col2: st.metric(label="✅ APROVADOS", value=f"{aprovados}")
-    with kpi_col3: st.metric(label="⏳ MÉDIA 1º VERF.", value=f"{media_v1:.1f} d")
-    with kpi_col4: st.metric(label="⏳ MÉDIA 2º VERF.", value=f"{media_v2:.1f} d")
-    with kpi_col5: st.metric(label="⏳ MÉDIA 3º VERF. (AAA)", value=f"{media_aaa:.1f} d")
+    with kpi_col3: st.metric(label="⏳ 1º VERF.", value=f"{media_v1:.1f} d")
+    with kpi_col4: st.metric(label="⏳ 2º VERF.", value=f"{media_v2:.1f} d")
+    with kpi_col5: st.metric(label="⏳ 3º VERF.", value=f"{media_aaa:.1f} d")
     
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("📊 Painel Executivo NAQH — Resultados Finais")
@@ -178,23 +178,20 @@ if not df_base.empty:
         else:
             st.line_chart(dados, color=cor)
 
-    #--- 5. PROCESSAMENTO E RENDERIZAÇÃO DOS NOVOS GRÁFICOS ---
-    
+    #--- 5. PROCESSAMENTO E RENDERIZAÇÃO REAL DOS GRÁFICOS ---
     linha1_col1, linha1_col2 = st.columns(2)
     
     with linha1_col1:
         st.markdown("### 1. Nº de Documentos por Status")
-        # Conta apenas status válidos informados
         dados_g1 = df_filtrado["STATUS"].dropna().value_counts()
         renderizar_grafico_seguro(dados_g1, t_g1, c_g1_color)
         
     with linha1_col2:
         st.markdown("### 2. Tempo de Análise em Dias")
-        # Gráfico comparativo das médias de verificação calculadas
         dados_g2 = pd.Series({
             "1º Verf.": media_v1,
             "2º Verf.": media_v2,
-            "3º Verf. (AAA)": media_aaa,
+            "3º Verf.": media_aaa,
             "Total Estimado": (media_v1 + media_v2 + media_aaa)
         })
         renderizar_grafico_seguro(dados_g2, t_g2, c_g2_color)
@@ -205,17 +202,19 @@ if not df_base.empty:
     
     with linha2_col1:
         st.markdown("### 3. Nº de Doc. Aprovados por Profissional (Individual)")
-        # Filtra apenas os registros que estão com status aprovado e possuem responsável
         df_aprovados = df_filtrado[df_filtrado["STATUS"].astype(str).str.upper().str.contains("APROVADO|OK|SIM", regex=True)]
         dados_g3 = df_aprovados["RESPONSAVEL"].dropna().value_counts()
         renderizar_grafico_seguro(dados_g3, t_g3, c_g3_color)
         
     with linha2_col2:
         st.markdown("### 4. Nº de Documentos (Validade/Prazo)")
-        # Mapeia e limpa a coluna de prazos
         dados_g4 = df_filtrado["SIT_PRAZO"].dropna().value_counts()
         renderizar_grafico_seguro(dados_g4, t_g4, c_g4_color)
         
     st.markdown("---")
     
-    st.markdown("### 5. Tipo de Documento (Sigla) x Status Normativo")
+    st.markdown("### 5. Tipo de Documento x Status Normativo")
+    # Agrupamento e cruzamento matricial de dois eixos limpos de valores nulos
+    df_g5_limpo = df_filtrado.dropna(subset=["SIGLA", "STATUS"])
+    if not df_g5_limpo.empty:
+        df_g5 = df_g5_limpo.groupby(["SIGLA", "STATUS"]).size().unstack(fill_value=0)
