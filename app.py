@@ -90,8 +90,8 @@ if arquivo_excel:
             df_raw = pd.read_excel(arquivo_excel, sheet_name=nome_aba_graficos, header=0, engine="openpyxl")
             df_raw.columns = df_raw.columns.astype(str).str.strip().str.upper()
             
-            # CORREÇÃO CRÍTICA: Utilizado .shape[1] para verificar quantidade de colunas e evitar o erro do print
-            num_colunas = df_raw.shape[1]
+            # Correção para obter o número exato de colunas mapeadas
+            num_colunas = len(df_raw.columns)
             df_base = pd.DataFrame()
             df_base["SIGLA"] = df_raw.iloc[:, 0] if num_colunas > 0 else None
             df_base["SETOR"] = df_raw.iloc[:, 1] if num_colunas > 1 else None
@@ -99,13 +99,12 @@ if arquivo_excel:
             df_base["STATUS"] = df_raw.iloc[:, 4] if num_colunas > 4 else "Não Informado"
             df_base["SIT_PRAZO"] = df_raw.iloc[:, 5] if num_colunas > 5 else "Não Informado"
             
-            # Limpeza de strings e substituição de textos sem informação por valores nulos reais
+            # Limpeza e tratamento de nulos
             for col in df_base.columns:
                 df_base[col] = df_base[col].astype(str).str.strip().replace(
                     ["0", "0.0", "nan", "None", "NAN", "", "nan nan", "NÃO INFORMADO"], None
                 )
             
-            # Remoção estrita de registros vazios nas colunas principais para limpar os gráficos
             df_base = df_base.dropna(subset=["STATUS", "SIGLA"], how="all")
             df_base = df_base[~df_base["STATUS"].astype(str).str.contains("#", na=False)]
             df_base = df_base[~df_base["SIT_PRAZO"].astype(str).str.contains("#", na=False)]
@@ -118,7 +117,6 @@ if not df_base.empty:
     st.sidebar.markdown("---")
     st.sidebar.subheader("🎛️ Filtros de Visualização")
     
-    # Filtrando responsáveis e removendo os nulos
     responsaveis_validos = df_base["RESPONSAVEL"].dropna().unique()
     lista_responsaveis = sorted([str(r) for r in responsaveis_validos])
     lista_responsaveis.insert(0, "Todos")
@@ -128,14 +126,12 @@ if not df_base.empty:
     if responsavel_selecionado != "Todos":
         df_filtrado = df_base[df_base["RESPONSAVEL"] == responsavel_selecionado]
         
-    # Painel Lateral de contagem resumida por documento
     st.sidebar.markdown("---")
     st.sidebar.subheader("📋 Qtd por Documento (Sigla)")
     df_lateral_contagem = df_filtrado["SIGLA"].dropna().value_counts().reset_index()
     df_lateral_contagem.columns = ["Documento", "Qtd"]
     st.sidebar.dataframe(df_lateral_contagem, use_container_width=True, hide_index=True)
     
-    # Customização de cores e tipos de gráficos na barra lateral
     st.sidebar.markdown("---")
     st.sidebar.subheader("🎨 Configuração dos Gráficos")
     
@@ -145,14 +141,8 @@ if not df_base.empty:
     t_g2 = st.sidebar.selectbox("G2 - Visualização:", ["Horizontal", "Vertical", "Linha"], key="t2")
     c_g2_color = st.sidebar.color_picker("G2 - Cor:", "#38BDF8", key="c2")
     
-    t_g3 = st.sidebar.selectbox("G3 - Visualização:", ["Horizontal", "Vertical", "Linha"], key="t3")
-    c_g3_color = st.sidebar.color_picker("G3 - Cor:", "#34D399", key="c3")
-    
     t_g4 = st.sidebar.selectbox("G4 - Visualização:", ["Horizontal", "Vertical", "Linha"], key="t4")
     c_g4_color = st.sidebar.color_picker("G4 - Cor:", "#C084FC", key="c4")
-    
-    t_g5 = st.sidebar.selectbox("G5 - Visualização:", ["Horizontal", "Vertical", "Linha"], key="t5")
-    c_g5_color = st.sidebar.color_picker("G5 - Cor:", "#FB923C", key="c5")
 
     #--- 4. INDICADORES DO TOPO (CARDS KPIs) ---
     total_docs = len(df_filtrado)
@@ -168,7 +158,7 @@ if not df_base.empty:
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("📊 Painel Executivo NAQH — Resultados Finais")
     
-    #--- FUNÇÃO DE PLOTAGEM ---
+    #--- FUNÇÃO DE PLOTAGEM SEGURA ---
     def renderizar_grafico_seguro(dados, tipo, cor):
         if dados.empty:
             st.warning("Sem dados válidos para exibir.")
@@ -184,16 +174,12 @@ if not df_base.empty:
     linha1_col1, linha1_col2 = st.columns(2)
     
     with linha1_col1:
-        # REMOVIDO: O número "1." do título
         st.markdown("### Nº de Documentos por Status")
         dados_g1 = df_filtrado["STATUS"].dropna().value_counts()
-        
-        # MODIFICAÇÃO: Filtrando para retirar o item 'CANCELADO' ou variações deste gráfico
         dados_g1 = dados_g1[~dados_g1.index.astype(str).str.upper().str.contains("CANCELADO", na=False)]
         renderizar_grafico_seguro(dados_g1, t_g1, c_g1_color)
         
     with linha1_col2:
-        # REMOVIDO: O número "2." do título
         st.markdown("### Tempo de Análise em Dias")
         dados_g2 = pd.Series({
             "1º Verf.": media_v1,
@@ -208,8 +194,27 @@ if not df_base.empty:
     linha2_col1, linha2_col2 = st.columns(2)
     
     with linha2_col1:
-        # REMOVIDO: O número "3." do título
         st.markdown("### Documentos por Responsável e Status de Aprovação")
-        # Gráfico que cruza os responsáveis e o status dos seus respectivos documentos
+        # Estrutura simplificada sem blocos complexos de if/else internos para evitar erros de recuo
         df_g3_limpo = df_filtrado.dropna(subset=["RESPONSAVEL", "STATUS"])
-        if not df_g3_limpo.empty:
+        df_g3 = df_g3_limpo.groupby(["RESPONSAVEL", "STATUS"]).size().unstack(fill_value=0)
+        st.bar_chart(df_g3, stack=True)
+        
+    with linha2_col2:
+        st.markdown("### Nº de Documentos (Validade/Prazo)")
+        dados_g4 = df_filtrado["SIT_PRAZO"].dropna().value_counts()
+        renderizar_grafico_seguro(dados_g4, t_g4, c_g4_color)
+        
+    st.markdown("---")
+    
+    st.markdown("### Tipo de Documento x Status Normativo")
+    df_g5_limpo = df_filtrado.dropna(subset=["SIGLA", "STATUS"])
+    df_g5 = df_g5_limpo.groupby(["SIGLA", "STATUS"]).size().unstack(fill_value=0)
+    st.bar_chart(df_g5, stack=True)
+
+    #--- 7. TABELA DETALHADA NO FINAL ---
+    st.markdown("---")
+    st.markdown("### 📄 Visão Geral dos Dados Filtrados")
+    st.dataframe(df_filtrado.dropna(subset=["SIGLA"]), use_container_width=True, hide_index=True)
+else:
+    st.info("💡 Por favor, carregue uma planilha válida no menu lateral para visualizar o painel.")
