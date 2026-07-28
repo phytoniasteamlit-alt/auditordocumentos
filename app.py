@@ -84,29 +84,31 @@ if arquivo_excel:
                 break
         
         if not nome_aba_graficos:
-            nome_aba_graficos = lista_abas_reais
+            nome_aba_graficos = lista_abas_reais[0] if lista_abas_reais else None
             
-        df_raw = pd.read_excel(arquivo_excel, sheet_name=nome_aba_graficos, header=0, engine="openpyxl")
-        df_raw.columns = df_raw.columns.astype(str).str.strip().str.upper()
-        
-        # Mapeamento das colunas por índice
-        df_base = pd.DataFrame()
-        df_base["SIGLA"] = df_raw.iloc[:, 0]
-        df_base["SETOR"] = df_raw.iloc[:, 1]
-        df_base["RESPONSAVEL"] = df_raw.iloc[:, 3] if df_raw.shape > 3 else "Não Informado"
-        df_base["STATUS"] = df_raw.iloc[:, 4] if df_raw.shape > 4 else "Não Informado"
-        df_base["SIT_PRAZO"] = df_raw.iloc[:, 5] if df_raw.shape > 5 else "Não Informado"
-        
-        # Limpeza de strings e substituição de textos sem informação por valores nulos reais
-        for col in df_base.columns:
-            df_base[col] = df_base[col].astype(str).str.strip().replace(
-                ["0", "0.0", "nan", "None", "NAN", "", "nan nan", "NÃO INFORMADO"], None
-            )
-        
-        # Remoção estrita de registros vazios nas colunas principais para limpar os gráficos
-        df_base = df_base.dropna(subset=["STATUS", "SIGLA"], how="all")
-        df_base = df_base[~df_base["STATUS"].astype(str).str.contains("#", na=False)]
-        df_base = df_base[~df_base["SIT_PRAZO"].astype(str).str.contains("#", na=False)]
+        if nome_aba_graficos:
+            df_raw = pd.read_excel(arquivo_excel, sheet_name=nome_aba_graficos, header=0, engine="openpyxl")
+            df_raw.columns = df_raw.columns.astype(str).str.strip().str.upper()
+            
+            # CORREÇÃO CRÍTICA: Utilizado .shape[1] para verificar quantidade de colunas e evitar o erro do print
+            num_colunas = df_raw.shape[1]
+            df_base = pd.DataFrame()
+            df_base["SIGLA"] = df_raw.iloc[:, 0] if num_colunas > 0 else None
+            df_base["SETOR"] = df_raw.iloc[:, 1] if num_colunas > 1 else None
+            df_base["RESPONSAVEL"] = df_raw.iloc[:, 3] if num_colunas > 3 else "Não Informado"
+            df_base["STATUS"] = df_raw.iloc[:, 4] if num_colunas > 4 else "Não Informado"
+            df_base["SIT_PRAZO"] = df_raw.iloc[:, 5] if num_colunas > 5 else "Não Informado"
+            
+            # Limpeza de strings e substituição de textos sem informação por valores nulos reais
+            for col in df_base.columns:
+                df_base[col] = df_base[col].astype(str).str.strip().replace(
+                    ["0", "0.0", "nan", "None", "NAN", "", "nan nan", "NÃO INFORMADO"], None
+                )
+            
+            # Remoção estrita de registros vazios nas colunas principais para limpar os gráficos
+            df_base = df_base.dropna(subset=["STATUS", "SIGLA"], how="all")
+            df_base = df_base[~df_base["STATUS"].astype(str).str.contains("#", na=False)]
+            df_base = df_base[~df_base["SIT_PRAZO"].astype(str).str.contains("#", na=False)]
 
     except Exception as e:
         st.error(f"❌ Erro crítico no processamento dos dados: {e}")
@@ -182,13 +184,16 @@ if not df_base.empty:
     linha1_col1, linha1_col2 = st.columns(2)
     
     with linha1_col1:
+        # REMOVIDO: O número "1." do título
         st.markdown("### Nº de Documentos por Status")
-        # Filtra os dados para remover completamente qualquer menção a status cancelado
-        df_g1_filtrado = df_filtrado[~df_filtrado["STATUS"].astype(str).str.upper().str.contains("CANCELADO|CANCEL", na=False)]
-        dados_g1 = df_g1_filtrado["STATUS"].dropna().value_counts()
+        dados_g1 = df_filtrado["STATUS"].dropna().value_counts()
+        
+        # MODIFICAÇÃO: Filtrando para retirar o item 'CANCELADO' ou variações deste gráfico
+        dados_g1 = dados_g1[~dados_g1.index.astype(str).str.upper().str.contains("CANCELADO", na=False)]
         renderizar_grafico_seguro(dados_g1, t_g1, c_g1_color)
         
     with linha1_col2:
+        # REMOVIDO: O número "2." do título
         st.markdown("### Tempo de Análise em Dias")
         dados_g2 = pd.Series({
             "1º Verf.": media_v1,
@@ -203,16 +208,8 @@ if not df_base.empty:
     linha2_col1, linha2_col2 = st.columns(2)
     
     with linha2_col1:
-        st.markdown("### Nº de Doc. Aprovados por Profissional (Individual)")
-        df_aprovados = df_filtrado[df_filtrado["STATUS"].astype(str).str.upper().str.contains("APROVADO|OK|SIM", regex=True)]
-        dados_g3 = df_aprovados["RESPONSAVEL"].dropna().value_counts()
-        renderizar_grafico_seguro(dados_g3, t_g3, c_g3_color)
-        
-    with linha2_col2:
-        st.markdown("### Nº de Documentos (Validade/Prazo)")
-        dados_g4 = df_filtrado["SIT_PRAZO"].dropna().value_counts()
-        renderizar_grafico_seguro(dados_g4, t_g4, c_g4_color)
-        
-    st.markdown("---")
-    
-    st.markdown("### Tipo de Documento x Status Normativo")
+        # REMOVIDO: O número "3." do título
+        st.markdown("### Documentos por Responsável e Status de Aprovação")
+        # Gráfico que cruza os responsáveis e o status dos seus respectivos documentos
+        df_g3_limpo = df_filtrado.dropna(subset=["RESPONSAVEL", "STATUS"])
+        if not df_g3_limpo.empty:
