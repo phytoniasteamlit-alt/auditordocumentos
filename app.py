@@ -182,12 +182,14 @@ if not df_base.empty:
     linha1_col1, linha1_col2 = st.columns(2)
     
     with linha1_col1:
-        st.markdown("### 1. Nº de Documentos por Status")
-        dados_g1 = df_filtrado["STATUS"].dropna().value_counts()
+        st.markdown("### Nº de Documentos por Status")
+        # Filtra os dados para remover completamente qualquer menção a status cancelado
+        df_g1_filtrado = df_filtrado[~df_filtrado["STATUS"].astype(str).str.upper().str.contains("CANCELADO|CANCEL", na=False)]
+        dados_g1 = df_g1_filtrado["STATUS"].dropna().value_counts()
         renderizar_grafico_seguro(dados_g1, t_g1, c_g1_color)
         
     with linha1_col2:
-        st.markdown("### 2. Tempo de Análise em Dias")
+        st.markdown("### Tempo de Análise em Dias")
         dados_g2 = pd.Series({
             "1º Verf.": media_v1,
             "2º Verf.": media_v2,
@@ -201,21 +203,16 @@ if not df_base.empty:
     linha2_col1, linha2_col2 = st.columns(2)
     
     with linha2_col1:
-        st.markdown("### 3. Nº de Doc. Aprovados por Profissional (Individual)")
+        st.markdown("### Nº de Doc. Aprovados por Profissional (Individual)")
         df_aprovados = df_filtrado[df_filtrado["STATUS"].astype(str).str.upper().str.contains("APROVADO|OK|SIM", regex=True)]
         dados_g3 = df_aprovados["RESPONSAVEL"].dropna().value_counts()
         renderizar_grafico_seguro(dados_g3, t_g3, c_g3_color)
         
     with linha2_col2:
-        st.markdown("### 4. Nº de Documentos (Validade/Prazo)")
+        st.markdown("### Nº de Documentos (Validade/Prazo)")
         dados_g4 = df_filtrado["SIT_PRAZO"].dropna().value_counts()
         renderizar_grafico_seguro(dados_g4, t_g4, c_g4_color)
         
     st.markdown("---")
     
-    st.markdown("### 5. Tipo de Documento x Status Normativo")
-    df_g5_limpo = df_filtrado.dropna(subset=["SIGLA", "STATUS"])
-    if not df_g5_limpo.empty:
-        df_g5 = df_g5_limpo.groupby(["SIGLA", "STATUS"]).size().unstack(fill_value=0)
-        st.bar_chart(df_g5, stack=True)
-    else:
+    st.markdown("### Tipo de Documento x Status Normativo")
