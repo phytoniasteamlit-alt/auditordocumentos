@@ -93,9 +93,9 @@ if arquivo_excel:
         df_base = pd.DataFrame()
         df_base["SIGLA"] = df_raw.iloc[:, 0]
         df_base["SETOR"] = df_raw.iloc[:, 1]
-        df_base["RESPONSAVEL"] = df_raw.iloc[:, 3] if df_raw.shape[1] > 3 else "Não Informado"
-        df_base["STATUS"] = df_raw.iloc[:, 4] if df_raw.shape[1] > 4 else "Não Informado"
-        df_base["SIT_PRAZO"] = df_raw.iloc[:, 5] if df_raw.shape[1] > 5 else "Não Informado"
+        df_base["RESPONSAVEL"] = df_raw.iloc[:, 3] if df_raw.shape > 3 else "Não Informado"
+        df_base["STATUS"] = df_raw.iloc[:, 4] if df_raw.shape > 4 else "Não Informado"
+        df_base["SIT_PRAZO"] = df_raw.iloc[:, 5] if df_raw.shape > 5 else "Não Informado"
         
         # Limpeza de strings e substituição de textos sem informação por valores nulos reais
         for col in df_base.columns:
@@ -214,7 +214,8 @@ if not df_base.empty:
     st.markdown("---")
     
     st.markdown("### 5. Tipo de Documento x Status Normativo")
-    # Agrupamento e cruzamento matricial de dois eixos limpos de valores nulos
     df_g5_limpo = df_filtrado.dropna(subset=["SIGLA", "STATUS"])
     if not df_g5_limpo.empty:
         df_g5 = df_g5_limpo.groupby(["SIGLA", "STATUS"]).size().unstack(fill_value=0)
+        st.bar_chart(df_g5, stack=True)
+    else:
