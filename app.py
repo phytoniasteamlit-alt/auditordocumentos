@@ -203,7 +203,7 @@ if not df_base.empty:
             
     with col_resp2:
         st.markdown("#### Quantidade de Documentos Aprovados")
-        # RESOLVIDO DEFINITIVAMENTE: Removido o bloco condicional "if" interno que quebrava o alinhamento
+        # RESOLVIDO DEFINITIVAMENTE: Removido qualquer bloco de condição "if" ou "else" que quebrava a colagem
         df_aprovados_resp = df_g3_limpo[df_g3_limpo["STATUS"].astype(str).str.upper().str.contains("APROVADO|OK|SIM", regex=True)]
         dados_aprovados_resp = df_aprovados_resp["RESPONSAVEL"].value_counts()
         st.bar_chart(dados_aprovados_resp, color="#34D399", horizontal=True)
@@ -211,8 +211,8 @@ if not df_base.empty:
     st.markdown("---")
     
     st.markdown("### Documentos (Validade/Prazo)")
-    try:
-        dados_g4 = df_filtrado["SIT_PRAZO"].dropna().value_counts()
-        if not dados_g4.empty:
-            st.bar_chart(dados_g4, color=c_g4_color, horizontal=True)
-        else:
+    dados_g4 = df_filtrado["SIT_PRAZO"].dropna().value_counts()
+    st.bar_chart(dados_g4, color=c_g4_color, horizontal=True)
+        
+    st.markdown("---")
+    
