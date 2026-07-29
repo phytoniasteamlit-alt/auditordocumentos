@@ -38,7 +38,6 @@ with col_titulo:
     st.markdown("# PAINEL DE INDICADORES NORMATIVOS NAQH")
 
 with col_hospital:
-    # ALTERADO: Bloco HTML contido em uma única div flexbox para evitar quebras de layouts ou gráficos ocultos
     st.markdown("""
     <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px; margin-top: 10px;">
         <div style="display: flex; align-items: center; gap: 10px;">
@@ -165,7 +164,10 @@ if not df_base.empty:
 
     #--- 4. INDICADORES DO TOPO (CARDS KPIs) ---
     total_docs = len(df_filtrado)
-    aprovados = len(df_filtrado[df_filtrado["STATUS"].astype(str).str.upper().str.contains("APROVADO|OK|SIM", na=False)])
+    
+    # CORREÇÃO DA BUSCA: Conta tudo o que NÃO é pendência/cancelado para obter os aprovados
+    mascara_aprovados_filtrada = ~df_filtrado["STATUS"].astype(str).str.upper().str.contains("AGUARDANDO|VERIFICAÇ|CANCEL", na=False)
+    aprovados = len(df_filtrado[mascara_aprovados_filtrada & df_filtrado["STATUS"].notna()])
     
     kpi_col1, kpi_col2, kpi_col3, kpi_col4, kpi_col5 = st.columns(5)
     with kpi_col1: st.metric(label="📄 TOTAL DOCUMENTOS", value=f"{total_docs}")
@@ -178,7 +180,7 @@ if not df_base.empty:
     st.subheader("📊 Painel Executivo NAQH — Resultados Finais")
 
     #--- 5. PROCESSAMENTO E RENDERIZAÇÃO REAL DOS GRÁFICOS ---
-    linha1_col1, linha1_col2 = st.columns(2)
+    linha1_col1, line_col2 = st.columns(2)
     
     with linha1_col1:
         st.markdown("### Documentos por Status")
@@ -186,7 +188,7 @@ if not df_base.empty:
         dados_g1 = dados_g1[~dados_g1.index.astype(str).str.upper().str.contains("CANCELADO", na=False)]
         st.bar_chart(dados_g1, color=c_g1_color, horizontal=True)
         
-    with linha1_col2:
+    with line_col2:
         st.markdown("### Tempo de Análise em Dias")
         dados_g2 = pd.Series({
             "1º Verf.": media_v1,
@@ -208,5 +210,4 @@ if not df_base.empty:
     st.bar_chart(dados_total_resp, color="#38BDF8", horizontal=True)
             
     st.markdown("#### Quantidade de Documentos Aprovados")
-    df_aprovados_resp = df_g3_limpo[df_g3_limpo["STATUS"].astype(str).str.upper().str.contains("APROVADO|OK|SIM", na=False)]
-    dados_aprovados_resp = df_aprovados_resp["RESPONSAVEL"].value_counts()
+    # CORREÇÃO ESTRATÉGICA DEFINITIVA: Exclui termos de pendência/cancelados e conta as barras restantes
