@@ -103,13 +103,13 @@ if arquivo_excel:
                     ["0", "0.0", "nan", "None", "NAN", "", "nan nan", "NÃO INFORMADO"], None
                 )
             
-            # Substituição de textos longos por "AG Aguardando"
+            # CORREÇÃO CRÍTICA: Garante que o valor seja tratado estritamente como String antes de aplicar o .upper()
             if "STATUS" in df_base.columns:
-                df_base["STATUS"] = df_base["STATUS"].astype(str).apply(
+                df_base["STATUS"] = df_base["STATUS"].fillna("").astype(str).apply(
                     lambda x: "AG Aguardando" if "VERIFICADO AGU" in x.upper() or "AGUARDANDO" in x.upper() else x
                 )
-                df_base["STATUS"] = df_base["STATUS"].replace(["None", "nan"], None)
-            
+                df_base["STATUS"] = df_base["STATUS"].replace(["None", "nan", ""], None)
+
             df_base = df_base.dropna(subset=["STATUS", "SIGLA"], how="all")
             df_base = df_base[~df_base["STATUS"].astype(str).str.contains("#", na=False)]
             df_base = df_base[~df_base["SIT_PRAZO"].astype(str).str.contains("#", na=False)]
@@ -207,13 +207,12 @@ if not df_base.empty:
     with linha2_col1:
         st.markdown("### Documentos (Validade/Prazo)")
         dados_g4 = df_filtrado["SIT_PRAZO"].dropna().value_counts()
+        
+        dados_g4 = dados_g4[dados_g4.index.astype(str).str.strip() != "A"]
+        dados_g4 = dados_g4[dados_g4.index.astype(str).str.strip().str.len() > 1]
+        
         st.bar_chart(dados_g4, color=c_g4_color, horizontal=True)
         
     with linha2_col2:
         st.markdown("### Tipo de Documento x Status Normativo")
-        # CORREÇÃO DEFINITIVA: Removido recuos aninhados que causavam o IndentationError
         df_g5_limpo = df_filtrado.dropna(subset=["SIGLA", "STATUS"])
-        df_g5 = df_g5_limpo.groupby(["SIGLA", "STATUS"]).size().unstack(fill_value=0)
-        st.bar_chart(df_g5, stack=True, horizontal=True)
-
-    #--- 7. TABELA DETALHADA NO FINAL ---
