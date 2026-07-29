@@ -117,15 +117,18 @@ if arquivo_excel:
             df_base["STATUS"] = df_raw.iloc[:, 4] if num_colunas > 4 else "Não Informado"
             df_base["SIT_PRAZO"] = df_raw.iloc[:, 5] if num_colunas > 5 else "Não Informado"
             
+            # Limpeza inicial convertendo tudo para texto limpo de espaços
             for col in df_base.columns:
                 df_base[col] = df_base[col].fillna("").astype(str).str.strip()
             
+            # Substituição para garantir que variações de texto virem "AG Aguardando"
             if "STATUS" in df_base.columns:
                 df_base["STATUS"] = df_base["STATUS"].apply(
                     lambda x: "AG Aguardando" if "VERIFICADO AGU" in x.upper() or "AGUARDANDO" in x.upper() else x
                 )
             
-            valores_vazios = ["0", "0.0", "nan", "NONE", "NAN", "", "NAN NAN", "NÃO INFORMADO", "A"]
+            # Substitui termos e textos sem informação por nulos reais do Python (None)
+            valores_vazios = ["0", "0.0", "NAN", "NONE", "", "NAN NAN", "NÃO INFORMADO", "A"]
             for col in df_base.columns:
                 df_base.loc[df_base[col].str.upper().isin(valores_vazios), col] = None
                 
@@ -165,9 +168,8 @@ if not df_base.empty:
     #--- 4. INDICADORES DO TOPO (CARDS KPIs) ---
     total_docs = len(df_filtrado)
     
-    # Nova contagem dinâmica inteligente para o card superior de aprovados
-    mascara_aprovacao_global = ~df_filtrado["STATUS"].astype(str).str.upper().str.contains("AGUARDANDO|VERIFICAÇ", na=False)
-    aprovados = len(df_filtrado[mascara_aprovacao_global & df_filtrado["STATUS"].notna()])
+    # CORREÇÃO DEFINITIVA DO TOPO: Conta o que contém explicitamente termos de aprovação de forma segura
+    aprovados = len(df_filtrado[df_filtrado["STATUS"].astype(str).str.upper().str.contains("APROVADO|OK|SIM", na=False)])
     
     kpi_col1, kpi_col2, kpi_col3, kpi_col4, kpi_col5 = st.columns(5)
     with kpi_col1: st.metric(label="📄 TOTAL DOCUMENTOS", value=f"{total_docs}")
@@ -211,5 +213,3 @@ if not df_base.empty:
         st.bar_chart(dados_total_resp, color="#38BDF8", horizontal=True)
             
     with col_resp2:
-        st.markdown("#### Quantidade de Documentos Aprovados")
-        # LÓGICA INVERTIDA INTELIGENTE: Puxa dinamicamente qualquer documento concluído que não possua pendências textuais
