@@ -103,6 +103,14 @@ if arquivo_excel:
                     ["0", "0.0", "nan", "None", "NAN", "", "nan nan", "NÃO INFORMADO"], None
                 )
             
+            # ALTERAÇÃO: Substitui qualquer variação de "VERIFICADO AGUARDANDO..." por "AG Aguardando"
+            if "STATUS" in df_base.columns:
+                df_base["STATUS"] = df_base["STATUS"].astype(str).apply(
+                    lambda x: "AG Aguardando" if "VERIFICADO AGU" in x.upper() or "AGUARDANDO" in x.upper() else x
+                )
+                # Remove os tratamentos que restaram como string literal None após a função
+                df_base["STATUS"] = df_base["STATUS"].replace(["None", "nan"], None)
+            
             df_base = df_base.dropna(subset=["STATUS", "SIGLA"], how="all")
             df_base = df_base[~df_base["STATUS"].astype(str).str.contains("#", na=False)]
             df_base = df_base[~df_base["SIT_PRAZO"].astype(str).str.contains("#", na=False)]
@@ -132,14 +140,8 @@ if not df_base.empty:
     
     st.sidebar.markdown("---")
     st.sidebar.subheader("🎨 Configuração dos Gráficos")
-    
-    t_g1 = st.sidebar.selectbox("G1 - Visualização Status:", ["Vertical", "Horizontal", "Linha"], key="t1")
     c_g1_color = st.sidebar.color_picker("G1 - Cor Status:", "#FBBF24", key="c1")
-    
-    t_g2 = st.sidebar.selectbox("G2 - Visualização Tempo:", ["Vertical", "Horizontal", "Linha"], key="t2")
     c_g2_color = st.sidebar.color_picker("G2 - Cor Tempo:", "#38BDF8", key="c2")
-    
-    t_g4 = st.sidebar.selectbox("G4 - Visualização Prazo:", ["Vertical", "Horizontal", "Linha"], key="t4")
     c_g4_color = st.sidebar.color_picker("G4 - Cor Prazo:", "#C084FC", key="c4")
 
     #--- 4. INDICADORES DO TOPO (CARDS KPIs) ---
@@ -155,27 +157,16 @@ if not df_base.empty:
     
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("📊 Painel Executivo NAQH — Resultados Finais")
-    
-    #--- FUNÇÃO DE PLOTAGEM SEGURA ---
-    def renderizar_grafico_seguro(dados, tipo, cor):
-        if dados.empty:
-            st.warning("Sem dados válidos para exibir.")
-            return
-        if tipo == "Horizontal":
-            st.bar_chart(dados, color=cor, horizontal=True)
-        elif tipo == "Vertical":
-            st.bar_chart(dados, color=cor)
-        else:
-            st.line_chart(dados, color=cor)
 
     #--- 5. PROCESSAMENTO E RENDERIZAÇÃO REAL DOS GRÁFICOS ---
     linha1_col1, linha1_col2 = st.columns(2)
     
     with linha1_col1:
-        st.markdown("### Nº de Documentos por Status")
+        # CORRIGIDO: Retirado o "Nº" do título
+        st.markdown("### Documentos por Status")
         dados_g1 = df_filtrado["STATUS"].dropna().value_counts()
         dados_g1 = dados_g1[~dados_g1.index.astype(str).str.upper().str.contains("CANCELADO", na=False)]
-        renderizar_grafico_seguro(dados_g1, t_g1, c_g1_color)
+        st.bar_chart(dados_g1, color=c_g1_color, horizontal=True)
         
     with linha1_col2:
         st.markdown("### Tempo de Análise em Dias")
@@ -185,11 +176,10 @@ if not df_base.empty:
             "3º Verf.": media_aaa,
             "Total Estimado": (media_v1 + media_v2 + media_aaa)
         })
-        renderizar_grafico_seguro(dados_g2, t_g2, c_g2_color)
+        st.bar_chart(dados_g2, color=c_g2_color, horizontal=True)
         
     st.markdown("---")
     
-    # SEÇÃO CORRIGIDA: Gráficos horizontais para os nomes ficarem totalmente retos
     st.markdown("### Análise de Desempenho por Responsável")
     df_g3_limpo = df_filtrado.dropna(subset=["RESPONSAVEL", "STATUS"])
     
@@ -199,7 +189,6 @@ if not df_base.empty:
         st.markdown("#### Total de Documentos sob Responsabilidade")
         if not df_g3_limpo.empty:
             dados_total_resp = df_g3_limpo["RESPONSAVEL"].value_counts()
-            # Forçado horizontal=True para alinhar as fontes perfeitamente
             st.bar_chart(dados_total_resp, color="#38BDF8", horizontal=True)
         else:
             st.warning("Sem dados.")
@@ -209,13 +198,21 @@ if not df_base.empty:
         if not df_g3_limpo.empty:
             df_aprovados_resp = df_g3_limpo[df_g3_limpo["STATUS"].astype(str).str.upper().str.contains("APROVADO|OK|SIM", regex=True)]
             dados_aprovados_resp = df_aprovados_resp["RESPONSAVEL"].value_counts()
-            # Forçado horizontal=True para alinhar as fontes perfeitamente
             st.bar_chart(dados_aprovados_resp, color="#34D399", horizontal=True)
         else:
             st.warning("Sem dados.")
         
     st.markdown("---")
     
-    # SEÇÃO CORRIGIDA: Fora do bloco condicional para nunca mais sumir da tela
     linha2_col1, linha2_col2 = st.columns(2)
     
+    with linha2_col1:
+        # CORRIGIDO: Retirado o "Nº" do título
+        st.markdown("### Documentos (Validade/Prazo)")
+        dados_g4 = df_filtrado["SIT_PRAZO"].dropna().value_counts()
+        st.bar_chart(dados_g4, color=c_g4_color, horizontal=True)
+        
+    with linha2_col2:
+        st.markdown("### Tipo de Documento x Status Normativo")
+        df_g5_limpo = df_filtrado.dropna(subset=["SIGLA", "STATUS"])
+        if not df_g5_limpo.empty:
