@@ -165,8 +165,9 @@ if not df_base.empty:
     #--- 4. INDICADORES DO TOPO (CARDS KPIs) ---
     total_docs = len(df_filtrado)
     
-    # CORREÇÃO DO FILTRO DE APROVADOS: Aplicação rigorosa com tratamento de maiúsculas para o topo
-    aprovados = len(df_filtrado[df_filtrado["STATUS"].astype(str).str.upper().str.contains("APROVADO|OK|SIM", na=False)])
+    # Nova contagem dinâmica inteligente para o card superior de aprovados
+    mascara_aprovacao_global = ~df_filtrado["STATUS"].astype(str).str.upper().str.contains("AGUARDANDO|VERIFICAÇ", na=False)
+    aprovados = len(df_filtrado[mascara_aprovacao_global & df_filtrado["STATUS"].notna()])
     
     kpi_col1, kpi_col2, kpi_col3, kpi_col4, kpi_col5 = st.columns(5)
     with kpi_col1: st.metric(label="📄 TOTAL DOCUMENTOS", value=f"{total_docs}")
@@ -211,4 +212,4 @@ if not df_base.empty:
             
     with col_resp2:
         st.markdown("#### Quantidade de Documentos Aprovados")
-        # CORREÇÃO CRÍTICA DO GRÁFICO: Nova lógica de mascaramento booleano robusto para mapear aprovações
+        # LÓGICA INVERTIDA INTELIGENTE: Puxa dinamicamente qualquer documento concluído que não possua pendências textuais
