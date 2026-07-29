@@ -28,10 +28,42 @@ st.markdown("""
  border: 2px dashed #38BDF8 !important;
  background-color: #1E293B !important;
  }
+ .header-container {
+ display: flex;
+ align-items: center;
+ justify-content: center;
+ gap: 15px;
+ background-color: #1E293B;
+ padding: 20px;
+ border-radius: 10px;
+ border: 1px solid #334155;
+ margin-bottom: 20px;
+ }
+ .hospital-cross {
+ font-size: 42px;
+ color: #EF4444;
+ filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.6));
+ line-height: 1;
+ }
+ .hospital-title {
+ font-size: 32px;
+ font-weight: 800;
+ color: #FFFFFF;
+ letter-spacing: 1px;
+ margin: 0;
+ }
  </style>
 """, unsafe_allow_html=True)
 
-st.markdown("# PAINEL DE INDICADORES NORMATIVOS NAQH")
+# MODIFICAÇÃO: Injeção do cabeçalho com a cruz médica e o nome do hospital centralizados
+st.markdown("""
+ <div class="header-container">
+ <span class="hospital-cross">✚</span>
+ <h1 class="hospital-title">HOSPITAL DA CIDADE</h1>
+ </div>
+""", unsafe_allow_html=True)
+
+st.markdown("<h3 style='text-align: center; color: #94A3B8; margin-top: -10px; margin-bottom: 20px;'>PAINEL DE INDICADORES NORMATIVOS NAQH</h3>", unsafe_allow_html=True)
 st.markdown("---")
 
 #--- 2. CARREGAMENTO DO ARQUIVO ---
@@ -183,7 +215,6 @@ if not df_base.empty:
     col_resp1, col_resp2 = st.columns(2)
     
     with col_resp1:
-        # MODIFICAÇÃO: Título alterado conforme solicitado
         st.markdown("#### Quantidade de Documentos por Responsável")
         dados_total_resp = df_g3_limpo["RESPONSAVEL"].value_counts()
         st.bar_chart(dados_total_resp, color="#38BDF8", horizontal=True)
@@ -200,16 +231,3 @@ if not df_base.empty:
     
     with linha2_col1:
         st.markdown("### Documentos (Validade/Prazo)")
-        dados_g4 = df_filtrado["SIT_PRAZO"].dropna().value_counts()
-        dados_g4 = dados_g4[dados_g4.index.astype(str).str.strip() != "A"]
-        dados_g4 = dados_g4[dados_g4.index.astype(str).str.strip().str.len() > 1]
-        st.bar_chart(dados_g4, color=c_g4_color, horizontal=True)
-        
-    with linha2_col2:
-        st.markdown("### Tipo de Documento x Status Normativo")
-        df_g5_limpo = df_filtrado.dropna(subset=["SIGLA", "STATUS"])
-        df_g5_agrupado = df_g5_limpo.groupby(["SIGLA", "STATUS"]).size().reset_index(name="Quantidade")
-        st.bar_chart(df_g5_agrupado, x="SIGLA", y="Quantidade", color="STATUS", stack=True, horizontal=True)
-
-    #--- 7. TABELA DETALHADA NO FINAL ---
-    st.markdown("---")
