@@ -31,7 +31,7 @@ st.markdown("""
  </style>
 """, unsafe_allow_html=True)
 
-# --- CABEÇALHO DO HOSPITAL (LADO A LADO COM O TÍTULO PRINCIPAL) ---
+# --- CABEÇALHO DO HOSPITAL (LADO A LADO WITH THE MAIN TITLE) ---
 col_titulo, col_hospital = st.columns([0.65, 0.35])
 
 with col_titulo:
@@ -164,10 +164,7 @@ if not df_base.empty:
 
     #--- 4. INDICADORES DO TOPO (CARDS KPIs) ---
     total_docs = len(df_filtrado)
-    
-    # CORREÇÃO DA BUSCA: Conta tudo o que NÃO é pendência/cancelado para obter os aprovados
-    mascara_aprovados_filtrada = ~df_filtrado["STATUS"].astype(str).str.upper().str.contains("AGUARDANDO|VERIFICAÇ|CANCEL", na=False)
-    aprovados = len(df_filtrado[mascara_aprovados_filtrada & df_filtrado["STATUS"].notna()])
+    aprovados = len(df_filtrado[df_filtrado["STATUS"].astype(str).str.upper().str.contains("APROVADO|OK|SIM", na=False)])
     
     kpi_col1, kpi_col2, kpi_col3, kpi_col4, kpi_col5 = st.columns(5)
     with kpi_col1: st.metric(label="📄 TOTAL DOCUMENTOS", value=f"{total_docs}")
@@ -180,7 +177,7 @@ if not df_base.empty:
     st.subheader("📊 Painel Executivo NAQH — Resultados Finais")
 
     #--- 5. PROCESSAMENTO E RENDERIZAÇÃO REAL DOS GRÁFICOS ---
-    linha1_col1, line_col2 = st.columns(2)
+    linha1_col1, linha1_col2 = st.columns(2)
     
     with linha1_col1:
         st.markdown("### Documentos por Status")
@@ -188,7 +185,7 @@ if not df_base.empty:
         dados_g1 = dados_g1[~dados_g1.index.astype(str).str.upper().str.contains("CANCELADO", na=False)]
         st.bar_chart(dados_g1, color=c_g1_color, horizontal=True)
         
-    with line_col2:
+    with linha1_col2:
         st.markdown("### Tempo de Análise em Dias")
         dados_g2 = pd.Series({
             "1º Verf.": media_v1,
@@ -203,11 +200,15 @@ if not df_base.empty:
     st.markdown("### Análise de Desempenho por Responsável")
     df_g3_limpo = df_filtrado.dropna(subset=["RESPONSAVEL", "STATUS"])
     
-    col_resp1, col_resp2 = st.columns(2)
-    
+    # CORREÇÃO CRÍTICA: Removido os escopos "with col_resp1/col_resp2" que ocultavam os dados das barras
     st.markdown("#### Quantidade de Documentos por Responsável")
     dados_total_resp = df_g3_limpo["RESPONSAVEL"].value_counts()
     st.bar_chart(dados_total_resp, color="#38BDF8", horizontal=True)
             
     st.markdown("#### Quantidade de Documentos Aprovados")
-    # CORREÇÃO ESTRATÉGICA DEFINITIVA: Exclui termos de pendência/cancelados e conta as barras restantes
+    df_aprovados_resp = df_g3_limpo[df_g3_limpo["STATUS"].astype(str).str.upper().str.contains("APROVADO|OK|SIM", na=False)]
+    dados_aprovados_resp = df_aprovados_resp["RESPONSAVEL"].value_counts()
+    st.bar_chart(dados_aprovados_resp, color="#34D399", horizontal=True)
+        
+    st.markdown("---")
+    
