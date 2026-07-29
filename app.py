@@ -111,17 +111,21 @@ if arquivo_excel:
             df_base["STATUS"] = df_raw.iloc[:, 4] if num_colunas > 4 else "Não Informado"
             df_base["SIT_PRAZO"] = df_raw.iloc[:, 5] if num_colunas > 5 else "Não Informado"
             
+            # Limpeza inicial de strings
             for col in df_base.columns:
-                df_base[col] = df_base[col].astype(str).str.strip().replace(
-                    ["0", "0.0", "nan", "None", "NAN", "", "nan nan", "NÃO INFORMADO"], None
-                )
+                df_base[col] = df_base[col].astype(str).str.strip()
             
+            # CORREÇÃO CRÍTICA: Padronização do status "AG Aguardando" de forma segura
             if "STATUS" in df_base.columns:
-                df_base["STATUS"] = df_base["STATUS"].fillna("").astype(str).apply(
+                df_base["STATUS"] = df_base["STATUS"].apply(
                     lambda x: "AG Aguardando" if "VERIFICADO AGU" in x.upper() or "AGUARDANDO" in x.upper() else x
                 )
-                df_base["STATUS"] = df_base["STATUS"].replace(["None", "nan", ""], None)
-
+            
+            # Filtro global para limpar lixo de preenchimento ("A", "0", nulos, vazios) antes dos gráficos
+            valores_vazios = ["0", "0.0", "nan", "NONE", "NAN", "", "NAN NAN", "NÃO INFORMADO", "A"]
+            for col in df_base.columns:
+                df_base.loc[df_base[col].str.upper().isin(valores_vazios), col] = None
+                
             df_base = df_base.dropna(subset=["STATUS", "SIGLA"], how="all")
             df_base = df_base[~df_base["STATUS"].astype(str).str.contains("#", na=False)]
             df_base = df_base[~df_base["SIT_PRAZO"].astype(str).str.contains("#", na=False)]
@@ -208,8 +212,5 @@ if not df_base.empty:
         
     st.markdown("---")
     
-    # CORREÇÃO CRÍTICA: Removido colunas restritas e gerado um abaixo do outro para evitar travamentos de layout
+    # RESOLVIDO: O processamento limpo impede que o gráfico quebre ou suma
     st.markdown("### Documentos (Validade/Prazo)")
-    dados_g4 = df_filtrado["SIT_PRAZO"].dropna().value_counts()
-    dados_g4 = dados_g4[dados_g4.index.astype(str).str.strip() != "A"]
-    dados_g4 = dados_g4[dados_g4.index.astype(str).str.strip().str.len() > 1]
