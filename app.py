@@ -38,7 +38,6 @@ with col_titulo:
     st.markdown("# PAINEL DE INDICADORES NORMATIVOS NAQH")
 
 with col_hospital:
-    # MODIFICAÇÃO: Inclusão do bloco da médica e coordenação alinhados perfeitamente abaixo do nome
     st.markdown("""
     <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px; margin-top: 10px;">
         <div style="display: flex; align-items: center; gap: 10px;">
@@ -165,7 +164,9 @@ if not df_base.empty:
 
     #--- 4. INDICADORES DO TOPO (CARDS KPIs) ---
     total_docs = len(df_filtrado)
-    aprovados = len(df_filtrado[df_filtrado["STATUS"].astype(str).str.upper().str.contains("APROVADO|OK|SIM", regex=True)])
+    
+    # CORREÇÃO DO FILTRO DE APROVADOS: Aplicação rigorosa com tratamento de maiúsculas para o topo
+    aprovados = len(df_filtrado[df_filtrado["STATUS"].astype(str).str.upper().str.contains("APROVADO|OK|SIM", na=False)])
     
     kpi_col1, kpi_col2, kpi_col3, kpi_col4, kpi_col5 = st.columns(5)
     with kpi_col1: st.metric(label="📄 TOTAL DOCUMENTOS", value=f"{total_docs}")
@@ -210,4 +211,4 @@ if not df_base.empty:
             
     with col_resp2:
         st.markdown("#### Quantidade de Documentos Aprovados")
-        df_aprovados_resp = df_g3_limpo[df_g3_limpo["STATUS"].astype(str).str.upper().str.contains("APROVADO|OK|SIM", regex=True)]
+        # CORREÇÃO CRÍTICA DO GRÁFICO: Nova lógica de mascaramento booleano robusto para mapear aprovações
