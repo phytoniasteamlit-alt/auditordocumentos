@@ -84,13 +84,13 @@ if arquivo_excel:
                 break
         
         if not nome_aba_graficos:
-            nome_aba_graficos = lista_abas_reais[0] if lista_abas_reais else None
+            nome_aba_graficos = lista_abas_reais if lista_abas_reais else None
             
         if nome_aba_graficos:
             df_raw = pd.read_excel(arquivo_excel, sheet_name=nome_aba_graficos, header=0, engine="openpyxl")
             df_raw.columns = df_raw.columns.astype(str).str.strip().str.upper()
             
-            # Correção para obter o número exato de colunas mapeadas
+            # Verificação segura do número de colunas para evitar TypeError/KeyError
             num_colunas = len(df_raw.columns)
             df_base = pd.DataFrame()
             df_base["SIGLA"] = df_raw.iloc[:, 0] if num_colunas > 0 else None
@@ -99,12 +99,13 @@ if arquivo_excel:
             df_base["STATUS"] = df_raw.iloc[:, 4] if num_colunas > 4 else "Não Informado"
             df_base["SIT_PRAZO"] = df_raw.iloc[:, 5] if num_colunas > 5 else "Não Informado"
             
-            # Limpeza e tratamento de nulos
+            # Substituição de textos inválidos por nulos reais (None)
             for col in df_base.columns:
                 df_base[col] = df_base[col].astype(str).str.strip().replace(
                     ["0", "0.0", "nan", "None", "NAN", "", "nan nan", "NÃO INFORMADO"], None
                 )
             
+            # Limpeza estrita para remover linhas em branco que poluem as barras
             df_base = df_base.dropna(subset=["STATUS", "SIGLA"], how="all")
             df_base = df_base[~df_base["STATUS"].astype(str).str.contains("#", na=False)]
             df_base = df_base[~df_base["SIT_PRAZO"].astype(str).str.contains("#", na=False)]
@@ -135,14 +136,14 @@ if not df_base.empty:
     st.sidebar.markdown("---")
     st.sidebar.subheader("🎨 Configuração dos Gráficos")
     
-    t_g1 = st.sidebar.selectbox("G1 - Visualização:", ["Horizontal", "Vertical", "Linha"], key="t1")
-    c_g1_color = st.sidebar.color_picker("G1 - Cor:", "#FBBF24", key="c1")
+    t_g1 = st.sidebar.selectbox("G1 - Visualização Status:", ["Vertical", "Horizontal", "Linha"], key="t1")
+    c_g1_color = st.sidebar.color_picker("G1 - Cor Status:", "#FBBF24", key="c1")
     
-    t_g2 = st.sidebar.selectbox("G2 - Visualização:", ["Horizontal", "Vertical", "Linha"], key="t2")
-    c_g2_color = st.sidebar.color_picker("G2 - Cor:", "#38BDF8", key="c2")
+    t_g2 = st.sidebar.selectbox("G2 - Visualização Tempo:", ["Vertical", "Horizontal", "Linha"], key="t2")
+    c_g2_color = st.sidebar.color_picker("G2 - Cor Tempo:", "#38BDF8", key="c2")
     
-    t_g4 = st.sidebar.selectbox("G4 - Visualização:", ["Horizontal", "Vertical", "Linha"], key="t4")
-    c_g4_color = st.sidebar.color_picker("G4 - Cor:", "#C084FC", key="c4")
+    t_g4 = st.sidebar.selectbox("G4 - Visualização Prazo:", ["Vertical", "Horizontal", "Linha"], key="t4")
+    c_g4_color = st.sidebar.color_picker("G4 - Cor Prazo:", "#C084FC", key="c4")
 
     #--- 4. INDICADORES DO TOPO (CARDS KPIs) ---
     total_docs = len(df_filtrado)
@@ -176,6 +177,7 @@ if not df_base.empty:
     with linha1_col1:
         st.markdown("### Nº de Documentos por Status")
         dados_g1 = df_filtrado["STATUS"].dropna().value_counts()
+        # MODIFICAÇÃO: Filtra para remover qualquer linha 'CANCELADO'
         dados_g1 = dados_g1[~dados_g1.index.astype(str).str.upper().str.contains("CANCELADO", na=False)]
         renderizar_grafico_seguro(dados_g1, t_g1, c_g1_color)
         
@@ -191,30 +193,25 @@ if not df_base.empty:
         
     st.markdown("---")
     
-    linha2_col1, linha2_col2 = st.columns(2)
+    # SEÇÃO MODIFICADA: Gráficos de responsáveis divididos lado a lado sem empilhamento confuso
+    st.markdown("### Análise de Desempenho por Responsável")
+    df_g3_limpo = df_filtrado.dropna(subset=["RESPONSAVEL", "STATUS"])
     
-    with linha2_col1:
-        st.markdown("### Documentos por Responsável e Status de Aprovação")
-        # Estrutura simplificada sem blocos complexos de if/else internos para evitar erros de recuo
-        df_g3_limpo = df_filtrado.dropna(subset=["RESPONSAVEL", "STATUS"])
-        df_g3 = df_g3_limpo.groupby(["RESPONSAVEL", "STATUS"]).size().unstack(fill_value=0)
-        st.bar_chart(df_g3, stack=True)
+    if not df_g3_limpo.empty:
+        col_resp1, col_resp2 = st.columns(2)
         
-    with linha2_col2:
-        st.markdown("### Nº de Documentos (Validade/Prazo)")
-        dados_g4 = df_filtrado["SIT_PRAZO"].dropna().value_counts()
-        renderizar_grafico_seguro(dados_g4, t_g4, c_g4_color)
+        with col_resp1:
+            st.markdown("#### Total de Documentos sob Responsabilidade")
+            dados_total_resp = df_g3_limpo["RESPONSAVEL"].value_counts()
+            st.bar_chart(dados_total_resp, color="#38BDF8")
+            
+        with col_resp2:
+            st.markdown("#### Quantidade de Documentos Aprovados")
+            df_aprovados_resp = df_g3_limpo[df_g3_limpo["STATUS"].astype(str).str.upper().str.contains("APROVADO|OK|SIM", regex=True)]
+            dados_aprovados_resp = df_aprovados_resp["RESPONSAVEL"].value_counts()
+            st.bar_chart(dados_aprovados_resp, color="#34D399")
+    else:
+        st.warning("Sem dados suficientes para gerar as análises por profissional.")
         
     st.markdown("---")
     
-    st.markdown("### Tipo de Documento x Status Normativo")
-    df_g5_limpo = df_filtrado.dropna(subset=["SIGLA", "STATUS"])
-    df_g5 = df_g5_limpo.groupby(["SIGLA", "STATUS"]).size().unstack(fill_value=0)
-    st.bar_chart(df_g5, stack=True)
-
-    #--- 7. TABELA DETALHADA NO FINAL ---
-    st.markdown("---")
-    st.markdown("### 📄 Visão Geral dos Dados Filtrados")
-    st.dataframe(df_filtrado.dropna(subset=["SIGLA"]), use_container_width=True, hide_index=True)
-else:
-    st.info("💡 Por favor, carregue uma planilha válida no menu lateral para visualizar o painel.")
