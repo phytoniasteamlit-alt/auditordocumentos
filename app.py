@@ -90,7 +90,6 @@ if arquivo_excel:
             df_raw = pd.read_excel(arquivo_excel, sheet_name=nome_aba_graficos, header=0, engine="openpyxl")
             df_raw.columns = df_raw.columns.astype(str).str.strip().str.upper()
             
-            # Verificação segura do número de colunas para evitar TypeError/KeyError
             num_colunas = len(df_raw.columns)
             df_base = pd.DataFrame()
             df_base["SIGLA"] = df_raw.iloc[:, 0] if num_colunas > 0 else None
@@ -99,13 +98,11 @@ if arquivo_excel:
             df_base["STATUS"] = df_raw.iloc[:, 4] if num_colunas > 4 else "Não Informado"
             df_base["SIT_PRAZO"] = df_raw.iloc[:, 5] if num_colunas > 5 else "Não Informado"
             
-            # Substituição de textos inválidos por nulos reais (None)
             for col in df_base.columns:
                 df_base[col] = df_base[col].astype(str).str.strip().replace(
                     ["0", "0.0", "nan", "None", "NAN", "", "nan nan", "NÃO INFORMADO"], None
                 )
             
-            # Limpeza estrita para remover linhas em branco que poluem as barras
             df_base = df_base.dropna(subset=["STATUS", "SIGLA"], how="all")
             df_base = df_base[~df_base["STATUS"].astype(str).str.contains("#", na=False)]
             df_base = df_base[~df_base["SIT_PRAZO"].astype(str).str.contains("#", na=False)]
@@ -177,7 +174,6 @@ if not df_base.empty:
     with linha1_col1:
         st.markdown("### Nº de Documentos por Status")
         dados_g1 = df_filtrado["STATUS"].dropna().value_counts()
-        # MODIFICAÇÃO: Filtra para remover qualquer linha 'CANCELADO'
         dados_g1 = dados_g1[~dados_g1.index.astype(str).str.upper().str.contains("CANCELADO", na=False)]
         renderizar_grafico_seguro(dados_g1, t_g1, c_g1_color)
         
@@ -193,25 +189,33 @@ if not df_base.empty:
         
     st.markdown("---")
     
-    # SEÇÃO MODIFICADA: Gráficos de responsáveis divididos lado a lado sem empilhamento confuso
+    # SEÇÃO CORRIGIDA: Gráficos horizontais para os nomes ficarem totalmente retos
     st.markdown("### Análise de Desempenho por Responsável")
     df_g3_limpo = df_filtrado.dropna(subset=["RESPONSAVEL", "STATUS"])
     
-    if not df_g3_limpo.empty:
-        col_resp1, col_resp2 = st.columns(2)
-        
-        with col_resp1:
-            st.markdown("#### Total de Documentos sob Responsabilidade")
+    col_resp1, col_resp2 = st.columns(2)
+    
+    with col_resp1:
+        st.markdown("#### Total de Documentos sob Responsabilidade")
+        if not df_g3_limpo.empty:
             dados_total_resp = df_g3_limpo["RESPONSAVEL"].value_counts()
-            st.bar_chart(dados_total_resp, color="#38BDF8")
+            # Forçado horizontal=True para alinhar as fontes perfeitamente
+            st.bar_chart(dados_total_resp, color="#38BDF8", horizontal=True)
+        else:
+            st.warning("Sem dados.")
             
-        with col_resp2:
-            st.markdown("#### Quantidade de Documentos Aprovados")
+    with col_resp2:
+        st.markdown("#### Quantidade de Documentos Aprovados")
+        if not df_g3_limpo.empty:
             df_aprovados_resp = df_g3_limpo[df_g3_limpo["STATUS"].astype(str).str.upper().str.contains("APROVADO|OK|SIM", regex=True)]
             dados_aprovados_resp = df_aprovados_resp["RESPONSAVEL"].value_counts()
-            st.bar_chart(dados_aprovados_resp, color="#34D399")
-    else:
-        st.warning("Sem dados suficientes para gerar as análises por profissional.")
+            # Forçado horizontal=True para alinhar as fontes perfeitamente
+            st.bar_chart(dados_aprovados_resp, color="#34D399", horizontal=True)
+        else:
+            st.warning("Sem dados.")
         
     st.markdown("---")
+    
+    # SEÇÃO CORRIGIDA: Fora do bloco condicional para nunca mais sumir da tela
+    linha2_col1, linha2_col2 = st.columns(2)
     
