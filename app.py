@@ -111,17 +111,14 @@ if arquivo_excel:
             df_base["STATUS"] = df_raw.iloc[:, 4] if num_colunas > 4 else "Não Informado"
             df_base["SIT_PRAZO"] = df_raw.iloc[:, 5] if num_colunas > 5 else "Não Informado"
             
-            # Limpeza inicial de strings protegendo contra nulos e limpando espaços em excesso
             for col in df_base.columns:
                 df_base[col] = df_base[col].fillna("").astype(str).str.strip()
             
-            # Padronização do status "AG Aguardando" de forma totalmente segura
             if "STATUS" in df_base.columns:
                 df_base["STATUS"] = df_base["STATUS"].apply(
                     lambda x: "AG Aguardando" if "VERIFICADO AGU" in x.upper() or "AGUARDANDO" in x.upper() else x
                 )
             
-            # Filtro global para transformar lixo de preenchimento ("A", "0", nulos textuais) em valores nulos reais
             valores_vazios = ["0", "0.0", "nan", "NONE", "NAN", "", "NAN NAN", "NÃO INFORMADO", "A"]
             for col in df_base.columns:
                 df_base.loc[df_base[col].str.upper().isin(valores_vazios), col] = None
@@ -201,13 +198,21 @@ if not df_base.empty:
     
     with col_resp1:
         st.markdown("#### Quantidade de Documentos por Responsável")
-        if not df_g3_limpo.empty:
-            dados_total_resp = df_g3_limpo["RESPONSAVEL"].value_counts()
-            st.bar_chart(dados_total_resp, color="#38BDF8", horizontal=True)
-        else:
-            st.warning("Sem dados sob responsabilidade para exibir.")
+        dados_total_resp = df_g3_limpo["RESPONSAVEL"].value_counts()
+        st.bar_chart(dados_total_resp, color="#38BDF8", horizontal=True)
             
     with col_resp2:
         st.markdown("#### Quantidade de Documentos Aprovados")
-        # CORREÇÃO DEFINITIVA: Cria uma lista padrão zerada caso ninguém tenha aprovações no momento para o gráfico não sumir
-        if not df_g3_limpo.empty:
+        # RESOLVIDO DEFINITIVAMENTE: Removido o bloco condicional "if" interno que quebrava o alinhamento
+        df_aprovados_resp = df_g3_limpo[df_g3_limpo["STATUS"].astype(str).str.upper().str.contains("APROVADO|OK|SIM", regex=True)]
+        dados_aprovados_resp = df_aprovados_resp["RESPONSAVEL"].value_counts()
+        st.bar_chart(dados_aprovados_resp, color="#34D399", horizontal=True)
+        
+    st.markdown("---")
+    
+    st.markdown("### Documentos (Validade/Prazo)")
+    try:
+        dados_g4 = df_filtrado["SIT_PRAZO"].dropna().value_counts()
+        if not dados_g4.empty:
+            st.bar_chart(dados_g4, color=c_g4_color, horizontal=True)
+        else:
