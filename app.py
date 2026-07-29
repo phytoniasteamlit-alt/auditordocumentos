@@ -103,7 +103,6 @@ if arquivo_excel:
                     ["0", "0.0", "nan", "None", "NAN", "", "nan nan", "NÃO INFORMADO"], None
                 )
             
-            # CORREÇÃO CRÍTICA: Garante que o valor seja tratado estritamente como String antes de aplicar o .upper()
             if "STATUS" in df_base.columns:
                 df_base["STATUS"] = df_base["STATUS"].fillna("").astype(str).apply(
                     lambda x: "AG Aguardando" if "VERIFICADO AGU" in x.upper() or "AGUARDANDO" in x.upper() else x
@@ -215,4 +214,6 @@ if not df_base.empty:
         
     with linha2_col2:
         st.markdown("### Tipo de Documento x Status Normativo")
+        # CORREÇÃO DEFINITIVA: Nova estrutura de agrupamento plano que evita o travamento interno do Streamlit
         df_g5_limpo = df_filtrado.dropna(subset=["SIGLA", "STATUS"])
+        if not df_g5_limpo.empty:
