@@ -209,6 +209,5 @@ if not df_base.empty:
             
     with col_resp2:
         st.markdown("#### Quantidade de Documentos Aprovados")
+        # CORREÇÃO DEFINITIVA: Cria uma lista padrão zerada caso ninguém tenha aprovações no momento para o gráfico não sumir
         if not df_g3_limpo.empty:
-            df_aprovados_resp = df_g3_limpo[df_g3_limpo["STATUS"].astype(str).str.upper().str.contains("APROVADO|OK|SIM", regex=True)]
-            dados_aprovados_resp = df_aprovados_resp["RESPONSAVEL"].value_counts()
