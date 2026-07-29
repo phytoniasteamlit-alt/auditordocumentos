@@ -183,7 +183,8 @@ if not df_base.empty:
     col_resp1, col_resp2 = st.columns(2)
     
     with col_resp1:
-        st.markdown("#### Total de Documentos sob Responsabilidade")
+        # MODIFICAÇÃO: Título alterado conforme solicitado
+        st.markdown("#### Quantidade de Documentos por Responsável")
         dados_total_resp = df_g3_limpo["RESPONSAVEL"].value_counts()
         st.bar_chart(dados_total_resp, color="#38BDF8", horizontal=True)
             
@@ -206,7 +207,6 @@ if not df_base.empty:
         
     with linha2_col2:
         st.markdown("### Tipo de Documento x Status Normativo")
-        # RESOLVIDO DEFINITIVAMENTE: Removido qualquer bloco 'if' que causava erro de indentação
         df_g5_limpo = df_filtrado.dropna(subset=["SIGLA", "STATUS"])
         df_g5_agrupado = df_g5_limpo.groupby(["SIGLA", "STATUS"]).size().reset_index(name="Quantidade")
         st.bar_chart(df_g5_agrupado, x="SIGLA", y="Quantidade", color="STATUS", stack=True, horizontal=True)
