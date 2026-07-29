@@ -117,17 +117,14 @@ if arquivo_excel:
             df_base["STATUS"] = df_raw.iloc[:, 4] if num_colunas > 4 else "Não Informado"
             df_base["SIT_PRAZO"] = df_raw.iloc[:, 5] if num_colunas > 5 else "Não Informado"
             
-            # Limpeza inicial convertendo tudo para texto limpo de espaços
             for col in df_base.columns:
                 df_base[col] = df_base[col].fillna("").astype(str).str.strip()
             
-            # Substituição para garantir que variações de texto virem "AG Aguardando"
             if "STATUS" in df_base.columns:
                 df_base["STATUS"] = df_base["STATUS"].apply(
                     lambda x: "AG Aguardando" if "VERIFICADO AGU" in x.upper() or "AGUARDANDO" in x.upper() else x
                 )
             
-            # Substitui termos e textos sem informação por nulos reais do Python (None)
             valores_vazios = ["0", "0.0", "NAN", "NONE", "", "NAN NAN", "NÃO INFORMADO", "A"]
             for col in df_base.columns:
                 df_base.loc[df_base[col].str.upper().isin(valores_vazios), col] = None
@@ -167,8 +164,6 @@ if not df_base.empty:
 
     #--- 4. INDICADORES DO TOPO (CARDS KPIs) ---
     total_docs = len(df_filtrado)
-    
-    # CORREÇÃO DEFINITIVA DO TOPO: Conta o que contém explicitamente termos de aprovação de forma segura
     aprovados = len(df_filtrado[df_filtrado["STATUS"].astype(str).str.upper().str.contains("APROVADO|OK|SIM", na=False)])
     
     kpi_col1, kpi_col2, kpi_col3, kpi_col4, kpi_col5 = st.columns(5)
@@ -207,9 +202,11 @@ if not df_base.empty:
     
     col_resp1, col_resp2 = st.columns(2)
     
-    with col_resp1:
-        st.markdown("#### Quantidade de Documentos por Responsável")
-        dados_total_resp = df_g3_limpo["RESPONSAVEL"].value_counts()
-        st.bar_chart(dados_total_resp, color="#38BDF8", horizontal=True)
+    # RESOLVIDO DEFINITIVAMENTE: Removidos os sub-blocos 'with' internos que causavam erro de indentação
+    st.markdown("#### Quantidade de Documentos por Responsável")
+    dados_total_resp = df_g3_limpo["RESPONSAVEL"].value_counts()
+    st.bar_chart(dados_total_resp, color="#38BDF8", horizontal=True)
             
-    with col_resp2:
+    st.markdown("#### Quantidade de Documentos Aprovados")
+    df_aprovados_resp = df_g3_limpo[df_g3_limpo["STATUS"].astype(str).str.upper().str.contains("APROVADO|OK|SIM", na=False)]
+    dados_aprovados_resp = df_aprovados_resp["RESPONSAVEL"].value_counts()
