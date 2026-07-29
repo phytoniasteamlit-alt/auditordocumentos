@@ -32,16 +32,23 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- CABEÇALHO DO HOSPITAL (LADO A LADO COM O TÍTULO PRINCIPAL) ---
-col_titulo, col_hospital = st.columns([0.7, 0.3])
+col_titulo, col_hospital = st.columns([0.65, 0.35])
 
 with col_titulo:
     st.markdown("# PAINEL DE INDICADORES NORMATIVOS NAQH")
 
 with col_hospital:
+    # ALTERADO: Bloco HTML contido em uma única div flexbox para evitar quebras de layouts ou gráficos ocultos
     st.markdown("""
-    <div style="display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 10px;">
-        <span style="font-size: 34px; color: #EF4444; font-weight: bold; line-height: 1;">➕</span>
-        <span style="font-size: 22px; color: #FFFFFF; font-weight: 800; letter-spacing: 0.5px;">HOSPITAL DA CIDADE</span>
+    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px; margin-top: 10px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 34px; color: #EF4444; font-weight: bold; line-height: 1;">➕</span>
+            <span style="font-size: 22px; color: #FFFFFF; font-weight: 800; letter-spacing: 0.5px;">HOSPITAL DA CIDADE</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; margin-right: 2px;">
+            <span style="font-size: 20px; line-height: 1;">👩‍⚕️</span>
+            <span style="font-size: 15px; color: #94A3B8; font-weight: 600; letter-spacing: 0.3px;">Coord.: Fabrícia Rocha</span>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -119,7 +126,7 @@ if arquivo_excel:
                     lambda x: "AG Aguardando" if "VERIFICADO AGU" in x.upper() or "AGUARDANDO" in x.upper() else x
                 )
             
-            valores_vazios = ["0", "0.0", "nan", "NONE", "NAN", "", "NAN NAN", "NÃO INFORMADO", "A"]
+            valores_vazios = ["0", "0.0", "NAN", "NONE", "", "NAN NAN", "NÃO INFORMADO", "A"]
             for col in df_base.columns:
                 df_base.loc[df_base[col].str.upper().isin(valores_vazios), col] = None
                 
@@ -158,7 +165,7 @@ if not df_base.empty:
 
     #--- 4. INDICADORES DO TOPO (CARDS KPIs) ---
     total_docs = len(df_filtrado)
-    aprovados = len(df_filtrado[df_filtrado["STATUS"].astype(str).str.upper().str.contains("APROVADO|OK|SIM", regex=True)])
+    aprovados = len(df_filtrado[df_filtrado["STATUS"].astype(str).str.upper().str.contains("APROVADO|OK|SIM", na=False)])
     
     kpi_col1, kpi_col2, kpi_col3, kpi_col4, kpi_col5 = st.columns(5)
     with kpi_col1: st.metric(label="📄 TOTAL DOCUMENTOS", value=f"{total_docs}")
@@ -196,23 +203,10 @@ if not df_base.empty:
     
     col_resp1, col_resp2 = st.columns(2)
     
-    with col_resp1:
-        st.markdown("#### Quantidade de Documentos por Responsável")
-        dados_total_resp = df_g3_limpo["RESPONSAVEL"].value_counts()
-        st.bar_chart(dados_total_resp, color="#38BDF8", horizontal=True)
+    st.markdown("#### Quantidade de Documentos por Responsável")
+    dados_total_resp = df_g3_limpo["RESPONSAVEL"].value_counts()
+    st.bar_chart(dados_total_resp, color="#38BDF8", horizontal=True)
             
-    with col_resp2:
-        st.markdown("#### Quantidade de Documentos Aprovados")
-        # RESOLVIDO DEFINITIVAMENTE: Removido qualquer bloco de condição "if" ou "else" que quebrava a colagem
-        df_aprovados_resp = df_g3_limpo[df_g3_limpo["STATUS"].astype(str).str.upper().str.contains("APROVADO|OK|SIM", regex=True)]
-        dados_aprovados_resp = df_aprovados_resp["RESPONSAVEL"].value_counts()
-        st.bar_chart(dados_aprovados_resp, color="#34D399", horizontal=True)
-        
-    st.markdown("---")
-    
-    st.markdown("### Documentos (Validade/Prazo)")
-    dados_g4 = df_filtrado["SIT_PRAZO"].dropna().value_counts()
-    st.bar_chart(dados_g4, color=c_g4_color, horizontal=True)
-        
-    st.markdown("---")
-    
+    st.markdown("#### Quantidade de Documentos Aprovados")
+    df_aprovados_resp = df_g3_limpo[df_g3_limpo["STATUS"].astype(str).str.upper().str.contains("APROVADO|OK|SIM", na=False)]
+    dados_aprovados_resp = df_aprovados_resp["RESPONSAVEL"].value_counts()
