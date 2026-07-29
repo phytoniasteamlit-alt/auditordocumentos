@@ -38,7 +38,6 @@ with col_titulo:
     st.markdown("# PAINEL DE INDICADORES NORMATIVOS NAQH")
 
 with col_hospital:
-    # Renderização segura da logo da cruz com o nome do hospital alinhados à direita
     st.markdown("""
     <div style="display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 10px;">
         <span style="font-size: 34px; color: #EF4444; font-weight: bold; line-height: 1;">➕</span>
@@ -209,9 +208,8 @@ if not df_base.empty:
         
     st.markdown("---")
     
-    linha2_col1, toggle_col2 = st.columns(2)
-    
-    with linha2_col1:
-        st.markdown("### Documentos (Validade/Prazo)")
-        dados_g4 = df_filtrado["SIT_PRAZO"].dropna().value_counts()
-        dados_g4 = dados_g4[dados_g4.index.astype(str).str.strip() != "A"]
+    # CORREÇÃO CRÍTICA: Removido colunas restritas e gerado um abaixo do outro para evitar travamentos de layout
+    st.markdown("### Documentos (Validade/Prazo)")
+    dados_g4 = df_filtrado["SIT_PRAZO"].dropna().value_counts()
+    dados_g4 = dados_g4[dados_g4.index.astype(str).str.strip() != "A"]
+    dados_g4 = dados_g4[dados_g4.index.astype(str).str.strip().str.len() > 1]
