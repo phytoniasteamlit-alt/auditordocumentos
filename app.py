@@ -184,20 +184,14 @@ if not df_base.empty:
     
     with col_resp1:
         st.markdown("#### Total de Documentos sob Responsabilidade")
-        if not df_g3_limpo.empty:
-            dados_total_resp = df_g3_limpo["RESPONSAVEL"].value_counts()
-            st.bar_chart(dados_total_resp, color="#38BDF8", horizontal=True)
-        else:
-            st.warning("Sem dados.")
+        dados_total_resp = df_g3_limpo["RESPONSAVEL"].value_counts()
+        st.bar_chart(dados_total_resp, color="#38BDF8", horizontal=True)
             
     with col_resp2:
         st.markdown("#### Quantidade de Documentos Aprovados")
-        if not df_g3_limpo.empty:
-            df_aprovados_resp = df_g3_limpo[df_g3_limpo["STATUS"].astype(str).str.upper().str.contains("APROVADO|OK|SIM", regex=True)]
-            dados_aprovados_resp = df_aprovados_resp["RESPONSAVEL"].value_counts()
-            st.bar_chart(dados_aprovados_resp, color="#34D399", horizontal=True)
-        else:
-            st.warning("Sem dados.")
+        df_aprovados_resp = df_g3_limpo[df_g3_limpo["STATUS"].astype(str).str.upper().str.contains("APROVADO|OK|SIM", regex=True)]
+        dados_aprovados_resp = df_aprovados_resp["RESPONSAVEL"].value_counts()
+        st.bar_chart(dados_aprovados_resp, color="#34D399", horizontal=True)
         
     st.markdown("---")
     
@@ -206,14 +200,16 @@ if not df_base.empty:
     with linha2_col1:
         st.markdown("### Documentos (Validade/Prazo)")
         dados_g4 = df_filtrado["SIT_PRAZO"].dropna().value_counts()
-        
         dados_g4 = dados_g4[dados_g4.index.astype(str).str.strip() != "A"]
         dados_g4 = dados_g4[dados_g4.index.astype(str).str.strip().str.len() > 1]
-        
         st.bar_chart(dados_g4, color=c_g4_color, horizontal=True)
         
     with linha2_col2:
         st.markdown("### Tipo de Documento x Status Normativo")
-        # CORREÇÃO DEFINITIVA: Nova estrutura de agrupamento plano que evita o travamento interno do Streamlit
+        # RESOLVIDO DEFINITIVAMENTE: Removido qualquer bloco 'if' que causava erro de indentação
         df_g5_limpo = df_filtrado.dropna(subset=["SIGLA", "STATUS"])
-        if not df_g5_limpo.empty:
+        df_g5_agrupado = df_g5_limpo.groupby(["SIGLA", "STATUS"]).size().reset_index(name="Quantidade")
+        st.bar_chart(df_g5_agrupado, x="SIGLA", y="Quantidade", color="STATUS", stack=True, horizontal=True)
+
+    #--- 7. TABELA DETALHADA NO FINAL ---
+    st.markdown("---")
