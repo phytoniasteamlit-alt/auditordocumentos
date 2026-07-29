@@ -28,42 +28,24 @@ st.markdown("""
  border: 2px dashed #38BDF8 !important;
  background-color: #1E293B !important;
  }
- .header-container {
- display: flex;
- align-items: center;
- justify-content: center;
- gap: 15px;
- background-color: #1E293B;
- padding: 20px;
- border-radius: 10px;
- border: 1px solid #334155;
- margin-bottom: 20px;
- }
- .hospital-cross {
- font-size: 42px;
- color: #EF4444;
- filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.6));
- line-height: 1;
- }
- .hospital-title {
- font-size: 32px;
- font-weight: 800;
- color: #FFFFFF;
- letter-spacing: 1px;
- margin: 0;
- }
  </style>
 """, unsafe_allow_html=True)
 
-# MODIFICAÇÃO: Injeção do cabeçalho com a cruz médica e o nome do hospital centralizados
-st.markdown("""
- <div class="header-container">
- <span class="hospital-cross">✚</span>
- <h1 class="hospital-title">HOSPITAL DA CIDADE</h1>
- </div>
-""", unsafe_allow_html=True)
+# --- CABEÇALHO DO HOSPITAL (LADO A LADO COM O TÍTULO PRINCIPAL) ---
+col_titulo, col_hospital = st.columns([0.7, 0.3])
 
-st.markdown("<h3 style='text-align: center; color: #94A3B8; margin-top: -10px; margin-bottom: 20px;'>PAINEL DE INDICADORES NORMATIVOS NAQH</h3>", unsafe_allow_html=True)
+with col_titulo:
+    st.markdown("# PAINEL DE INDICADORES NORMATIVOS NAQH")
+
+with col_hospital:
+    # Renderização segura da logo da cruz com o nome do hospital alinhados à direita
+    st.markdown("""
+    <div style="display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 10px;">
+        <span style="font-size: 34px; color: #EF4444; font-weight: bold; line-height: 1;">➕</span>
+        <span style="font-size: 22px; color: #FFFFFF; font-weight: 800; letter-spacing: 0.5px;">HOSPITAL DA CIDADE</span>
+    </div>
+    """, unsafe_allow_html=True)
+
 st.markdown("---")
 
 #--- 2. CARREGAMENTO DO ARQUIVO ---
@@ -227,7 +209,9 @@ if not df_base.empty:
         
     st.markdown("---")
     
-    linha2_col1, linha2_col2 = st.columns(2)
+    linha2_col1, toggle_col2 = st.columns(2)
     
     with linha2_col1:
         st.markdown("### Documentos (Validade/Prazo)")
+        dados_g4 = df_filtrado["SIT_PRAZO"].dropna().value_counts()
+        dados_g4 = dados_g4[dados_g4.index.astype(str).str.strip() != "A"]
