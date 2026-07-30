@@ -182,7 +182,7 @@ if arquivo_word:
     st.session_state.porcentagem_conforme = int((itens_conformes / total_itens) * 100)
     st.success("✔️ Varredura de integridade estrutural e de tipografia finalizada.")
 
-#--- 4. INTERFACE GRÁFICA DO ESPELHO DA FICHA (POSICIONADA NO TOPO - CORRIGIDA) ---
+#--- 4. INTERFACE GRÁFICA DO ESPELHO DA FICHA (TOPO DA TELA) ---
 st.markdown("---")
 st.subheader("📝 Ficha de Verificação Consolidada (Espelho Oficial)")
 
@@ -194,11 +194,10 @@ with col_p2:
 
 st.markdown("---")
 
+# Função visual otimizada sem blocos 'if' internos (Elimina erros de recuo/espaço por completo)
 def render_linha_ficha(nome_item, status_atual, obs=""):
     c1, c2 = st.columns(2)
     with c1:
         st.markdown(f"**{nome_item}**")
-        if obs:
-            st.caption(f"_{obs}_")
+        if obs: st.caption(f"_{obs}_")
     with c2:
-        if status_atual == "SIM":
