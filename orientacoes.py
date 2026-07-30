@@ -16,7 +16,7 @@ tem_impressos_inconformes = st.sidebar.checkbox("⚠️ Há imagens/fotos de imp
 logo_hospital_manual = st.sidebar.checkbox("Autorizar Manualmente: Logomarca do Hospital")
 codigo_manual = st.sidebar.checkbox("Autorizar Manualmente: Código do Documento")
 
-# Inicialização segura e persistente de variáveis de controle (Layout Fixo e Estável)
+# Inicialização segura dos estados de sessão para manter o layout visível
 if "nome_arquivo_doc" not in st.session_state:
     st.session_state.nome_arquivo_doc = "Documento Coletado"
 if "tipo_detectado" not in st.session_state:
@@ -183,7 +183,6 @@ if arquivo_word:
     st.session_state.porcentagem_conforme = int((itens_conformes / total_itens) * 100)
     st.success("✔️ Varredura de integridade estrutural e de tipografia finalizada.")
 
-#--- 4. EXIBIÇÃO DO GUIA DE ERROS (LAYOUT DE GRUPO ISOLADO E PROTEGIDO) ---
-lista_erros_painel = list(set(st.session_state.erros_formatacao))
+#--- 4. EXIBIÇÃO DO GUIA DE ERROS (100% LIMPO E LIVRE DE TRAVAMENTOS) ---
 with st.expander("⚠️ Guia de Correção Manual (Fontes e Tamanhos Inconformes)", expanded=True):
-    if lista_erros_painel:
+    st.markdown("Abra o seu documento original no Word e ajuste os trechos apontados abaixo:")
