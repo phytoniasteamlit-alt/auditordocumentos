@@ -65,6 +65,13 @@ if arquivo_word:
     corpo_texto_ok = True
     tabelas_texto_ok = True
     
+    # Reinicia marcações estruturais para nova varredura dinamicamente
+    st.session_state.cabecalho_dados = {k: False for k in st.session_state.cabecalho_dados.keys()}
+    st.session_state.historico_dados = {k: False for k in st.session_state.historico_dados.keys()}
+    
+    if logo_hospital_manual: st.session_state.cabecalho_dados["LOGOMARCA DO HOSPITAL"] = True
+    if codigo_manual: st.session_state.cabecalho_dados["CÓDIGO DO DOCUMENTO"] = True
+    
     for sigla in ["NOR", "POP", "PROT", "MAN", "REG", "ROT", "POL"]:
         if sigla in arquivo_word.name.upper():
             st.session_state.tipo_detectado = sigla
@@ -92,7 +99,7 @@ if arquivo_word:
         
     for tabela in doc.tables:
         texto_tabela_completo = "".join([celula.text.upper() for linha in tabela.rows for celula in linha.cells])
-        is_registro_historico = any(termo in texto_tabela_completo for termo in ["HISTÓRICO", "REVISÃO", "VERSÃO", "PROCESSO"])
+        is_registro_historico = any(termo in texto_tabela_completo for termo in ["HISTÓRICO", "REVISÃO", "VERSÃO", "PROCESSO", "APROVAÇÃO"])
         
         for i_linha, linha in enumerate(tabela.rows):
             for celula in linha.cells:
@@ -115,6 +122,40 @@ if arquivo_word:
                                 if f_tam and int(f_tam) != 9 and int(f_tam) != 10:
                                     tabelas_texto_ok = False
                                     st.session_state.erros_formatacao.append(f"❌ **Dados Internos**: O texto '{text_clean[:15]}...' está com tamanho **{f_tam}pt**. O correto é **9pt (Justificado)**.")
+
+    # 3. Varredura de Cabeçalhos e Rodapés textuais das seções
+    for secao in doc.sections:
+        if secao.header:
+            for p_head in secao.header.paragraphs:
+                if p_head.text.strip():
+                    conteudo_linhas.append(p_head.text)
+        if secao.footer:
+            for p_foot in secao.footer.paragraphs:
+                if p_foot.text.strip():
+                    conteudo_linhas.append(p_foot.text)
+                
+    texto_completo = "\n".join(conteudo_linhas)
+    if texto_completo:
+        p_upper = texto_completo.upper()
+        if "HOSPITAL" in p_upper or "SEMUS" in p_upper or logo_hospital_manual:
+            st.session_state.cabecalho_dados["LOGOMARCA DO HOSPITAL"] = True
+        if "NORMA" in p_upper or "PROCEDIMENTO" in p_upper or "PROTOCOLO" in p_upper or "PROT" in p_upper:
+            st.session_state.cabecalho_dados["TIPO DE DOCUMENTO"] = True
+        if "CÓDIGO" in p_upper or re.search(r"[A-Z]{2,4}_[A-Z0-9]+", p_upper) or codigo_manual:
+            st.session_state.cabecalho_dados["CÓDIGO DO DOCUMENTO"] = True
+        if "VERSÃO:" in p_upper or "VERSÃO" in p_upper or "1ª" in p_upper or "2ª" in p_upper or "3ª" in p_upper:
+            st.session_state.cabecalho_dados["VERSÃO"] = True
+        # Calibragem do Mapeamento Inteligente de Páginas (Captura PÁGINAS, PÁG., FL., FOLHA)
+        if any(term in p_upper for term in ["PÁGINAS", "PÁG", "FL.", "FOLHA", "PAG"]):
+            st.session_state.cabecalho_dados["PÁGINAS"] = True
+        if len(st.session_state.nome_arquivo_doc) > 5:
+            st.session_state.cabecalho_dados["TÍTULO DO DOCUMENTO"] = True
+            
+        # Calibragem do Mapeamento Inteligente do Fim do Documento (DATA DE APROVAÇÃO / VERSÃO)
+        if any(term in p_upper for term in ["VALIDADE", "DATA APROVAÇÃO", "DATA DE APROVAÇÃO", "APROVAÇÃO:"]):
+            st.session_state.historico_dados["DATA DA APROVAÇÃO / VALIDADE"] = True
+        if any(term in p_upper for term in ["REGISTRO HISTÓRICO", "DESCRIÇÃO DA ATUALIZAÇÃO", "VERSÃO INICIAL", "HISTÓRICO"]):
+            st.session_state.historico_dados["REGISTRO HISTÓRICO DO DOCUMENTO"] = True
 
     st.session_state.stats_texto["MODELO DA FONTE E TAMANHO (CORPO DO TEXTO)"] = "SIM" if corpo_texto_ok else "NÃO"
     st.session_state.stats_texto["FONTE E TAMANHO (DENTRO DE TABELAS/HISTÓRICO)"] = "SIM" if tabelas_texto_ok else "NÃO"
@@ -143,73 +184,12 @@ if arquivo_word:
     st.session_state.porcentagem_conforme = int((itens_conformes / total_itens) * 100)
     st.success("✔️ Varredura de integridade estrutural e de tipografia finalizada.")
 
-#--- 4. EXIBIÇÃO DO GUIA DE ERROS DIRETOS ---
+#--- 4. EXIBIÇÃO DO GUIA DE ERROS DIRETOS E 100% DINÂMICOS ---
 st.markdown("### ⚠️ Guia de Correção Manual (Fontes e Tamanhos Inconformes)")
 st.markdown("Abra o seu documento original no Word e ajuste os trechos apontados abaixo:")
 
 lista_erros_painel = list(set(st.session_state.erros_formatacao))
 if lista_erros_painel:
-    for erro in lista_erros_painel[:8]:
+    for erro in lista_erros_painel[:12]:
         st.info(erro)
 else:
-    st.info("❌ **Tabelas do Registro Histórico**: Encontrado tamanho **11.0pt** nas células internas. O corpo do texto está correto (Calibri 11), mas os cabeçalhos das tabelas devem ser **10pt (Negrito)** e os dados internos devem ser **9pt (Justificado)**.")
-
-#--- 5. INTERFACE GRÁFICA DO ESPELHO DA FICHA (RENDERIZAÇÃO GLOBAL) ---
-st.markdown("---")
-st.subheader("📝 Ficha de Verificação Consolidada (Espelho Oficial)")
-
-col_p1, col_p2 = st.columns(2)
-with col_p1:
-    st.progress(st.session_state.porcentagem_conforme / 100)
-with col_p2:
-    st.subheader(f"📊 {st.session_state.porcentagem_conforme}% Conformidade")
-
-st.markdown("---")
-
-def render_linha_ficha(nome_item, status_atual, obs=""):
-    c1, c2 = st.columns(2)
-    with c1:
-        st.markdown(f"**{nome_item}**")
-        if obs:
-            st.caption(f"_{obs}_")
-    with c2:
-        if status_atual == "SIM":
-            st.markdown("🟩 **[X] SIM** &nbsp;&nbsp;&nbsp;&nbsp; ⬜ [ ] NÃO")
-        elif status_atual == "NÃO":
-            st.markdown("⬜ [ ] SIM &nbsp;&nbsp;&nbsp;&nbsp; 🟥 **[X] NÃO**")
-        elif status_atual == "OPCIONAL":
-            st.markdown("🔷 **[X] OPCIONAL**")
-        else:
-            st.markdown("⬜ [ ] SIM &nbsp;&nbsp;&nbsp;&nbsp; ⬜ [ ] NÃO &nbsp;&nbsp;&nbsp;&nbsp; 🟨 **[X] N/A**")
-    st.markdown("<hr style='margin:4px 0px; border-top: 1px dashed #444;' />", unsafe_allow_html=True)
-
-st.markdown("### 🔹 CABEÇALHO")
-for k, v in st.session_state.cabecalho_dados.items():
-    render_linha_ficha(k, "SIM" if v else "NÃO")
-
-st.markdown("<br>", unsafe_allow_html=True)
-
-st.markdown("### 🔹 ITENS TEXTO")
-for item, stat in st.session_state.stats_texto.items():
-    render_linha_ficha(item, stat)
-
-st.markdown("<br>", unsafe_allow_html=True)
-
-st.markdown("### 🔹 FIM DO DOCUMENTO")
-for k, v in st.session_state.historico_dados.items():
-    render_linha_ficha(k, "SIM" if v else "NÃO")
-
-st.markdown("<br>", unsafe_allow_html=True)
-
-st.markdown("### 🔹 IMPRESSOS")
-render_linha_ficha("ITENS IMPRESSO (ESTRUTURAS GRÁFICAS/TABELAS)", st.session_state.status_impressos, obs=st.session_state.comentario_impressos)
-
-#--- 6. CONSTRUÇÃO EXTRAÇÃO SEGURA DE VARIÁVEIS (CORRIGIDO SEM PARSE INTERNO) ---
-v_logo = "SIM" if st.session_state.cabecalho_dados["LOGOMARCA DO HOSPITAL"] else "NÃO"
-v_tit = "SIM" if st.session_state.cabecalho_dados["TÍTULO DO DOCUMENTO"] else "NÃO"
-v_tipo = "SIM" if st.session_state.cabecalho_dados["TIPO DE DOCUMENTO"] else "NÃO"
-v_cod = "SIM" if st.session_state.cabecalho_dados["CÓDIGO DO DOCUMENTO"] else "NÃO"
-v_ver = "SIM" if st.session_state.cabecalho_dados["VERSÃO"] else "NÃO"
-v_pag = "SIM" if st.session_state.cabecalho_dados["PÁGINAS"] else "NÃO"
-
-s_papel = st.session_state.stats_texto["PAPEL"]
