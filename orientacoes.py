@@ -187,6 +187,7 @@ if arquivo_word:
             for erro in erros_unicos[:6]:
                 st.warning(erro)
 
+# --- DEFINIÇÃO DOS STATUS DE EXIBIÇÃO GLOBAL ---
 status_impressos = "NÃO SE APLICA"
 comentario_impressos = ""
 
@@ -201,7 +202,7 @@ if arquivo_word:
     else:
         status_impressos = "NÃO SE APLICA"
 
-# Consolidação da lista de dados para cálculo matemático
+# Consolidação dos dados para cálculo matemático geral de porcentagem
 lista_calculo = []
 for k, v in cabecalho_dados.items():
     lista_calculo.append("SIM" if v else "NÃO")
@@ -216,6 +217,3 @@ itens_texto_fixos = [
     ("FIGURAS, TABELAS E GRÁFICOS", "SIM" if has_tables_or_images else "NÃO"),
     ("PAGINAÇÃO", "SIM" if arquivo_word else "NÃO"),
     ("MARCA D'AGUA", "SIM" if arquivo_word else "NÃO"),
-    ("REFERÊNCIAS", "SIM" if arquivo_word else "NÃO"),
-    ("APÊNDICES/ ANEXOS", "OPCIONAL")
-]
