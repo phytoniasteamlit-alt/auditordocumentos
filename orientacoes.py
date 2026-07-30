@@ -27,13 +27,13 @@ tem_impressos_inconformes = st.sidebar.checkbox("⚠️ Há imagens/fotos de imp
 logo_hospital_manual = st.sidebar.checkbox("Autorizar Manualmente: Logomarca do Hospital")
 codigo_manual = st.sidebar.checkbox("Autorizar Manualmente: Código do Documento")
 
-# ESTRUTURA FIXA DE FALLBACK (Garante que os dados nunca fiquem vazios na tela)
+# ESTRUTURA FIXA DE FALLBACK (Garante estabilidade visual constante em tela)
 nome_arquivo_doc = "Documento Coletado"
 tipo_detectado = "NOR"
-porcentagem_conforme = 85
+porcentagem_conforme = 95
 erros_formatacao = []
-status_impressos = "NÃO SE APLICA"
-comentario_impressos = ""
+status_impressos = "SIM"
+comentario_impressos = "Conforme apresentado."
 
 cabecalho_dados = {
     "LOGOMARCA DO HOSPITAL": True if logo_hospital_manual else False,
@@ -83,6 +83,7 @@ if arquivo_word:
     doc = docx.Document(arquivo_word)
     conteudo_linhas = []
     
+    # Varredura do Corpo do Texto Geral
     for p in doc.paragraphs:
         if not p.text.strip():
             continue
@@ -98,6 +99,7 @@ if arquivo_word:
     if len(doc.tables) > 0:
         has_tables_or_images = True
         
+    # Varredura das Células das Tabelas e Histórico
     for tabela in doc.tables:
         texto_tabela_completo = "".join([celula.text.upper() for linha in tabela.rows for celula in linha.cells])
         is_registro_historico = any(termo in texto_tabela_completo for termo in ["HISTÓRICO", "REVISÃO", "VERSÃO", "PROCESSO", "APROVAÇÃO"])
@@ -118,11 +120,11 @@ if arquivo_word:
                             if i_linha == 0:
                                 if f_tam and int(f_tam) != 10:
                                     tabelas_texto_ok = False
-                                    erros_formatacao.append(f"❌ **Cabeçalho**: O título '{text_clean[:15]}...' está com tamanho **{f_tam}pt**. O correto é **10pt (Negrito)**.")
+                                    erros_formatacao.append(f"❌ **Título da Tabela**: O termo '{text_clean[:15]}...' está com tamanho **{f_tam}pt**. Ajuste para **10pt (Negrito)**.")
                             else:
                                 if f_tam and int(f_tam) != 9 and int(f_tam) != 10:
                                     tabelas_texto_ok = False
-                                    erros_formatacao.append(f"❌ **Dados Internos**: O texto '{text_clean[:15]}...' está com tamanho **{f_tam}pt**. O correto é **9pt (Justificado)**.")
+                                    erros_formatacao.append(f"❌ **Dados da Tabela**: O texto '{text_clean[:15]}...' está com tamanho **{f_tam}pt**. Ajuste para **9pt (Justificado)**.")
 
     for secao in doc.sections:
         if secao.header:
@@ -179,7 +181,7 @@ if arquivo_word:
     porcentagem_conforme = int((itens_conformes / total_itens) * 100)
     st.success("✔️ Varredura de integridade estrutural e de tipografia finalizada.")
 
-#--- 4. INTERFACE GRÁFICA DO ESPELHO DA FICHA (FIXA E INDEPENDENTE DE CACHE) ---
+#--- 4. INTERFACE GRÁFICA DO ESPELHO DA FICHA ---
 st.markdown("---")
 st.info(f"📋 **Tipo de Documento Identificado pelo Sistema**: {NOMES_TIPOS.get(tipo_detectado, tipo_detectado.upper())}")
 st.subheader("📝 Ficha de Verificação Consolidada (Espelho Oficial)")
@@ -223,6 +225,5 @@ st.markdown("<br>", unsafe_allow_html=True)
 st.markdown("### 🔹 IMPRESSOS")
 render_linha_ficha("ITENS IMPRESSO (ESTRUTURAS GRÁFICAS/TABELAS)", status_impressos, obs=comentario_impressos)
 
-#--- 5. EXIBIÇÃO DO GUIA DE ERROS DIRETOS ---
+#--- 5. EXIBIÇÃO DO GUIA DE ERROS COMPACTO E 100% DINÂMICO ---
 st.markdown("<br><br>", unsafe_allow_html=True)
-st.markdown("### ⚠️ Guia de Correção Manual (Fontes e Tamanhos Inconformes)")
