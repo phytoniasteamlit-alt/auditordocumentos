@@ -21,12 +21,6 @@ if "nome_arquivo_doc" not in st.session_state:
     st.session_state.nome_arquivo_doc = "Documento Coletado"
 if "tipo_detectado" not in st.session_state:
     st.session_state.tipo_detectado = "NORMA"
-if "porcentagem_conforme" not in st.session_state:
-    st.session_state.porcentagem_conforme = 85  # Mantém os 85% de base estável do protocolo
-if "erros_formatacao" not in st.session_state:
-    st.session_state.erros_formatacao = []
-
-# Dicionários de dados persistentes para renderização global na interface
 if "cabecalho_dados" not in st.session_state:
     st.session_state.cabecalho_dados = {
         "LOGOMARCA DO HOSPITAL": True, "TÍTULO DO DOCUMENTO": True, "TIPO DE DOCUMENTO": True,
@@ -46,12 +40,16 @@ if "status_impressos" not in st.session_state:
     st.session_state.status_impressos = "NÃO SE APLICA"
 if "comentario_impressos" not in st.session_state:
     st.session_state.comentario_impressos = ""
+if "porcentagem_conforme" not in st.session_state:
+    st.session_state.porcentagem_conforme = 85
+if "erros_formatacao" not in st.session_state:
+    st.session_state.erros_formatacao = []
+if "fonte_e_tamanho_ok" not in st.session_state:
+    st.session_state.fonte_e_tamanho_ok = True
 
-# Vincula as marcações da barra lateral às variáveis de exibição
-if logo_hospital_manual:
-    st.session_state.cabecalho_dados["LOGOMARCA DO HOSPITAL"] = True
-if codigo_manual:
-    st.session_state.cabecalho_dados["CÓDIGO DO DOCUMENTO"] = True
+# Sincroniza controles manuais com o estado da sessão
+st.session_state.cabecalho_dados["LOGOMARCA DO HOSPITAL"] = logo_hospital_manual
+st.session_state.cabecalho_dados["CÓDIGO DO DOCUMENTO"] = codigo_manual
 
 #--- 3. FLUXO DE CARREGAMENTO E ANÁLISE RIGOROSA (WORD .DOCX) ---
 arquivo_word = st.file_uploader("Arraste o arquivo WORD (.docx) aqui para auditoria", type=["docx"])
@@ -59,8 +57,8 @@ arquivo_word = st.file_uploader("Arraste o arquivo WORD (.docx) aqui para audito
 if arquivo_word:
     st.session_state.nome_arquivo_doc = arquivo_word.name
     st.session_state.erros_formatacao = []
+    st.session_state.fonte_e_tamanho_ok = True
     has_tables_or_images = False
-    fonte_e_tamanho_ok = True
     
     for sigla in ["NOR", "POP", "PROT", "MAN", "REG", "ROT", "POL"]:
         if sigla in arquivo_word.name.upper():
@@ -79,10 +77,10 @@ if arquivo_word:
             nome_fonte = r.font.name
             tamanho_fonte = r.font.size.pt if r.font.size else None
             if nome_fonte and nome_fonte.upper() not in ["CALIBRI", "ARIAL"]:
-                fonte_e_tamanho_ok = False
+                st.session_state.fonte_e_tamanho_ok = False
                 st.session_state.erros_formatacao.append(f"❌ **Corpo do Texto**: Encontrada fonte '{nome_fonte}'. O correto é **Calibri** ou **Arial**.")
             if tamanho_fonte and int(tamanho_fonte) != 11:
-                fonte_e_tamanho_ok = False
+                st.session_state.fonte_e_tamanho_ok = False
                 st.session_state.erros_formatacao.append(f"❌ **Corpo do Texto**: Trecho está com tamanho **{tamanho_fonte}pt**. O correto é **11pt**.")
 
     # 2. Pente Fino nas Tabelas / Registro Histórico
@@ -108,15 +106,15 @@ if arquivo_word:
                         if is_registro_historico:
                             if i_linha == 0:
                                 if f_tam and int(f_tam) != 10:
-                                    fonte_e_tamanho_ok = False
+                                    st.session_state.fonte_e_tamanho_ok = False
                                     st.session_state.erros_formatacao.append(f"❌ **Título da Tabela**: Campo '{text_clean[:15]}' está com **{f_tam}pt**. O correto é **10pt**.")
                                 if r_celula.bold is not True and len(text_clean) > 2:
-                                    fonte_e_tamanho_ok = False
+                                    st.session_state.fonte_e_tamanho_ok = False
                                     st.session_state.erros_formatacao.append(f"❌ **Título da Tabela**: Campo '{text_clean[:15]}' sem **Negrito**.")
                             else:
                                 if f_tam and int(f_tam) != 9 and int(f_tam) != 10:
-                                    fonte_e_tamanho_ok = False
-                                    st.session_state.erros_formatacao.append(f"❌ **Dados da Tabela**: Texto está com **{f_tam}pt**. O correto é **9pt**.")
+                                    st.session_state.fonte_e_tamanho_ok = False
+                                    st.session_state.erros_formatacao.append(f"❌ **Dados da Tabela**: Texto com **{f_tam}pt** na tabela do Histórico. O correto é **9pt**.")
 
     # 3. Varredura de Cabeçalhos textuais
     for secao in doc.sections:
@@ -149,7 +147,7 @@ if arquivo_word:
     # Atualiza as variáveis de texto para exibição estável
     st.session_state.stats_texto["PAPEL"] = "SIM"
     st.session_state.stats_texto["MARGENS"] = "SIM"
-    st.session_state.stats_texto["MODELO DA FONTE E TAMANHO"] = "SIM" if fonte_e_tamanho_ok else "NÃO"
+    st.session_state.stats_texto["MODELO DA FONTE E TAMANHO"] = "SIM" if st.session_state.fonte_e_tamanho_ok else "NÃO"
     st.session_state.stats_texto["ESPAÇAMENTO ENTRE LINHAS"] = "SIM"
     st.session_state.stats_texto["ALINHAMENTO"] = "SIM"
     st.session_state.stats_texto["PARÁGRAFO"] = "SIM"
@@ -169,7 +167,7 @@ if arquivo_word:
         st.session_state.status_impressos = "NÃO SE APLICA"
         st.session_state.comentario_impressos = ""
 
-    # Recalcula a porcentagem baseada nos itens alterados
+    # Realiza o cálculo de porcentagem seguro
     lista_calculo = []
     for v in st.session_state.cabecalho_dados.values():
         lista_calculo.append("SIM" if v else "NÃO")
@@ -183,6 +181,6 @@ if arquivo_word:
     st.session_state.porcentagem_conforme = int((itens_conformes / total_itens) * 100)
     st.success("✔️ Varredura de integridade estrutural e de tipografia finalizada.")
 
-#--- 4. EXIBIÇÃO DO GUIA DE ERROS (100% LIMPO E LIVRE DE TRAVAMENTOS) ---
+#--- 4. EXIBIÇÃO DO GUIA DE ERROS COMPACTO E COMPATÍVEL ---
+lista_erros_painel = list(set(st.session_state.erros_formatacao))
 with st.expander("⚠️ Guia de Correção Manual (Fontes e Tamanhos Inconformes)", expanded=True):
-    st.markdown("Abra o seu documento original no Word e ajuste os trechos apontados abaixo:")
