@@ -63,7 +63,7 @@ if arquivo_excel:
                 break
         
         if not nome_aba_principal and lista_abas_reais:
-            nome_aba_principal = lista_abas_reais[0]
+            nome_aba_principal = lista_abas_reais
             
         if nome_aba_principal:
             df_raw = pd.read_excel(arquivo_excel, sheet_name=nome_aba_principal, header=1, engine="openpyxl")
@@ -192,8 +192,8 @@ if not df_base.empty:
     
     with linha2_col1:
         st.markdown("### 📅 Situação de Prazos")
-        # CORRIGIDO: Parêntese de fechamento da pd.Series adicionado corretamente ao final
         s_prazos_limpos = df_filtrado["SIT_PRAZO"].apply(remover_acentos)
         contagem_prazos = s_prazos_limpos.value_counts()
         
         dados_prazo = pd.Series({
+            "No Prazo": contagem_prazos.get("VALIDO", 0) + contagem_prazos.get("NO PRAZO", 0),
