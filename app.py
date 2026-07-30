@@ -8,12 +8,15 @@ from io import BytesIO
 st.set_page_config(page_title="PAINEL DE INDICADORES NORMA ZERO", page_icon="📋", layout="wide")
 
 # --- BLOCO DE CUSTOMIZAÇÃO VISUAL AVANÇADA (CSS INJECT NATIVO) ---
+# ALTERADO: Adicionada regra para travar o tamanho máximo da tabela lateral e não quebrar o painel
 st.markdown("""
 <style>
 [data-testid="stDataFrame"] td, [data-testid="stDataFrame"] th { font-size: 16px !important; font-weight: 600 !important; color: #FFFFFF !important; }
 [data-testid="stDataFrame"] td:last-child { color: #FBBF24 !important; font-size: 18px !important; font-weight: bold !important; }
 div[data-testid="stSelectbox"] label p, div[data-testid="stFileUploader"] label p { font-size: 15px !important; font-weight: bold !important; color: #38BDF8 !important; }
 section[data-testid="stFileUploaderDropzone"] { border: 2px dashed #38BDF8 !important; background-color: #1E293B !important; }
+/* Força a tabela da barra lateral a ter tamanho controlado */
+[data-testid="stSidebar"] [data-testid="stDataFrame"] { max-height: 250px !important; overflow-y: auto !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -62,12 +65,13 @@ if arquivo_excel:
                 break
         
         if not nome_aba_principal and lista_abas_reais:
-            nome_aba_principal = lista_abas_reais[0]
+            nome_aba_principal = lista_abas_reais
             
         if nome_aba_principal:
             df_raw = pd.read_excel(arquivo_excel, sheet_name=nome_aba_principal, header=1, engine="openpyxl")
             df_raw.columns = df_raw.columns.astype(str).str.strip().str.upper()
             
+            # 1. PROCESSAMENTO DAS MÉDIAS
             col_g, col_h = None, None
             for c in df_raw.columns:
                 if "1º" in c or "1O" in c or "V 1" in c or "V1" in c: col_g = c
@@ -88,6 +92,7 @@ if arquivo_excel:
             media_v1 = float(media_v1) if pd.notna(media_v1) else 0.0
             media_v2 = float(media_v2) if pd.notna(media_v2) else 0.0
 
+            # 2. CAPTURA DOS DADOS DOS GRÁFICOS
             df_base = pd.DataFrame()
             for col_real in df_raw.columns:
                 if "SIGLA" in col_real: df_base["SIGLA"] = df_raw[col_real]
@@ -140,17 +145,12 @@ if not df_base.empty:
     lista_documentos.insert(0, "Todos")
     documento_selecionado = st.sidebar.selectbox("Filtrar por Documento Aprovado:", lista_documentos)
     
-    df_filtrado = df_base.copy()
-    if responsavel_selecionado != "Todos":
-        df_filtrado = df_filtrado[df_filtrado["RESPONSAVEL"] == responsavel_selecionado]
-    if documento_selecionado != "Todos":
-        df_filtrado = df_filtrado[df_filtrado["SIGLA"] == documento_selecionado]
-    
     st.sidebar.markdown("---")
     st.sidebar.subheader("📊 Qtd por Documento (Sigla)")
-    df_lateral_contagem = df_filtrado["SIGLA"].dropna().value_counts().reset_index()
+    df_lateral_contagem = df_base["SIGLA"].dropna().value_counts().reset_index()
     df_lateral_contagem.columns = ["Documento", "Qtd"]
-    st.sidebar.dataframe(df_lateral_contagem, use_container_width=True, hide_index=True)
+    # ALTERADO: Travado a altura padrão para gerar barra de rolagem na tabela interna lateral
+    st.sidebar.dataframe(df_lateral_contagem, use_container_width=True, hide_index=True, height=200)
     
     st.sidebar.markdown("---")
     st.sidebar.subheader("🎨 Configuração dos Gráficos")
@@ -158,6 +158,13 @@ if not df_base.empty:
     c_g2_color = st.sidebar.color_picker("G2 - Cor Tempo:", "#38BDF8", key="c2")
     c_g4_color = st.sidebar.color_picker("G4 - Cor Prazo:", "#C084FC", key="c4")
     
+    # Executa a filtragem real reativa dos dados na tela principal
+    df_filtrado = df_base.copy()
+    if responsavel_selecionado != "Todos":
+        df_filtrado = df_filtrado[df_filtrado["RESPONSAVEL"] == responsavel_selecionado]
+    if documento_selecionado != "Todos":
+        df_filtrado = df_filtrado[df_filtrado["SIGLA"] == documento_selecionado]
+
     #--- 4. INDICADORES DO TOPO (CARDS) ---
     total_docs = len(df_filtrado)
     aprovados = len(df_filtrado[df_filtrado["STATUS"].astype(str).str.upper().str.contains("APROVADO|OK|SIM", na=False)])
@@ -187,13 +194,3 @@ if not df_base.empty:
     
     linha2_col1, linha2_col2 = st.columns(2)
     
-    with linha2_col1:
-        st.markdown("### 📅 Situação de Prazos")
-        s_prazos_limpos = df_filtrado["SIT_PRAZO"].apply(remover_acentos)
-        contagem_prazos = s_prazos_limpos.value_counts()
-        
-        dados_prazo = pd.Series({
-            "No Prazo": contagem_prazos.get("VALIDO", 0) + contagem_prazos.get("NO PRAZO", 0),
-            "Prestes a Vencer": contagem_prazos.get("PRESTES A VENCER", 0),
-            "Vencido": contagem_prazos.get("VENCIDO", 0)
-        })
