@@ -26,7 +26,6 @@ st.sidebar.header("⚙️ Controles de Auditoria (NAQH)")
 tem_impressos_inconformes = st.sidebar.checkbox("⚠️ Há imagens/fotos de impressos ilegíveis ou inconformes?")
 logo_hospital_manual = st.sidebar.checkbox("Autorizar Manualmente: Logomarca do Hospital")
 codigo_manual = st.sidebar.checkbox("Autorizar Manualmente: Código do Documento")
-# NOVO CONTROLE MANUAL EXCLUSIVO PARA IMPRESSOS
 impresso_manual_conforme = st.sidebar.checkbox("Autorizar Manualmente: Itens Impresso (Conforme)")
 
 # ESTRUTURA FIXA DE FALLBACK (Garante estabilidade visual constante em tela)
@@ -173,7 +172,6 @@ if arquivo_word:
             comentario_impressos = "Conforme apresentado."
     else:
         status_impressos = "NÃO SE APLICA"
-        comentario_impressos = ""
 
     lista_calculo = []
     for v in cabecalho_dados.values():
@@ -204,6 +202,15 @@ with col_p1:
 with col_p2:
     st.subheader(f"📊 {porcentagem_conforme}% Conformidade")
 
+# NOTIFICAÇÕES VISUAIS DE LIBERAÇÃO MANUAL (Avisos dinâmicos no topo da tela)
+itens_liberados = []
+if logo_hospital_manual: itens_liberados.append("Logomarca do Hospital")
+if codigo_manual: itens_liberados.append("Código do Documento")
+if impresso_manual_conforme: itens_liberados.append("Itens Impresso")
+
+if itens_liberados:
+    st.info(f"ℹ️ **Itens aprovados manualmente via painel de contingência**: {', '.join(itens_liberados)}.")
+
 st.markdown("---")
 
 def render_linha_ficha(nome_item, status_atual, obs=""):
@@ -212,11 +219,3 @@ def render_linha_ficha(nome_item, status_atual, obs=""):
     marcador = "🔷 **[X] OPCIONAL**"
     if status_atual == "SIM": marcador = "🟩 **[X] SIM** &nbsp;&nbsp;&nbsp;&nbsp; ⬜ [ ] NÃO"
     elif status_atual == "NÃO": marcador = "⬜ [ ] SIM &nbsp;&nbsp;&nbsp;&nbsp; 🟥 **[X] NÃO**"
-    elif status_atual == "NÃO SE APLICA": marcador = "⬜ [ ] SIM &nbsp;&nbsp;&nbsp;&nbsp; ⬜ [ ] NÃO &nbsp;&nbsp;&nbsp;&nbsp; 🟨 **[X] N/A**"
-    c2.markdown(marcador)
-    st.markdown("<hr style='margin:4px 0px; border-top: 1px dashed #444;' />", unsafe_allow_html=True)
-
-st.markdown("### 🔹 CABEÇALHO")
-for k, v in cabecalho_dados.items():
-    render_linha_ficha(k, "SIM" if v else "NÃO")
-
