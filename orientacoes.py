@@ -7,7 +7,7 @@ from io import BytesIO
 #--- 1. CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="Validador NAQH", page_icon="🔍", layout="wide")
 st.title("Auditor Automatizado - Ficha Oficial NAQH")
-st.markdown("Sistema completo parametrizado com o layout oficial de conferência lateral do Hospital Dr. Jackson Lago.")
+st.markdown("Sistema completo focado no apontamento detalhado de desvios tipográficos conforme a Norma Zero.")
 
 #--- 2. BARRA LATERAL (CONTROLES E CHECKBOXES) ---
 st.sidebar.header("⚙️ Controles de Auditoria (NAQH)")
@@ -16,13 +16,12 @@ tem_impressos_inconformes = st.sidebar.checkbox("⚠️ Há imagens/fotos de imp
 logo_hospital_manual = st.sidebar.checkbox("Autorizar Manualmente: Logomarca do Hospital")
 codigo_manual = st.sidebar.checkbox("Autorizar Manualmente: Código do Documento")
 
-# Inicialização de variáveis padrão de auditoria (Layout Fixo)
+# Inicialização de variáveis padrão de auditoria (Layout Fixo e Estável)
 nome_arquivo_doc = "Documento Coletado"
 tipo_detectado = "NORMA"
 has_tables_or_images = False
 fonte_e_tamanho_ok = True
 erros_formatacao = []
-documento_corrigido_bytes = None
 
 cabecalho_dados = {
     "LOGOMARCA DO HOSPITAL": logo_hospital_manual,
@@ -62,92 +61,66 @@ if arquivo_word:
             break
             
     doc = docx.Document(arquivo_word)
-    doc_out = docx.Document(arquivo_word)
     conteudo_linhas = []
     
-    # Varredura do Corpo do Texto
-    for p_idx, p in enumerate(doc.paragraphs):
+    # 1. Pente Fino no Corpo do Texto Geral
+    for p in doc.paragraphs:
         if not p.text.strip():
             continue
         conteudo_linhas.append(p.text)
         
-        if p_idx < len(doc_out.paragraphs):
-            p_out = doc_out.paragraphs[p_idx]
-            p_out.alignment = docx.enum.text.WD_ALIGN_PARAGRAPH.JUSTIFY
-            p_out.paragraph_format.line_spacing = 1.5
-            for r_out in p_out.runs:
-                r_out.font.name = 'Calibri'
-                r_out.font.size = docx.shared.Pt(11)
-        
         for r in p.runs:
             nome_fonte = r.font.name
             tamanho_fonte = r.font.size.pt if r.font.size else None
+            
             if nome_fonte and nome_fonte.upper() not in ["CALIBRI", "ARIAL"]:
                 fonte_e_tamanho_ok = False
-                erros_formatacao.append(f"Fonte incorreta no corpo: '{nome_fonte}'")
+                erros_formatacao.append(f"❌ **Corpo do Texto**: Encontrada fonte '{nome_fonte}'. O correto pela Norma Zero é **Calibri** ou **Arial**.")
+            
             if tamanho_fonte and int(tamanho_fonte) != 11:
                 fonte_e_tamanho_ok = False
-                erros_formatacao.append(f"Tamanho incorreto no corpo: {tamanho_fonte}pt (Esperado: 11pt)")
+                erros_formatacao.append(f"❌ **Corpo do Texto**: Trecho '{p.text[:25]}...' está com tamanho **{tamanho_fonte}pt**. O correto pela Norma Zero é **11pt**.")
 
+    # 2. Pente Fino nas Tabelas / Registro Histórico
     if len(doc.tables) > 0:
         has_tables_or_images = True
         
-    for t_idx, tabela in enumerate(doc.tables):
+    for tabela in doc.tables:
         texto_tabela_completo = "".join([celula.text.upper() for linha in tabela.rows for celula in linha.cells])
         is_registro_historico = any(termo in texto_tabela_completo for termo in ["HISTÓRICO", "REVISÃO", "VERSÃO", "PROCESSO"])
         
-        tabela_out = doc_out.tables[t_idx]
-        
         for i_linha, linha in enumerate(tabela.rows):
-            for i_celula, celula in enumerate(linha.cells):
+            for celula in linha.cells:
                 text_clean = celula.text.strip()
                 if text_clean:
                     conteudo_linhas.append(text_clean)
                 if re.match(r"^[\s_\-\.]+$", text_clean):
                     continue
                     
-                celula_out = tabela_out.rows[i_linha].cells[i_celula]
-                
-                for p_idx_c, p_celula in enumerate(celula.paragraphs):
+                for p_celula in celula.paragraphs:
                     if not p_celula.text.strip():
                         continue
-                        
-                    if p_idx_c < len(celula_out.paragraphs):
-                        p_celula_out = celula_out.paragraphs[p_idx_c]
-                        p_celula_out.alignment = docx.enum.text.WD_ALIGN_PARAGRAPH.JUSTIFY
-                        for r_celula_out in p_celula_out.runs:
-                            r_celula_out.font.name = 'Calibri'
-                            if is_registro_historico and i_linha == 0:
-                                r_celula_out.font.size = docx.shared.Pt(10)
-                                r_celula_out.bold = True
-                            elif is_registro_historico:
-                                r_celula_out.font.size = docx.shared.Pt(9)
-                                r_celula_out.bold = False
                     
                     for r_celula in p_celula.runs:
                         f_tam = r_celula.font.size.pt if r_celula.font.size else None
+                        
                         if is_registro_historico:
+                            # Se for a linha de Títulos (Cabeçalho da tabela) -> Exige 10pt Negrito
                             if i_linha == 0:
                                 if f_tam and int(f_tam) != 10:
                                     fonte_e_tamanho_ok = False
-                                    erros_formatacao.append(f"Título da tabela de Histórico inválido: {f_tam}pt (Esperado: 10pt)")
+                                    erros_formatacao.append(f"❌ **Título da Tabela (Histórico)**: O campo '{text_clean[:15]}' está com **{f_tam}pt**. O tamanho correto pela Norma Zero é **10pt**.")
                                 if r_celula.bold is not True and len(text_clean) > 2:
                                     fonte_e_tamanho_ok = False
-                                    erros_formatacao.append(f"Título da tabela de Histórico sem Negrito: '{text_clean[:20]}'")
+                                    erros_formatacao.append(f"❌ **Título da Tabela (Histórico)**: O campo '{text_clean[:15]}' não está em **Negrito**. O correto pela Norma Zero é aplicar Negrito nos títulos.")
+                            
+                            # Se forem as linhas de dados/preenchimento -> Exige 9pt
                             else:
                                 if f_tam and int(f_tam) != 9 and int(f_tam) != 10:
                                     fonte_e_tamanho_ok = False
-                                    erros_formatacao.append(f"Dados da tabela de Histórico inválidos: {f_tam}pt (Esperado: 9pt)")
+                                    erros_formatacao.append(f"❌ **Dados Internos da Tabela (Histórico)**: O texto '{text_clean[:20]}...' está com **{f_tam}pt**. O tamanho correto pela Norma Zero é **9pt**.")
 
-    # Correção de Margens
-    for secao_out in doc_out.sections:
-        secao_out.top_margin = docx.shared.Cm(3.0)
-        secao_out.left_margin = docx.shared.Cm(3.0)
-        secao_out.bottom_margin = docx.shared.Cm(2.0)
-        secao_out.right_margin = docx.shared.Cm(2.0)
-        secao_out.page_width = docx.shared.Cm(21.0)
-        secao_out.page_height = docx.shared.Cm(29.7)
-
+    # 3. Varredura de Cabeçalhos e Rodapés textuais
     for secao in doc.sections:
         if secao.header:
             for p_head in secao.header.paragraphs:
@@ -188,19 +161,17 @@ if arquivo_word:
     stat_referencia = "SIM"
     stat_anexos = "OPCIONAL"
 
-    buffer_doc = BytesIO()
-    doc_out.save(buffer_doc)
-    documento_corrigido_bytes = buffer_doc.getvalue()
-
     st.success("✔️ Varredura de integridade estrutural e de tipografia finalizada.")
     
+    # Painel explicativo com instruções claras de correção manual
     erros_unicos = list(set(erros_formatacao))
     if not fonte_e_tamanho_ok and erros_unicos:
-        with st.expander("⚠️ Detalhes das Inconformidades de Formatação Identificadas"):
-            for erro in erros_unicos[:6]:
-                st.warning(erro)
+        with st.expander("⚠️ Guia de Correção Manual (Fontes e Tamanhos Inconformes)"):
+            st.markdown("Abra o seu documento original no Word e ajuste os trechos apontados abaixo:")
+            for erro in erros_unicos[:8]:
+                st.info(erro)
 
-# --- CONFIGURAÇÃO DOS STATUS DOS IMPRESSOS ---
+# --- DEFINIÇÃO DOS STATUS DOS IMPRESSOS ---
 status_impressos = "NÃO SE APLICA"
 comentario_impressos = ""
 
@@ -228,5 +199,33 @@ total_itens = len(lista_calculo)
 itens_conformes = sum(1 for x in lista_calculo if x in ["SIM", "OPCIONAL", "NÃO SE APLICA"])
 porcentagem_conforme = int((itens_conformes / total_itens) * 100) if arquivo_word else 0
 
-#--- 4. INTERFACE GRÁFICA DO ESPELHO DA FICHA (RERENDER SEGURO) ---
+#--- 4. INTERFACE GRÁFICA DO ESPELHO DA FICHA (LAYOUT LATERAL FIXO) ---
 st.markdown("---")
+st.subheader("📝 Ficha de Verificação Consolidada (Espelho Oficial)")
+
+col_p1, col_p2 = st.columns()
+with col_p1:
+    st.progress(porcentagem_conforme / 100)
+with col_p2:
+    st.subheader(f"📊 {porcentagem_conforme}% Conformidade")
+
+st.markdown("---")
+
+def render_linha_ficha(nome_item, status_atual, obs=""):
+    c1, c2 = st.columns()
+    with c1:
+        st.markdown(f"**{nome_item}**")
+        if obs:
+            st.caption(f"_{obs}_")
+    with c2:
+        if status_atual == "SIM":
+            st.markdown("🟩 **[X] SIM** &nbsp;&nbsp;&nbsp;&nbsp; ⬜ [ ] NÃO")
+        elif status_atual == "NÃO":
+            st.markdown("⬜ [ ] SIM &nbsp;&nbsp;&nbsp;&nbsp; 🟥 **[X] NÃO**")
+        elif status_atual == "OPCIONAL":
+            st.markdown("🔷 **[X] OPCIONAL**")
+        else:
+            st.markdown("⬜ [ ] SIM &nbsp;&nbsp;&nbsp;&nbsp; ⬜ [ ] NÃO &nbsp;&nbsp;&nbsp;&nbsp; 🟨 **[X] N/A**")
+    st.markdown("<hr style='margin:4px 0px; border-top: 1px dashed #444;' />", unsafe_allow_html=True)
+
+st.markdown("### 🔹 CABEÇALHO")
