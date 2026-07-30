@@ -69,7 +69,7 @@ if arquivo_excel:
             df_raw = pd.read_excel(arquivo_excel, sheet_name=nome_aba_principal, header=1, engine="openpyxl")
             df_raw.columns = df_raw.columns.astype(str).str.strip().str.upper()
             
-            # 1. PROCESSAMENTO DAS MÉDIAS (Idêntico ao anterior que funcionou perfeitamente)
+            # 1. PROCESSAMENTO DAS MÉDIAS
             col_g, col_h = None, None
             for c in df_raw.columns:
                 if "1º" in c or "1O" in c or "V 1" in c or "V1" in c: col_g = c
@@ -192,7 +192,7 @@ if not df_base.empty:
     
     with linha2_col1:
         st.markdown("### 📅 Situação de Prazos")
-        # AJUSTE ROBUSTO: Remove acentuações para fazer a contagem casar 100% com o Excel
+        # CORRIGIDO: Parêntese de fechamento da pd.Series adicionado corretamente ao final
         s_prazos_limpos = df_filtrado["SIT_PRAZO"].apply(remover_acentos)
         contagem_prazos = s_prazos_limpos.value_counts()
         
