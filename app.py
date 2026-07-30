@@ -60,25 +60,29 @@ if arquivo_excel:
             nome_aba_principal = lista_abas_reais[0]
             
         if nome_aba_principal:
+            # Lendo a planilha pulando a linha do título para ler o cabeçalho real
             df_raw = pd.read_excel(arquivo_excel, sheet_name=nome_aba_principal, header=1, engine="openpyxl")
             df_raw.columns = df_raw.columns.astype(str).str.strip().str.upper()
             
-            # 1. PROCESSAMENTO CORRIGIDO DAS MÉDIAS (Ignorando zeros fantasmas e erros)
+            # 1. PROCESSAMENTO CORRIGIDO E SEGURO DAS MÉDIAS (Limpando #VALOR!)
             col_g, col_h = None, None
             for c in df_raw.columns:
-                if any(term in c for term in ["1º", "1O", "V 1", "I.A.V.1", "V1"]): col_g = c
-                if any(term in c for term in ["2º", "2O", "V 2", "I.A.V.2", "V2"]): col_h = c
+                if "1º" in c or "1O" in c or "V 1" in c or "V1" in c: col_g = c
+                if "2º" in c or "2O" in c or "V 2" in c or "V2" in c: col_h = c
             
+            # Tratamento rigoroso: Converte para número e descarta tudo que não for dígito limpo
             if col_g:
                 s_g = df_raw[col_g].astype(str).str.replace(" dias", "", regex=False).str.replace(",", ".", regex=False)
-                s_g = s_g.replace(to_replace=[r'#.*', r'VALOR.*', '0', '0.0'], value='NaN', regex=True)
-                df_g_limpo = pd.to_numeric(s_g, errors='coerce').dropna()
-                media_v1 = df_g_limpo[df_g_limpo > 0].mean()
+                df_g_nums = pd.to_numeric(s_g, errors='coerce').dropna()
+                # Considera apenas dias reais positivos menores que 365 para tirar distorções de células fantasmas
+                df_g_filtrado = df_g_nums[(df_g_nums >= 0) & (df_g_nums < 365)]
+                media_v1 = df_g_filtrado.mean() if not df_g_filtrado.empty else 0.0
+                
             if col_h:
                 s_h = df_raw[col_h].astype(str).str.replace(" dias", "", regex=False).str.replace(",", ".", regex=False)
-                s_h = s_h.replace(to_replace=[r'#.*', r'VALOR.*', '0', '0.0'], value='NaN', regex=True)
-                df_h_limpo = pd.to_numeric(s_h, errors='coerce').dropna()
-                media_v2 = df_h_limpo[df_h_limpo > 0].mean()
+                df_h_nums = pd.to_numeric(s_h, errors='coerce').dropna()
+                df_h_filtrado = df_h_nums[(df_h_nums >= 0) & (df_h_nums < 365)]
+                media_v2 = df_h_filtrado.mean() if not df_h_filtrado.empty else 0.0
             
             media_v1 = float(media_v1) if pd.notna(media_v1) else 0.0
             media_v2 = float(media_v2) if pd.notna(media_v2) else 0.0
@@ -185,12 +189,7 @@ if not df_base.empty:
     
     with linha2_col1:
         st.markdown("### 📅 Situação de Prazos")
-        # AJUSTADO: Mapeando termos exatos 'Válido' e 'Vencido' direto da sua planilha para aparecer bonito
-        contagem_prazos = df_filtrado["SIT_PRAZO"].dropna().value_counts()
-        dados_prazo = pd.Series({
-            "No Prazo": contagem_prazos.get("No Prazo", 0) if "No Prazo" in contagem_prazos else contagem_prazos.get("VÁLIDO", 0),
-            "Prestes a Vencer": contagem_prazos.get("Prestes a Vencer", 0),
-            "Vencido": contagem_prazos.get("VENCIDO", 0)
-        })
-        st.bar_chart(dados_prazo, color=c_g4_color, horizontal=True)
-
+        # CORREÇÃO DA CONTAGEM: Padroniza o texto para maiúsculo para bater certo com a planilha
+        s_prazos_upper = df_filtrado["SIT_PRAZO"].astype(str).str.upper().str.strip()
+        contagem_prazos = s_prazos_upper.value_counts()
+        
