@@ -182,6 +182,5 @@ if arquivo_word:
     st.session_state.porcentagem_conforme = int((itens_conformes / total_itens) * 100)
     st.success("✔️ Varredura de integridade estrutural e de tipografia finalizada.")
 
-#--- 4. EXIBIÇÃO DO GUIA DE ERROS (SEM CONDIÇÕES IF - TOTALMENTE SEGURO) ---
-erros_unicos = list(set(st.session_state.erros_formatacao))
-if erros_unicos:
+#--- 4. EXIBIÇÃO DO GUIA DE ERROS (SEM DECLARAÇÕES DE CONDIÇÃO INTERNAS) ---
+lista_erros_painel = list(set(st.session_state.erros_formatacao))
