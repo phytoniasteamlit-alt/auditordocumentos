@@ -85,24 +85,40 @@ if arquivo_excel:
                 break
         
         if not nome_aba_graficos:
-            nome_aba_graficos = lista_abas_reais if lista_abas_reais else None
+            nome_aba_graficos = lista_abas_reais[0] if lista_abas_reais else None
         
         if nome_aba_graficos:
             df_raw = pd.read_excel(arquivo_excel, sheet_name=nome_aba_graficos, header=0, engine="openpyxl")
-            df_raw.columns = df_raw.columns.astype(str).str.strip().str.upper()
             
-            num_colunas = len(df_raw.columns)
+            # Mapeamento dinâmico por aproximação textual de nomes de colunas para evitar quebras por posição física
             df_base = pd.DataFrame()
-            df_base["SIGLA"] = df_raw.iloc[:, 0] if num_colunas > 0 else None
-            df_base["SETOR"] = df_raw.iloc[:, 1] if num_colunas > 1 else None
-            df_base["RESPONSAVEL"] = df_raw.iloc[:, 3] if num_colunas > 3 else "Não Informado"
-            df_base["STATUS"] = df_raw.iloc[:, 4] if num_colunas > 4 else "Não Informado"
-            df_base["SIT_PRAZO"] = df_raw.iloc[:, 5] if num_colunas > 5 else "Não Informado"
             
+            for col_real in df_raw.columns:
+                col_upper = str(col_real).upper().strip()
+                if "SIGLA" in col_upper or "DOCUMENTO" in col_upper and "STATUS" not in col_upper:
+                    df_base["SIGLA"] = df_raw[col_real]
+                if "SETOR" in col_upper:
+                    df_base["SETOR"] = df_raw[col_real]
+                if "RESPONSAVEL" in col_upper or "RESPONSÁVEL" in col_upper:
+                    df_base["RESPONSAVEL"] = df_raw[col_real]
+                if "STATUS" in col_upper:
+                    df_base["STATUS"] = df_raw[col_real]
+                if "PRAZO" in col_upper or "SIT" in col_upper:
+                    df_base["SIT_PRAZO"] = df_raw[col_real]
+
+            # Casos de contingência caso os cabeçalhos textuais falhem na verificação direta
+            num_colunas = len(df_raw.columns)
+            if "SIGLA" not in df_base.columns and num_colunas > 0: df_base["SIGLA"] = df_raw.iloc[:, 0]
+            if "SETOR" not in df_base.columns and num_colunas > 1: df_base["SETOR"] = df_raw.iloc[:, 1]
+            if "RESPONSAVEL" not in df_base.columns and num_colunas > 3: df_base["RESPONSAVEL"] = df_raw.iloc[:, 3]
+            if "STATUS" not in df_base.columns and num_colunas > 4: df_base["STATUS"] = df_raw.iloc[:, 4]
+            if "SIT_PRAZO" not in df_base.columns and num_colunas > 5: df_base["SIT_PRAZO"] = df_raw.iloc[:, 5]
+
+            # Padronização e Limpeza
             for col in df_base.columns:
                 df_base[col] = df_base[col].fillna("").astype(str).str.strip()
             
-            # CORREÇÃO SEGURA: Tratamento preventivo de maiúsculas e espaços para Sabrina e Sonalhya
+            # Tratamento preventivo de maiúsculas e espaços para Sabrina e Sonalhya
             if "RESPONSAVEL" in df_base.columns:
                 df_base["RESPONSAVEL"] = df_base["RESPONSAVEL"].apply(
                     lambda x: "Antigo Colaborador" if str(x).upper().strip() in ["SABRINA", "SONALHYA"] else str(x).upper().strip()
@@ -113,7 +129,7 @@ if arquivo_excel:
                     lambda x: "AG Aguardando" if "VERIFICADO AGU" in x.upper() or "AGUARDANDO" in x.upper() else x
                 )
             
-            # Limpeza robusta contra sujeiras e fórmulas quebradas da planilha do Excel
+            # Limpeza contra erros textuais residuais e fórmulas quebradas do Excel
             valores_vazios = ["0", "0.0", "NAN", "NONE", "", "NAN NAN", "NÃO INFORMADO", "A", "#VALOR!"]
             for col in df_base.columns:
                 df_base.loc[df_base[col].str.upper().isin(valores_vazios), col] = None
@@ -127,11 +143,11 @@ if not df_base.empty:
     st.sidebar.markdown("---")
     st.sidebar.subheader("Filtros de Visualização")
     
-    lista_responsaveis = sorted([str(r) for r in df_base["RESPONSAVEL"].dropna().unique()])
+    lista_responsaveis = sorted([str(r) for r in df_base["RESPONSAVEL"].dropna().unique() if str(r).strip() != ""])
     lista_responsaveis.insert(0, "Todos")
     responsavel_selecionado = st.sidebar.selectbox("Selecione o Responsável:", lista_responsaveis)
     
-    lista_documentos = sorted([str(d) for d in df_base["SIGLA"].dropna().unique()])
+    lista_documentos = sorted([str(d) for d in df_base["SIGLA"].dropna().unique() if str(d).strip() != ""])
     lista_documentos.insert(0, "Todos")
     documento_selecionado = st.sidebar.selectbox("Filtrar por Documento Aprovado:", lista_documentos)
     
@@ -175,27 +191,3 @@ if not df_base.empty:
     
     with linha1_col2:
         st.markdown("### Tempo de Análise")
-        dados_g2 = pd.Series({"1º Verf.": media_v1, "2º Verf.": media_v2, "Total Estimado": (media_v1 + media_v2)})
-        st.bar_chart(dados_g2, color=c_g2_color, horizontal=True)
-    
-    st.markdown("---")
-    
-    linha2_col1, linha2_col2 = st.columns(2)
-    
-    with linha2_col1:
-        st.markdown("### Situação de Prazos")
-        contagem_prazos = df_filtrado["SIT_PRAZO"].dropna().value_counts()
-        dados_prazo = pd.Series({
-            "No Prazo": contagem_prazos.get("No Prazo", 0) if "No Prazo" in contagem_prazos else contagem_prazos.get("Válido", 0),
-            "Prestes a Vencer": contagem_prazos.get("Prestes a Vencer", 0),
-            "Vencido": contagem_prazos.get("Vencido", 0)
-        })
-        st.bar_chart(dados_prazo, color=c_g4_color, horizontal=True)
-
-    with linha2_col2:
-        st.markdown("### Documentos Aprovados por Tipo")
-        df_aprov_por_tipo = df_filtrado[df_filtrado["STATUS"].astype(str).str.upper().str.contains("APROVADO|OK|SIM", na=False)]
-        dados_tipo = df_aprov_por_tipo["SIGLA"].dropna().value_counts()
-        st.bar_chart(dados_tipo, color="#34D399", horizontal=True)
-    
-    #--- 6. GRÁFICOS DE PRODUTIVIDADE POR RESPONSÁVEL CORRIGIDOS ---
