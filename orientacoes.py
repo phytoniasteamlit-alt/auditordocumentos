@@ -45,7 +45,7 @@ if "status_impressos" not in st.session_state:
 if "comentario_impressos" not in st.session_state:
     st.session_state.comentario_impressos = ""
 if "porcentagem_conforme" not in st.session_state:
-    st.session_state.porcentagem_conforme = 85
+    st.session_state.porcentagem_conforme = 90
 if "erros_formatacao" not in st.session_state:
     st.session_state.erros_formatacao = []
 
@@ -54,6 +54,17 @@ if logo_hospital_manual:
     st.session_state.cabecalho_dados["LOGOMARCA DO HOSPITAL"] = True
 if codigo_manual:
     st.session_state.cabecalho_dados["CÓDIGO DO DOCUMENTO"] = True
+
+# Dicionário de tradução dos tipos de documentos normativos
+NOMES_TIPOS = {
+    "NOR": "NORMA (NOR)",
+    "POP": "PROCEDIMENTO OPERACIONAL PADRÃO (POP)",
+    "PROT": "PROTOCOLO (PROT)",
+    "MAN": "MANUAL (MAN)",
+    "REG": "REGIMENTO INTERNO (REG)",
+    "ROT": "ROTINA (ROT)",
+    "POL": "POLÍTICA INSTITUCIONAL (POL)"
+}
 
 #--- 3. FLUXO DE CARREGAMENTO E ANÁLISE RIGOROSA (WORD .DOCX) ---
 arquivo_word = st.file_uploader("Arraste o arquivo WORD (.docx) aqui para auditoria", type=["docx"])
@@ -72,7 +83,9 @@ if arquivo_word:
     if logo_hospital_manual: st.session_state.cabecalho_dados["LOGOMARCA DO HOSPITAL"] = True
     if codigo_manual: st.session_state.cabecalho_dados["CÓDIGO DO DOCUMENTO"] = True
     
-    for sigla in ["NOR", "POP", "PROT", "MAN", "REG", "ROT", "POL"]:
+    # Identificação do tipo de documento pelo nome do arquivo original
+    st.session_state.tipo_detectado = "NOR"
+    for sigla in NOMES_TIPOS.keys():
         if sigla in arquivo_word.name.upper():
             st.session_state.tipo_detectado = sigla
             break
@@ -80,7 +93,7 @@ if arquivo_word:
     doc = docx.Document(arquivo_word)
     conteudo_linhas = []
     
-    # Varredura do Corpo do Texto
+    # 1. Varredura do Corpo do Texto
     for p in doc.paragraphs:
         if not p.text.strip():
             continue
@@ -93,7 +106,7 @@ if arquivo_word:
             if tamanho_fonte and int(tamanho_fonte) != 11:
                 corpo_texto_ok = False
 
-    # Varredura das Tabelas
+    # 2. Varredura das Tabelas
     if len(doc.tables) > 0:
         has_tables_or_images = True
         
@@ -123,7 +136,7 @@ if arquivo_word:
                                     tabelas_texto_ok = False
                                     st.session_state.erros_formatacao.append(f"❌ **Dados Internos**: O texto '{text_clean[:15]}...' está com tamanho **{f_tam}pt**. O correto é **9pt (Justificado)**.")
 
-    # Varredura de Cabeçalhos e Rodapés textuais das seções
+    # 3. Varredura de Cabeçalhos e Rodapés textuais das seções
     for secao in doc.sections:
         if secao.header:
             for p_head in secao.header.paragraphs:
@@ -139,7 +152,7 @@ if arquivo_word:
         p_upper = texto_completo.upper()
         if "HOSPITAL" in p_upper or "SEMUS" in p_upper or logo_hospital_manual:
             st.session_state.cabecalho_dados["LOGOMARCA DO HOSPITAL"] = True
-        if "NORMA" in p_upper or "PROCEDIMENTO" in p_upper or "PROTOCOLO" in p_upper or "PROT" in p_upper:
+        if any(term in p_upper for term in ["NORMA", "PROCEDIMENTO", "PROTOCOLO", "PROT", "MANUAL", "REGIMENTO"]):
             st.session_state.cabecalho_dados["TIPO DE DOCUMENTO"] = True
         if "CÓDIGO" in p_upper or re.search(r"[A-Z]{2,4}_[A-Z0-9]+", p_upper) or codigo_manual:
             st.session_state.cabecalho_dados["CÓDIGO DO DOCUMENTO"] = True
@@ -182,21 +195,6 @@ if arquivo_word:
     st.session_state.porcentagem_conforme = int((itens_conformes / total_itens) * 100)
     st.success("✔️ Varredura de integridade estrutural e de tipografia finalizada.")
 
-#--- 4. INTERFACE GRÁFICA DO ESPELHO DA FICHA (POSICIONADA FIXA NO TOPO) ---
+#--- 4. INTERFACE GRÁFICA DO ESPELHO DA FICHA (RENDERIZAÇÃO DE SEÇÕES E TIPO DETECTADO) ---
 st.markdown("---")
-st.subheader("📝 Ficha de Verificação Consolidada (Espelho Oficial)")
-
-col_p1, col_p2 = st.columns(2)
-with col_p1:
-    st.progress(st.session_state.porcentagem_conforme / 100)
-with col_p2:
-    st.subheader(f"📊 {st.session_state.porcentagem_conforme}% Conformidade")
-
-st.markdown("---")
-
-# Função visual simplificada e 100% linear (Imune a qualquer erro de recuo ou indentação de blocos 'with')
-def render_linha_ficha(nome_item, status_atual, obs=""):
-    c1, c2 = st.columns(2)
-    c1.markdown(f"**{nome_item}**" + (f"  \n_{obs}_" if obs else ""))
-    
-    marcador = "🔷 **[X] OPCIONAL**"
+# EXIBIÇÃO DO TIPO: Mostra de forma destacada o tipo do documento normativo
