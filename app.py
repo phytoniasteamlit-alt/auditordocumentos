@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import openpyxl
+import unicodedata
 from io import BytesIO
 
 #--- 1. CONFIGURAÇÃO DA PÁGINA ---
@@ -44,6 +45,11 @@ arquivo_excel = st.sidebar.file_uploader("📁 Carregar Planilha Excel (.xlsx):"
 df_base = pd.DataFrame()
 media_v1, media_v2 = 0.0, 0.0
 
+# Função auxiliar para limpar acentos de forma segura
+def remover_acentos(texto):
+    if pd.isna(texto): return ""
+    return "".join(c for c in unicodedata.normalize('NFD', str(texto)) if unicodedata.category(c) != 'Mn').upper().strip()
+
 if arquivo_excel:
     try:
         xl = pd.ExcelFile(arquivo_excel, engine="openpyxl")
@@ -60,21 +66,18 @@ if arquivo_excel:
             nome_aba_principal = lista_abas_reais[0]
             
         if nome_aba_principal:
-            # Lendo a planilha pulando a linha do título para ler o cabeçalho real
             df_raw = pd.read_excel(arquivo_excel, sheet_name=nome_aba_principal, header=1, engine="openpyxl")
             df_raw.columns = df_raw.columns.astype(str).str.strip().str.upper()
             
-            # 1. PROCESSAMENTO CORRIGIDO E SEGURO DAS MÉDIAS (Limpando #VALOR!)
+            # 1. PROCESSAMENTO DAS MÉDIAS (Idêntico ao anterior que funcionou perfeitamente)
             col_g, col_h = None, None
             for c in df_raw.columns:
                 if "1º" in c or "1O" in c or "V 1" in c or "V1" in c: col_g = c
                 if "2º" in c or "2O" in c or "V 2" in c or "V2" in c: col_h = c
             
-            # Tratamento rigoroso: Converte para número e descarta tudo que não for dígito limpo
             if col_g:
                 s_g = df_raw[col_g].astype(str).str.replace(" dias", "", regex=False).str.replace(",", ".", regex=False)
                 df_g_nums = pd.to_numeric(s_g, errors='coerce').dropna()
-                # Considera apenas dias reais positivos menores que 365 para tirar distorções de células fantasmas
                 df_g_filtrado = df_g_nums[(df_g_nums >= 0) & (df_g_nums < 365)]
                 media_v1 = df_g_filtrado.mean() if not df_g_filtrado.empty else 0.0
                 
@@ -189,7 +192,8 @@ if not df_base.empty:
     
     with linha2_col1:
         st.markdown("### 📅 Situação de Prazos")
-        # CORREÇÃO DA CONTAGEM: Padroniza o texto para maiúsculo para bater certo com a planilha
-        s_prazos_upper = df_filtrado["SIT_PRAZO"].astype(str).str.upper().str.strip()
-        contagem_prazos = s_prazos_upper.value_counts()
+        # AJUSTE ROBUSTO: Remove acentuações para fazer a contagem casar 100% com o Excel
+        s_prazos_limpos = df_filtrado["SIT_PRAZO"].apply(remover_acentos)
+        contagem_prazos = s_prazos_limpos.value_counts()
         
+        dados_prazo = pd.Series({
