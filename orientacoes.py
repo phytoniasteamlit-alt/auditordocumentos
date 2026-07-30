@@ -204,16 +204,12 @@ st.markdown("<br>", unsafe_allow_html=True)
 st.markdown("### 🔹 IMPRESSOS")
 render_linha_ficha("ITENS IMPRESSO (ESTRUTURAS GRÁFICAS/TABELAS)", st.session_state.status_impressos, obs=st.session_state.comentario_impressos)
 
-#--- 6. CONSTRUÇÃO DA STRING DA FICHA PARA EXPORTAÇÃO (CORRIGIDA) ---
-texto_documento_word = f"""SÃO LUÍS | SEMUS
-PREFEITURA DE SÃO LUÍS
-SECRETARIA MUNICIPAL DE SAÚDE
-HOSPITAL DA CIDADE DR. JACKSON LAGO
-FICHA DE VERIFICAÇÃO PARA APROVAÇÃO DO DOCUMENTO
-============================================================
+#--- 6. CONSTRUÇÃO EXTRAÇÃO SEGURA DE VARIÁVEIS (CORRIGIDO SEM PARSE INTERNO) ---
+v_logo = "SIM" if st.session_state.cabecalho_dados["LOGOMARCA DO HOSPITAL"] else "NÃO"
+v_tit = "SIM" if st.session_state.cabecalho_dados["TÍTULO DO DOCUMENTO"] else "NÃO"
+v_tipo = "SIM" if st.session_state.cabecalho_dados["TIPO DE DOCUMENTO"] else "NÃO"
+v_cod = "SIM" if st.session_state.cabecalho_dados["CÓDIGO DO DOCUMENTO"] else "NÃO"
+v_ver = "SIM" if st.session_state.cabecalho_dados["VERSÃO"] else "NÃO"
+v_pag = "SIM" if st.session_state.cabecalho_dados["PÁGINAS"] else "NÃO"
 
-DOCUMENTO EM ANÁLISE: {st.session_state.nome_arquivo_doc}
-COMPLEMENTO DE CONFORMIDADE DA NORMA ZERO: {st.session_state.porcentagem_conforme}%
-------------------------------------------------------------
-
-STATUS GERAL DE ANÁLISE:
+s_papel = st.session_state.stats_texto["PAPEL"]
