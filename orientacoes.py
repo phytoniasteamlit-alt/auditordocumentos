@@ -145,13 +145,11 @@ if arquivo_word:
             st.session_state.cabecalho_dados["CÓDIGO DO DOCUMENTO"] = True
         if "VERSÃO:" in p_upper or "VERSÃO" in p_upper or "1ª" in p_upper or "2ª" in p_upper or "3ª" in p_upper:
             st.session_state.cabecalho_dados["VERSÃO"] = True
-        # Calibragem do Mapeamento Inteligente de Páginas (Captura PÁGINAS, PÁG., FL., FOLHA)
         if any(term in p_upper for term in ["PÁGINAS", "PÁG", "FL.", "FOLHA", "PAG"]):
             st.session_state.cabecalho_dados["PÁGINAS"] = True
         if len(st.session_state.nome_arquivo_doc) > 5:
             st.session_state.cabecalho_dados["TÍTULO DO DOCUMENTO"] = True
             
-        # Calibragem do Mapeamento Inteligente do Fim do Documento (DATA DE APROVAÇÃO / VERSÃO)
         if any(term in p_upper for term in ["VALIDADE", "DATA APROVAÇÃO", "DATA DE APROVAÇÃO", "APROVAÇÃO:"]):
             st.session_state.historico_dados["DATA DA APROVAÇÃO / VALIDADE"] = True
         if any(term in p_upper for term in ["REGISTRO HISTÓRICO", "DESCRIÇÃO DA ATUALIZAÇÃO", "VERSÃO INICIAL", "HISTÓRICO"]):
@@ -184,7 +182,7 @@ if arquivo_word:
     st.session_state.porcentagem_conforme = int((itens_conformes / total_itens) * 100)
     st.success("✔️ Varredura de integridade estrutural e de tipografia finalizada.")
 
-#--- 4. EXIBIÇÃO DO GUIA DE ERROS DIRETOS E 100% DINÂMICOS ---
+#--- 4. EXIBIÇÃO DO GUIA DE ERROS DIRETOS E DINÂMICOS (CORRIGIDO SEM ELSE EM BRANCO) ---
 st.markdown("### ⚠️ Guia de Correção Manual (Fontes e Tamanhos Inconformes)")
 st.markdown("Abra o seu documento original no Word e ajuste os trechos apontados abaixo:")
 
@@ -193,3 +191,7 @@ if lista_erros_painel:
     for erro in lista_erros_painel[:12]:
         st.info(erro)
 else:
+    st.success("✔️ Nenhuma inconformidade de tamanho ou fonte foi detectada em tabelas ou no corpo do texto do arquivo atual.")
+
+#--- 5. INTERFACE GRÁFICA DO ESPELHO DA FICHA (RENDERIZAÇÃO GLOBAL) ---
+st.markdown("---")
