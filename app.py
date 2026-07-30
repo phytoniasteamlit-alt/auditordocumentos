@@ -49,7 +49,6 @@ if arquivo_excel:
         xl = pd.ExcelFile(arquivo_excel, engine="openpyxl")
         lista_abas_reais = xl.sheet_names
         
-        # DEFINIÇÃO DA ABA CORRETA: Forçando a leitura da aba principal que você mostrou no print
         nome_aba_principal = None
         for n_real in lista_abas_reais:
             n_up = str(n_real).upper().strip()
@@ -61,11 +60,10 @@ if arquivo_excel:
             nome_aba_principal = lista_abas_reais[0]
             
         if nome_aba_principal:
-            # Lendo a planilha pulando as duas primeiras linhas de título para alinhar com o cabeçalho real
             df_raw = pd.read_excel(arquivo_excel, sheet_name=nome_aba_principal, header=1, engine="openpyxl")
             df_raw.columns = df_raw.columns.astype(str).str.strip().str.upper()
             
-            # 1. PROCESSAMENTO EXCLUSIVO DAS MÉDIAS (Colunas G e H)
+            # 1. PROCESSAMENTO CORRIGIDO DAS MÉDIAS (Ignorando zeros fantasmas e erros)
             col_g, col_h = None, None
             for c in df_raw.columns:
                 if any(term in c for term in ["1º", "1O", "V 1", "I.A.V.1", "V1"]): col_g = c
@@ -73,20 +71,20 @@ if arquivo_excel:
             
             if col_g:
                 s_g = df_raw[col_g].astype(str).str.replace(" dias", "", regex=False).str.replace(",", ".", regex=False)
-                s_g = s_g.replace(to_replace=[r'#.*', r'VALOR.*'], value='NaN', regex=True)
-                media_v1 = pd.to_numeric(s_g, errors='coerce').dropna().mean()
+                s_g = s_g.replace(to_replace=[r'#.*', r'VALOR.*', '0', '0.0'], value='NaN', regex=True)
+                df_g_limpo = pd.to_numeric(s_g, errors='coerce').dropna()
+                media_v1 = df_g_limpo[df_g_limpo > 0].mean()
             if col_h:
                 s_h = df_raw[col_h].astype(str).str.replace(" dias", "", regex=False).str.replace(",", ".", regex=False)
-                s_h = s_h.replace(to_replace=[r'#.*', r'VALOR.*'], value='NaN', regex=True)
-                media_v2 = pd.to_numeric(s_h, errors='coerce').dropna().mean()
+                s_h = s_h.replace(to_replace=[r'#.*', r'VALOR.*', '0', '0.0'], value='NaN', regex=True)
+                df_h_limpo = pd.to_numeric(s_h, errors='coerce').dropna()
+                media_v2 = df_h_limpo[df_h_limpo > 0].mean()
             
             media_v1 = float(media_v1) if pd.notna(media_v1) else 0.0
             media_v2 = float(media_v2) if pd.notna(media_v2) else 0.0
 
-            # 2. CAPTURA SEGURA DOS DADOS DOS GRÁFICOS (Mapeamento baseado estritamente na imagem)
+            # 2. CAPTURA DOS DADOS DOS GRÁFICOS
             df_base = pd.DataFrame()
-            
-            # Vinculando os nomes exatos das colunas da sua planilha real
             for col_real in df_raw.columns:
                 if "SIGLA" in col_real: df_base["SIGLA"] = df_raw[col_real]
                 if "SETOR" in col_real: df_base["SETOR"] = df_raw[col_real]
@@ -94,7 +92,6 @@ if arquivo_excel:
                 if "STATUS" in col_real: df_base["STATUS"] = df_raw[col_real]
                 if "PRAZO" in col_real or "SIT" in col_real or "VENCIDO" in col_real: df_base["SIT_PRAZO"] = df_raw[col_real]
 
-            # Plano de contingência caso os nomes variem levemente
             num_colunas = len(df_raw.columns)
             if "SIGLA" not in df_base.columns and num_colunas > 0: df_base["SIGLA"] = df_raw.iloc[:, 0]
             if "SETOR" not in df_base.columns and num_colunas > 1: df_base["SETOR"] = df_raw.iloc[:, 1]
@@ -102,20 +99,17 @@ if arquivo_excel:
             if "STATUS" not in df_base.columns and num_colunas > 4: df_base["STATUS"] = df_raw.iloc[:, 4]
             if "SIT_PRAZO" not in df_base.columns and num_colunas > 5: df_base["SIT_PRAZO"] = df_raw.iloc[:, 5]
 
-            # Elimina linhas complementares nulas do Excel
             df_base = df_base.dropna(subset=["SIGLA", "STATUS"], how="all")
 
             for col in df_base.columns:
                 df_base[col] = df_base[col].fillna("").astype(str).str.strip()
             
-            # Limpeza geral de valores fantasmas ou inválidos (letras avulsas como 'A')
             valores_vazios = ["0", "0.0", "NAN", "NONE", "", "NAN NAN", "NÃO INFORMADO", "A", "#VALOR!"]
             for col in df_base.columns:
                 df_base.loc[df_base[col].str.upper().isin(valores_vazios), col] = None
 
             df_base = df_base.dropna(subset=["SIGLA", "STATUS"], how="any")
 
-            # Substituição automática e padronizada das colaboradoras antigas
             if "RESPONSAVEL" in df_base.columns:
                 df_base["RESPONSAVEL"] = df_base["RESPONSAVEL"].apply(
                     lambda x: "Antigo Colaborador" if str(x).upper().strip() in ["SABRINA", "SONALHYA"] else str(x).upper().strip()
@@ -191,4 +185,12 @@ if not df_base.empty:
     
     with linha2_col1:
         st.markdown("### 📅 Situação de Prazos")
+        # AJUSTADO: Mapeando termos exatos 'Válido' e 'Vencido' direto da sua planilha para aparecer bonito
         contagem_prazos = df_filtrado["SIT_PRAZO"].dropna().value_counts()
+        dados_prazo = pd.Series({
+            "No Prazo": contagem_prazos.get("No Prazo", 0) if "No Prazo" in contagem_prazos else contagem_prazos.get("VÁLIDO", 0),
+            "Prestes a Vencer": contagem_prazos.get("Prestes a Vencer", 0),
+            "Vencido": contagem_prazos.get("VENCIDO", 0)
+        })
+        st.bar_chart(dados_prazo, color=c_g4_color, horizontal=True)
+
