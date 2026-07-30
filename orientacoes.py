@@ -203,7 +203,8 @@ porcentagem_conforme = int((itens_conformes / total_itens) * 100) if arquivo_wor
 st.markdown("---")
 st.subheader("📝 Ficha de Verificação Consolidada (Espelho Oficial)")
 
-col_p1, col_p2 = st.columns()
+# CORREÇÃO AQUI: Passando o argumento (2) para gerar duas colunas corretamente
+col_p1, col_p2 = st.columns(2)
 with col_p1:
     st.progress(porcentagem_conforme / 100)
 with col_p2:
@@ -212,7 +213,7 @@ with col_p2:
 st.markdown("---")
 
 def render_linha_ficha(nome_item, status_atual, obs=""):
-    c1, c2 = st.columns()
+    c1, c2 = st.columns(2)
     with c1:
         st.markdown(f"**{nome_item}**")
         if obs:
@@ -226,6 +227,3 @@ def render_linha_ficha(nome_item, status_atual, obs=""):
             st.markdown("🔷 **[X] OPCIONAL**")
         else:
             st.markdown("⬜ [ ] SIM &nbsp;&nbsp;&nbsp;&nbsp; ⬜ [ ] NÃO &nbsp;&nbsp;&nbsp;&nbsp; 🟨 **[X] N/A**")
-    st.markdown("<hr style='margin:4px 0px; border-top: 1px dashed #444;' />", unsafe_allow_html=True)
-
-st.markdown("### 🔹 CABEÇALHO")
