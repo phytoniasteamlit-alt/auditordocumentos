@@ -21,6 +21,7 @@ if "nome_arquivo_doc" not in st.session_state:
     st.session_state.nome_arquivo_doc = "Documento Coletado"
 if "tipo_detectado" not in st.session_state:
     st.session_state.tipo_detectado = "NORMA"
+
 if "cabecalho_dados" not in st.session_state:
     st.session_state.cabecalho_dados = {
         "LOGOMARCA DO HOSPITAL": True, "TÍTULO DO DOCUMENTO": True, "TIPO DE DOCUMENTO": True,
@@ -203,7 +204,7 @@ st.markdown("<br>", unsafe_allow_html=True)
 st.markdown("### 🔹 IMPRESSOS")
 render_linha_ficha("ITENS IMPRESSO (ESTRUTURAS GRÁFICAS/TABELAS)", st.session_state.status_impressos, obs=st.session_state.comentario_impressos)
 
-#--- 6. CONSTRUÇÃO DA STRING DA FICHA PARA EXPORTAÇÃO ---
+#--- 6. CONSTRUÇÃO DA STRING DA FICHA PARA EXPORTAÇÃO (CORRIGIDA SEM LAÇOS FOR) ---
 texto_documento_word = f"""SÃO LUÍS | SEMUS
 PREFEITURA DE SÃO LUÍS
 SECRETARIA MUNICIPAL DE SAÚDE
@@ -215,6 +216,4 @@ DOCUMENTO EM ANÁLISE: {st.session_state.nome_arquivo_doc}
 COMPLEMENTO DE CONFORMIDADE DA NORMA ZERO: {st.session_state.porcentagem_conforme}%
 ------------------------------------------------------------
 
-CABEÇALHO:\n"""
-
-for k, v in st.session_state.cabecalho_dados.items():
+STATUS GERAL DE ANÁLISE:
