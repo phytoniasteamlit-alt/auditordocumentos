@@ -8,15 +8,14 @@ from io import BytesIO
 st.set_page_config(page_title="PAINEL DE INDICADORES NORMA ZERO", page_icon="📋", layout="wide")
 
 # --- BLOCO DE CUSTOMIZAÇÃO VISUAL AVANÇADA (CSS INJECT NATIVO) ---
-# ALTERADO: Adicionada regra para travar o tamanho máximo da tabela lateral e não quebrar o painel
 st.markdown("""
 <style>
 [data-testid="stDataFrame"] td, [data-testid="stDataFrame"] th { font-size: 16px !important; font-weight: 600 !important; color: #FFFFFF !important; }
 [data-testid="stDataFrame"] td:last-child { color: #FBBF24 !important; font-size: 18px !important; font-weight: bold !important; }
 div[data-testid="stSelectbox"] label p, div[data-testid="stFileUploader"] label p { font-size: 15px !important; font-weight: bold !important; color: #38BDF8 !important; }
 section[data-testid="stFileUploaderDropzone"] { border: 2px dashed #38BDF8 !important; background-color: #1E293B !important; }
-/* Força a tabela da barra lateral a ter tamanho controlado */
-[data-testid="stSidebar"] [data-testid="stDataFrame"] { max-height: 250px !important; overflow-y: auto !important; }
+/* Rolagem interna controlada para a tabela da barra lateral */
+[data-testid="stSidebar"] [data-testid="stDataFrame"] { max-height: 220px !important; overflow-y: auto !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -65,26 +64,21 @@ if arquivo_excel:
                 break
         
         if not nome_aba_principal and lista_abas_reais:
-            nome_aba_principal = lista_abas_reais
+            nome_aba_principal = lista_abas_reais[0]
             
         if nome_aba_principal:
-            df_raw = pd.read_excel(arquivo_excel, sheet_name=nome_aba_principal, header=1, engine="openpyxl")
-            df_raw.columns = df_raw.columns.astype(str).str.strip().str.upper()
+            # Lendo a partir da linha 1 (header=0) para pegar a estrutura inteira de colunas do Excel
+            df_raw = pd.read_excel(arquivo_excel, sheet_name=nome_aba_principal, header=0, engine="openpyxl")
             
-            # 1. PROCESSAMENTO DAS MÉDIAS
-            col_g, col_h = None, None
-            for c in df_raw.columns:
-                if "1º" in c or "1O" in c or "V 1" in c or "V1" in c: col_g = c
-                if "2º" in c or "2O" in c or "V 2" in c or "V2" in c: col_h = c
-            
-            if col_g:
-                s_g = df_raw[col_g].astype(str).str.replace(" dias", "", regex=False).str.replace(",", ".", regex=False)
+            # 1. PROCESSAMENTO DAS MÉDIAS (Colunas G e H fixas por posição para evitar erros de fórmulas)
+            if df_raw.shape[1] > 6:
+                s_g = df_raw.iloc[:, 6].astype(str).str.replace(" dias", "", regex=False).str.replace(",", ".", regex=False)
                 df_g_nums = pd.to_numeric(s_g, errors='coerce').dropna()
                 df_g_filtrado = df_g_nums[(df_g_nums >= 0) & (df_g_nums < 365)]
                 media_v1 = df_g_filtrado.mean() if not df_g_filtrado.empty else 0.0
                 
-            if col_h:
-                s_h = df_raw[col_h].astype(str).str.replace(" dias", "", regex=False).str.replace(",", ".", regex=False)
+            if df_raw.shape[1] > 7:
+                s_h = df_raw.iloc[:, 7].astype(str).str.replace(" dias", "", regex=False).str.replace(",", ".", regex=False)
                 df_h_nums = pd.to_numeric(s_h, errors='coerce').dropna()
                 df_h_filtrado = df_h_nums[(df_h_nums >= 0) & (df_h_nums < 365)]
                 media_v2 = df_h_filtrado.mean() if not df_h_filtrado.empty else 0.0
@@ -92,33 +86,27 @@ if arquivo_excel:
             media_v1 = float(media_v1) if pd.notna(media_v1) else 0.0
             media_v2 = float(media_v2) if pd.notna(media_v2) else 0.0
 
-            # 2. CAPTURA DOS DADOS DOS GRÁFICOS
+            # 2. CAPTURA DOS DADOS TRAVADA POR POSIÇÃO DA PLANILHA (A, B, D, E, F)
             df_base = pd.DataFrame()
-            for col_real in df_raw.columns:
-                if "SIGLA" in col_real: df_base["SIGLA"] = df_raw[col_real]
-                if "SETOR" in col_real: df_base["SETOR"] = df_raw[col_real]
-                if "RESPONS" in col_real: df_base["RESPONSAVEL"] = df_raw[col_real]
-                if "STATUS" in col_real: df_base["STATUS"] = df_raw[col_real]
-                if "PRAZO" in col_real or "SIT" in col_real or "VENCIDO" in col_real: df_base["SIT_PRAZO"] = df_raw[col_real]
+            num_colunas = df_raw.shape[1]
+            
+            df_base["SIGLA"] = df_raw.iloc[:, 0] if num_colunas > 0 else "N/A"
+            df_base["SETOR"] = df_raw.iloc[:, 1] if num_colunas > 1 else "N/A"
+            df_base["RESPONSAVEL"] = df_raw.iloc[:, 3] if num_colunas > 3 else "Não Informado"
+            df_base["STATUS"] = df_raw.iloc[:, 4] if num_colunas > 4 else "Não Informado"
+            df_base["SIT_PRAZO"] = df_raw.iloc[:, 5] if num_colunas > 5 else "Não Informado"
 
-            num_colunas = len(df_raw.columns)
-            if "SIGLA" not in df_base.columns and num_colunas > 0: df_base["SIGLA"] = df_raw.iloc[:, 0]
-            if "SETOR" not in df_base.columns and num_colunas > 1: df_base["SETOR"] = df_raw.iloc[:, 1]
-            if "RESPONSAVEL" not in df_base.columns and num_colunas > 3: df_base["RESPONSAVEL"] = df_raw.iloc[:, 3]
-            if "STATUS" not in df_base.columns and num_colunas > 4: df_base["STATUS"] = df_raw.iloc[:, 4]
-            if "SIT_PRAZO" not in df_base.columns and num_colunas > 5: df_base["SIT_PRAZO"] = df_raw.iloc[:, 5]
-
+            # Limpeza inicial de linhas em branco do Excel
             df_base = df_base.dropna(subset=["SIGLA", "STATUS"], how="all")
 
             for col in df_base.columns:
                 df_base[col] = df_base[col].fillna("").astype(str).str.strip()
             
-            valores_vazios = ["0", "0.0", "NAN", "NONE", "", "NAN NAN", "NÃO INFORMADO", "A", "#VALOR!"]
+            valores_vazios = ["0", "0.0", "NAN", "NONE", "", "NAN NAN", "NÃO INFORMADO", "A", "#VALOR!", "SIGLA DO DOCUMENTO", "STATUS DO DOCUMENTO NORMATIVO"]
             for col in df_base.columns:
-                df_base.loc[df_base[col].str.upper().isin(valores_vazios), col] = None
+                df_base = df_base[~df_base[col].str.upper().isin(valores_vazios)]
 
-            df_base = df_base.dropna(subset=["SIGLA", "STATUS"], how="any")
-
+            # Substituição e padronização das colaboradoras desligadas
             if "RESPONSAVEL" in df_base.columns:
                 df_base["RESPONSAVEL"] = df_base["RESPONSAVEL"].apply(
                     lambda x: "Antigo Colaborador" if str(x).upper().strip() in ["SABRINA", "SONALHYA"] else str(x).upper().strip()
@@ -145,12 +133,17 @@ if not df_base.empty:
     lista_documentos.insert(0, "Todos")
     documento_selecionado = st.sidebar.selectbox("Filtrar por Documento Aprovado:", lista_documentos)
     
+    df_filtrado = df_base.copy()
+    if responsavel_selecionado != "Todos":
+        df_filtrado = df_filtrado[df_filtrado["RESPONSAVEL"] == responsavel_selecionado]
+    if documento_selecionado != "Todos":
+        df_filtrado = df_filtrado[df_filtrado["SIGLA"] == documento_selecionado]
+    
     st.sidebar.markdown("---")
     st.sidebar.subheader("📊 Qtd por Documento (Sigla)")
-    df_lateral_contagem = df_base["SIGLA"].dropna().value_counts().reset_index()
+    df_lateral_contagem = df_filtrado["SIGLA"].dropna().value_counts().reset_index()
     df_lateral_contagem.columns = ["Documento", "Qtd"]
-    # ALTERADO: Travado a altura padrão para gerar barra de rolagem na tabela interna lateral
-    st.sidebar.dataframe(df_lateral_contagem, use_container_width=True, hide_index=True, height=200)
+    st.sidebar.dataframe(df_lateral_contagem, use_container_width=True, hide_index=True, height=180)
     
     st.sidebar.markdown("---")
     st.sidebar.subheader("🎨 Configuração dos Gráficos")
@@ -158,13 +151,6 @@ if not df_base.empty:
     c_g2_color = st.sidebar.color_picker("G2 - Cor Tempo:", "#38BDF8", key="c2")
     c_g4_color = st.sidebar.color_picker("G4 - Cor Prazo:", "#C084FC", key="c4")
     
-    # Executa a filtragem real reativa dos dados na tela principal
-    df_filtrado = df_base.copy()
-    if responsavel_selecionado != "Todos":
-        df_filtrado = df_filtrado[df_filtrado["RESPONSAVEL"] == responsavel_selecionado]
-    if documento_selecionado != "Todos":
-        df_filtrado = df_filtrado[df_filtrado["SIGLA"] == documento_selecionado]
-
     #--- 4. INDICADORES DO TOPO (CARDS) ---
     total_docs = len(df_filtrado)
     aprovados = len(df_filtrado[df_filtrado["STATUS"].astype(str).str.upper().str.contains("APROVADO|OK|SIM", na=False)])
@@ -194,3 +180,19 @@ if not df_base.empty:
     
     linha2_col1, linha2_col2 = st.columns(2)
     
+    with linha2_col1:
+        st.markdown("### 📅 Situação de Prazos")
+        s_prazos_limpos = df_filtrado["SIT_PRAZO"].apply(remover_acentos)
+        contagem_prazos = s_prazos_limpos.value_counts()
+        
+        dados_prazo = pd.Series({
+            "No Prazo": contagem_prazos.get("VALIDO", 0) + contagem_prazos.get("NO PRAZO", 0),
+            "Prestes a Vencer": contagem_prazos.get("PRESTES A VENCER", 0),
+            "Vencido": contagem_prazos.get("VENCIDO", 0)
+        })
+        st.bar_chart(dados_prazo, color=c_g4_color, horizontal=True)
+
+    with linha2_col2:
+        st.markdown("### 🏆 Documentos Aprovados por Tipo")
+        df_aprov_por_tipo = df_filtrado[df_filtrado["STATUS"].astype(str).str.upper().str.contains("APROVADO|OK|SIM", na=False)]
+        dados_tipo = df_aprov_por_tipo["SIGLA"].dropna().value_counts()
