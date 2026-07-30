@@ -9,7 +9,7 @@ st.set_page_config(page_title="Validador NAQH", page_icon="🔍", layout="wide")
 st.title("Auditor Automatizado - Ficha Oficial NAQH")
 st.markdown("Sistema completo focado no apontamento detalhado de desvios tipográficos conforme a Norma Zero.")
 
-# Dicionário global de tipos de documentos normativos
+# Dicionário global estável de tipos de documentos normativos
 NOMES_TIPOS = {
     "NOR": "NORMA (NOR)",
     "POP": "PROCEDIMENTO OPERACIONAL PADRÃO (POP)",
@@ -27,70 +27,62 @@ tem_impressos_inconformes = st.sidebar.checkbox("⚠️ Há imagens/fotos de imp
 logo_hospital_manual = st.sidebar.checkbox("Autorizar Manualmente: Logomarca do Hospital")
 codigo_manual = st.sidebar.checkbox("Autorizar Manualmente: Código do Documento")
 
-# FORÇAR INICIALIZAÇÃO DE ESTADOS GLOBAIS ESTÁVEIS (Evita tela em branco)
-if "nome_arquivo_doc" not in st.session_state:
-    st.session_state.nome_arquivo_doc = "Documento Coletado"
-if "tipo_detectado" not in st.session_state:
-    st.session_state.tipo_detectado = "NOR"
-if "porcentagem_conforme" not in st.session_state:
-    st.session_state.porcentagem_conforme = 90
-if "erros_formatacao" not in st.session_state:
-    st.session_state.erros_formatacao = []
-if "cabecalho_dados" not in st.session_state:
-    st.session_state.cabecalho_dados = {
-        "LOGOMARCA DO HOSPITAL": True, "TÍTULO DO DOCUMENTO": True, "TIPO DE DOCUMENTO": True,
-        "CÓDIGO DO DOCUMENTO": True, "VERSÃO": True, "PÁGINAS": True
-    }
-if "historico_dados" not in st.session_state:
-    st.session_state.historico_dados = {
-        "DATA DA APROVAÇÃO / VALIDADE": True, "REGISTRO HISTÓRICO DO DOCUMENTO": True
-    }
-if "stats_texto" not in st.session_state:
-    st.session_state.stats_texto = {
-        "PAPEL": "SIM", "MARGENS": "SIM", 
-        "MODELO DA FONTE E TAMANHO (CORPO DO TEXTO)": "SIM", 
-        "FONTE E TAMANHO (DENTRO DE TABELAS/HISTÓRICO)": "NÃO",
-        "ESPAÇAMENTO ENTRE LINHAS": "SIM", "ALINHAMENTO": "SIM", "PARÁGRAFO": "SIM", 
-        "FIGURAS, TABELAS E GRÁFICOS": "SIM", "PAGINAÇÃO": "SIM", "MARCA D'AGUA": "SIM", 
-        "REFERÊNCIAS": "SIM", "APÊNDICES/ ANEXOS": "OPCIONAL"
-    }
-if "status_impressos" not in st.session_state:
-    st.session_state.status_impressos = "NÃO SE APLICA"
-if "comentario_impressos" not in st.session_state:
-    st.session_state.comentario_impressos = ""
+# ESTRUTURA FIXA DE FALLBACK (Garante que os dados nunca fiquem vazios na tela)
+nome_arquivo_doc = "Documento Coletado"
+tipo_detectado = "NOR"
+porcentagem_conforme = 85
+erros_formatacao = []
+status_impressos = "NÃO SE APLICA"
+comentario_impressos = ""
 
-# Aplica as autorizações manuais imediatamente no estado global
-if logo_hospital_manual: st.session_state.cabecalho_dados["LOGOMARCA DO HOSPITAL"] = True
-if codigo_manual: st.session_state.cabecalho_dados["CÓDIGO DO DOCUMENTO"] = True
+cabecalho_dados = {
+    "LOGOMARCA DO HOSPITAL": True if logo_hospital_manual else False,
+    "TÍTULO DO DOCUMENTO": False,
+    "TIPO DE DOCUMENTO": False,
+    "CÓDIGO DO DOCUMENTO": True if codigo_manual else False,
+    "VERSÃO": False,
+    "PÁGINAS": False
+}
+
+historico_dados = {
+    "DATA DA APROVAÇÃO / VALIDADE": False,
+    "REGISTRO HISTÓRICO DO DOCUMENTO": False
+}
+
+stats_texto = {
+    "PAPEL": "SIM", "MARGENS": "SIM", 
+    "MODELO DA FONTE E TAMANHO (CORPO DO TEXTO)": "SIM", 
+    "FONTE E TAMANHO (DENTRO DE TABELAS/HISTÓRICO)": "NÃO",
+    "ESPAÇAMENTO ENTRE LINHAS": "SIM", "ALINHAMENTO": "SIM", "PARÁGRAFO": "SIM", 
+    "FIGURAS, TABELAS E GRÁFICOS": "SIM", "PAGINAÇÃO": "SIM", "MARCA D'AGUA": "SIM", 
+    "REFERÊNCIAS": "SIM", "APÊNDICES/ ANEXOS": "OPCIONAL"
+}
 
 #--- 3. FLUXO DE CARREGAMENTO E ANÁLISE RIGOROSA (WORD .DOCX) ---
 arquivo_word = st.file_uploader("Arraste o arquivo WORD (.docx) aqui para auditoria", type=["docx"])
 
 if arquivo_word:
-    st.session_state.nome_arquivo_doc = arquivo_word.name
-    st.session_state.erros_formatacao = []
+    nome_arquivo_doc = arquivo_word.name
+    erros_formatacao = []
     has_tables_or_images = False
     corpo_texto_ok = True
     tabelas_texto_ok = True
     
-    # Reseta marcações estruturais para novos cálculos dinâmicos
-    st.session_state.cabecalho_dados = {k: False for k in st.session_state.cabecalho_dados.keys()}
-    st.session_state.historico_dados = {k: False for k in st.session_state.historico_dados.keys()}
+    cabecalho_dados = {k: False for k in cabecalho_dados.keys()}
+    historico_dados = {k: False for k in historico_dados.keys()}
     
-    if logo_hospital_manual: st.session_state.cabecalho_dados["LOGOMARCA DO HOSPITAL"] = True
-    if codigo_manual: st.session_state.cabecalho_dados["CÓDIGO DO DOCUMENTO"] = True
+    if logo_hospital_manual: cabecalho_dados["LOGOMARCA DO HOSPITAL"] = True
+    if codigo_manual: cabecalho_dados["CÓDIGO DO DOCUMENTO"] = True
     
-    # Detecta a sigla correta pelo nome do arquivo
-    st.session_state.tipo_detectado = "NOR"
+    tipo_detectado = "NOR"
     for sigla in NOMES_TIPOS.keys():
         if sigla in arquivo_word.name.upper():
-            st.session_state.tipo_detectado = sigla
+            tipo_detectado = sigla
             break
             
     doc = docx.Document(arquivo_word)
     conteudo_linhas = []
     
-    # 1. Pente fino no corpo do texto
     for p in doc.paragraphs:
         if not p.text.strip():
             continue
@@ -103,7 +95,6 @@ if arquivo_word:
             if tamanho_fonte and int(tamanho_fonte) != 11:
                 corpo_texto_ok = False
 
-    # 2. Pente fino nas tabelas
     if len(doc.tables) > 0:
         has_tables_or_images = True
         
@@ -127,13 +118,12 @@ if arquivo_word:
                             if i_linha == 0:
                                 if f_tam and int(f_tam) != 10:
                                     tabelas_texto_ok = False
-                                    st.session_state.erros_formatacao.append(f"❌ **Cabeçalho**: O título '{text_clean[:15]}...' está com tamanho **{f_tam}pt**. O correto é **10pt (Negrito)**.")
+                                    erros_formatacao.append(f"❌ **Cabeçalho**: O título '{text_clean[:15]}...' está com tamanho **{f_tam}pt**. O correto é **10pt (Negrito)**.")
                             else:
                                 if f_tam and int(f_tam) != 9 and int(f_tam) != 10:
                                     tabelas_texto_ok = False
-                                    st.session_state.erros_formatacao.append(f"❌ **Dados Internos**: O texto '{text_clean[:15]}...' está com tamanho **{f_tam}pt**. O correto é **9pt (Justificado)**.")
+                                    erros_formatacao.append(f"❌ **Dados Internos**: O texto '{text_clean[:15]}...' está com tamanho **{f_tam}pt**. O correto é **9pt (Justificado)**.")
 
-    # 3. Cabeçalhos e rodapés técnicos
     for secao in doc.sections:
         if secao.header:
             for p_head in secao.header.paragraphs:
@@ -146,52 +136,93 @@ if arquivo_word:
     if texto_completo:
         p_upper = texto_completo.upper()
         if "HOSPITAL" in p_upper or "SEMUS" in p_upper or logo_hospital_manual:
-            st.session_state.cabecalho_dados["LOGOMARCA DO HOSPITAL"] = True
+            cabecalho_dados["LOGOMARCA DO HOSPITAL"] = True
         if any(term in p_upper for term in ["NORMA", "PROCEDIMENTO", "PROTOCOLO", "PROT", "MANUAL", "REGIMENTO"]):
-            st.session_state.cabecalho_dados["TIPO DE DOCUMENTO"] = True
+            cabecalho_dados["TIPO DE DOCUMENTO"] = True
         if "CÓDIGO" in p_upper or re.search(r"[A-Z]{2,4}_[A-Z0-9]+", p_upper) or codigo_manual:
-            st.session_state.cabecalho_dados["CÓDIGO DO DOCUMENTO"] = True
+            cabecalho_dados["CÓDIGO DO DOCUMENTO"] = True
         if "VERSÃO:" in p_upper or "VERSÃO" in p_upper or "1ª" in p_upper or "2ª" in p_upper or "3ª" in p_upper:
-            st.session_state.cabecalho_dados["VERSÃO"] = True
+            cabecalho_dados["VERSÃO"] = True
         if any(term in p_upper for term in ["PÁGINAS", "PÁG", "FL.", "FOLHA", "PAG"]):
-            st.session_state.cabecalho_dados["PÁGINAS"] = True
-        if len(st.session_state.nome_arquivo_doc) > 5:
-            st.session_state.cabecalho_dados["TÍTULO DO DOCUMENTO"] = True
+            cabecalho_dados["PÁGINAS"] = True
+        if len(nome_arquivo_doc) > 5:
+            cabecalho_dados["TÍTULO DO DOCUMENTO"] = True
             
         if any(term in p_upper for term in ["VALIDADE", "DATA APROVAÇÃO", "DATA DE APROVAÇÃO", "APROVAÇÃO:"]):
-            st.session_state.historico_dados["DATA DA APROVAÇÃO / VALIDADE"] = True
+            historico_dados["DATA DA APROVAÇÃO / VALIDADE"] = True
         if any(term in p_upper for term in ["REGISTRO HISTÓRICO", "DESCRIÇÃO DA ATUALIZAÇÃO", "VERSÃO INICIAL", "HISTÓRICO"]):
-            st.session_state.historico_dados["REGISTRO HISTÓRICO DO DOCUMENTO"] = True
+            historico_dados["REGISTRO HISTÓRICO DO DOCUMENTO"] = True
 
-    st.session_state.stats_texto["MODELO DA FONTE E TAMANHO (CORPO DO TEXTO)"] = "SIM" if corpo_texto_ok else "NÃO"
-    st.session_state.stats_texto["FONTE E TAMANHO (DENTRO DE TABELAS/HISTÓRICO)"] = "SIM" if tabelas_texto_ok else "NÃO"
+    stats_texto["MODELO DA FONTE E TAMANHO (CORPO DO TEXTO)"] = "SIM" if corpo_texto_ok else "NÃO"
+    stats_texto["FONTE E TAMANHO (DENTRO DE TABELAS/HISTÓRICO)"] = "SIM" if tabelas_texto_ok else "NÃO"
 
     if has_tables_or_images:
         if tem_impressos_inconformes:
-            st.session_state.status_impressos = "NÃO"
-            st.session_state.comentario_impressos = "Solicito os anexos p/ analise..."
+            status_impressos = "NÃO"
+            comentario_impressos = "Solicito os anexos p/ analise..."
         else:
-            st.session_state.status_impressos = "SIM"
-            st.session_state.comentario_impressos = "Conforme apresentado."
+            status_impressos = "SIM"
+            comentario_impressos = "Conforme apresentado."
     else:
-        st.session_state.status_impressos = "NÃO SE APLICA"
-        st.session_state.comentario_impressos = ""
+        status_impressos = "NÃO SE APLICA"
 
     lista_calculo = []
-    for v in st.session_state.cabecalho_dados.values():
+    for v in cabecalho_dados.values():
         lista_calculo.append("SIM" if v else "NÃO")
-    lista_calculo.extend(st.session_state.stats_texto.values())
-    for v in st.session_state.historico_dados.values():
+    lista_calculo.extend(stats_texto.values())
+    for v in historico_dados.values():
         lista_calculo.append("SIM" if v else "NÃO")
-    lista_calculo.append(st.session_state.status_impressos)
+    lista_calculo.append(status_impressos)
 
     total_itens = len(lista_calculo)
     itens_conformes = sum(1 for x in lista_calculo if x in ["SIM", "OPCIONAL", "NÃO SE APLICA"])
-    st.session_state.porcentagem_conforme = int((itens_conformes / total_itens) * 100)
+    porcentagem_conforme = int((itens_conformes / total_itens) * 100)
     st.success("✔️ Varredura de integridade estrutural e de tipografia finalizada.")
 
-#--- 4. INTERFACE GRÁFICA DO ESPELHO DA FICHA (IMUNE A CACHE E SEMPRE VISÍVEL) ---
+#--- 4. INTERFACE GRÁFICA DO ESPELHO DA FICHA (FIXA E INDEPENDENTE DE CACHE) ---
 st.markdown("---")
-# EXIBIÇÃO FIXA E GARANTIDA DO TIPO DE DOCUMENTO
-st.info(f"📋 **Tipo de Documento Identificado pelo Sistema**: {NOMES_TIPOS.get(st.session_state.tipo_detectado, st.session_state.tipo_detectado.upper())}")
+st.info(f"📋 **Tipo de Documento Identificado pelo Sistema**: {NOMES_TIPOS.get(tipo_detectado, tipo_detectado.upper())}")
+st.subheader("📝 Ficha de Verificação Consolidada (Espelho Oficial)")
 
+col_p1, col_p2 = st.columns(2)
+with col_p1:
+    st.progress(porcentagem_conforme / 100)
+with col_p2:
+    st.subheader(f"📊 {porcentagem_conforme}% Conformidade")
+
+st.markdown("---")
+
+def render_linha_ficha(nome_item, status_atual, obs=""):
+    c1, c2 = st.columns(2)
+    c1.markdown(f"**{nome_item}**" + (f"  \n_{obs}_" if obs else ""))
+    marcador = "🔷 **[X] OPCIONAL**"
+    if status_atual == "SIM": marcador = "🟩 **[X] SIM** &nbsp;&nbsp;&nbsp;&nbsp; ⬜ [ ] NÃO"
+    elif status_atual == "NÃO": marcador = "⬜ [ ] SIM &nbsp;&nbsp;&nbsp;&nbsp; 🟥 **[X] NÃO**"
+    elif status_atual == "NÃO SE APLICA": marcador = "⬜ [ ] SIM &nbsp;&nbsp;&nbsp;&nbsp; ⬜ [ ] NÃO &nbsp;&nbsp;&nbsp;&nbsp; 🟨 **[X] N/A**"
+    c2.markdown(marcador)
+    st.markdown("<hr style='margin:4px 0px; border-top: 1px dashed #444;' />", unsafe_allow_html=True)
+
+st.markdown("### 🔹 CABEÇALHO")
+for k, v in cabecalho_dados.items():
+    render_linha_ficha(k, "SIM" if v else "NÃO")
+
+st.markdown("<br>", unsafe_allow_html=True)
+
+st.markdown("### 🔹 ITENS TEXTO")
+for item, stat in stats_texto.items():
+    render_linha_ficha(item, stat)
+
+st.markdown("<br>", unsafe_allow_html=True)
+
+st.markdown("### 🔹 FIM DO DOCUMENTO")
+for k, v in historico_dados.items():
+    render_linha_ficha(k, "SIM" if v else "NÃO")
+
+st.markdown("<br>", unsafe_allow_html=True)
+
+st.markdown("### 🔹 IMPRESSOS")
+render_linha_ficha("ITENS IMPRESSO (ESTRUTURAS GRÁFICAS/TABELAS)", status_impressos, obs=comentario_impressos)
+
+#--- 5. EXIBIÇÃO DO GUIA DE ERROS DIRETOS ---
+st.markdown("<br><br>", unsafe_allow_html=True)
+st.markdown("### ⚠️ Guia de Correção Manual (Fontes e Tamanhos Inconformes)")
