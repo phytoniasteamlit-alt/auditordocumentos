@@ -78,7 +78,7 @@ if arquivo_excel:
             media_v1 = float(media_v1) if pd.notna(media_v1) else 0.0
             media_v2 = float(media_v2) if pd.notna(media_v2) else 0.0
         
-        # 2. CARREGAMENTO DOS DADOS PARA OS GRÁFICOS (Retornado ao padrão de posições numéricas seguras do PDF)
+        # 2. CARREGAMENTO DOS DADOS PARA OS GRÁFICOS
         nome_aba_graficos = None
         for n_real in lista_abas_reais:
             n_up = str(n_real).upper().strip()
@@ -87,7 +87,7 @@ if arquivo_excel:
                 break
         
         if not nome_aba_graficos:
-            nome_aba_graficos = lista_abas_reais if lista_abas_reais else None
+            nome_aba_graficos = lista_abas_reais[0] if lista_abas_reais else None
         
         if nome_aba_graficos:
             df_raw = pd.read_excel(arquivo_excel, sheet_name=nome_aba_graficos, header=0, engine="openpyxl")
@@ -95,17 +95,18 @@ if arquivo_excel:
             num_colunas = len(df_raw.columns)
             df_base = pd.DataFrame()
             
-            # Força o script a ler exatamente as colunas corretas da planilha conforme a estrutura original do seu PDF
-            df_base["SIGLA"] = df_raw.iloc[:, 0] if num_colunas > 0 else None
-            df_base["SETOR"] = df_raw.iloc[:, 1] if num_colunas > 1 else None
+            # Mapeamento por posição física exata (evita confusão de colunas)
+            df_base["SIGLA"] = df_raw.iloc[:, 0] if num_colunas > 0 else "N/A"
+            df_base["SETOR"] = df_raw.iloc[:, 1] if num_colunas > 1 else "N/A"
             df_base["RESPONSAVEL"] = df_raw.iloc[:, 3] if num_colunas > 3 else "Não Informado"
             df_base["STATUS"] = df_raw.iloc[:, 4] if num_colunas > 4 else "Não Informado"
             df_base["SIT_PRAZO"] = df_raw.iloc[:, 5] if num_colunas > 5 else "Não Informado"
 
+            # Tratamento de strings e preenchimento de vazios preventivo
             for col in df_base.columns:
-                df_base[col] = df_base[col].fillna("").astype(str).str.strip()
+                df_base[col] = df_base[col].fillna("Não Informado").astype(str).str.strip()
             
-            # Substituição das ex-colaboradoras padronizando maiúsculas e minúsculas
+            # Substituição segura das ex-colaboradoras
             if "RESPONSAVEL" in df_base.columns:
                 df_base["RESPONSAVEL"] = df_base["RESPONSAVEL"].apply(
                     lambda x: "Antigo Colaborador" if str(x).upper().strip() in ["SABRINA", "SONALHYA"] else str(x).upper().strip()
@@ -115,12 +116,7 @@ if arquivo_excel:
                 df_base["STATUS"] = df_base["STATUS"].apply(
                     lambda x: "AG Aguardando" if "VERIFICADO AGU" in x.upper() or "AGUARDANDO" in x.upper() else x
                 )
-            
-            valores_vazios = ["0", "0.0", "NAN", "NONE", "", "NAN NAN", "NÃO INFORMADO", "A", "#VALOR!"]
-            for col in df_base.columns:
-                df_base.loc[df_base[col].str.upper().isin(valores_vazios), col] = None
                 
-            df_base = df_base.dropna(subset=["STATUS", "SIGLA"], how="all")
     except Exception as e:
         st.error(f"Erro crítico no processamento dos dados da planilha: {e}")
 
@@ -129,12 +125,12 @@ if not df_base.empty:
     st.sidebar.markdown("---")
     st.sidebar.subheader("🔍 Filtros de Visualização")
     
-    lista_responsaveis = sorted([str(r) for r in df_base["RESPONSAVEL"].dropna().unique() if str(r).strip() != ""])
-    lista_responsaveis.insert(0, "Todos")
+    lista_responsaveis = sorted([str(r) for r in df_base["RESPONSAVEL"].unique() if str(r).strip() != ""])
+    if "Todos" not in lista_responsaveis: lista_responsaveis.insert(0, "Todos")
     responsavel_selecionado = st.sidebar.selectbox("Selecione o Responsável:", lista_responsaveis)
     
-    lista_documentos = sorted([str(d) for d in df_base["SIGLA"].dropna().unique() if str(d).strip() != ""])
-    lista_documentos.insert(0, "Todos")
+    lista_documentos = sorted([str(d) for d in df_base["SIGLA"].unique() if str(d).strip() != ""])
+    if "Todos" not in lista_documentos: lista_documentos.insert(0, "Todos")
     documento_selecionado = st.sidebar.selectbox("Filtrar por Documento Aprovado:", lista_documentos)
     
     df_filtrado = df_base.copy()
@@ -145,7 +141,7 @@ if not df_base.empty:
     
     st.sidebar.markdown("---")
     st.sidebar.subheader("📊 Qtd por Documento (Sigla)")
-    df_lateral_contagem = df_filtrado["SIGLA"].dropna().value_counts().reset_index()
+    df_lateral_contagem = df_filtrado["SIGLA"].value_counts().reset_index()
     df_lateral_contagem.columns = ["Documento", "Qtd"]
     st.sidebar.dataframe(df_lateral_contagem, use_container_width=True, hide_index=True)
     
@@ -167,12 +163,12 @@ if not df_base.empty:
     
     st.markdown("<br>", unsafe_allow_html=True)
     
-    #--- 5. RENDERIZAÇÃO DOS GRÁFICOS ---
+    #--- 5. RENDERIZAÇÃO DOS GRÁFICOS INICIAIS ---
     linha1_col1, linha1_col2 = st.columns(2)
     
     with linha1_col1:
         st.markdown("### 📊 Documentos por Status")
-        dados_g1 = df_filtrado["STATUS"].dropna().value_counts()
+        dados_g1 = df_filtrado["STATUS"].value_counts()
         st.bar_chart(dados_g1, color=c_g1_color, horizontal=True)
     
     with linha1_col2:
@@ -186,7 +182,7 @@ if not df_base.empty:
     
     with linha2_col1:
         st.markdown("### 📅 Situação de Prazos")
-        contagem_prazos = df_filtrado["SIT_PRAZO"].dropna().value_counts()
+        contagem_prazos = df_filtrado["SIT_PRAZO"].value_counts()
         dados_prazo = pd.Series({
             "No Prazo": contagem_prazos.get("No Prazo", 0) if "No Prazo" in contagem_prazos else contagem_prazos.get("Válido", 0),
             "Prestes a Vencer": contagem_prazos.get("Prestes a Vencer", 0),
@@ -196,3 +192,10 @@ if not df_base.empty:
 
     with linha2_col2:
         st.markdown("### 🏆 Documentos Aprovados por Tipo")
+        df_aprov_por_tipo = df_filtrado[df_filtrado["STATUS"].astype(str).str.upper().str.contains("APROVADO|OK|SIM", na=False)]
+        dados_tipo = df_aprov_por_tipo["SIGLA"].value_counts()
+        st.bar_chart(dados_tipo, color="#34D399", horizontal=True)
+    
+    #--- 6. GRÁFICOS DE PRODUTIVIDADE POR RESPONSÁVEL (FORÇADO SEM DROP) ---
+    st.markdown("---")
+    
