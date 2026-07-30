@@ -4,7 +4,6 @@ import openpyxl
 from io import BytesIO
 
 #--- 1. CONFIGURAÇÃO DA PÁGINA ---
-# CORRIGIDO: Retornado o ícone original da prancheta com caneta
 st.set_page_config(page_title="PAINEL DE INDICADORES NORMA ZERO", page_icon="📋", layout="wide")
 
 # --- BLOCO DE CUSTOMIZAÇÃO VISUAL AVANÇADA (CSS INJECT NATIVO) ---
@@ -17,13 +16,12 @@ section[data-testid="stFileUploaderDropzone"] { border: 2px dashed #38BDF8 !impo
 </style>
 """, unsafe_allow_html=True)
 
-# --- CABEÇALHO DO HOSPITAL (LADO A LADO) ---
+# --- CABEÇALHO DO HOSPITAL ---
 col_titulo, col_hospital = st.columns([0.65, 0.35])
 with col_titulo:
     st.markdown("# PAINEL DE INDICADORES NORMA ZERO")
 
 with col_hospital:
-    # CORRIGIDO: Inserido novamente o ícone de cruz médica vermelha e a bonequinha da coordenação conforme o PDF original
     st.markdown("""
     <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px; margin-top: 10px;">
     <div style="display: flex; align-items: center; gap: 10px;">
@@ -40,7 +38,6 @@ with col_hospital:
 st.markdown("---")
 
 #--- 2. CARREGAMENTO DO ARQUIVO ---
-# CORRIGIDO: Retornado o ícone de engrenagem no cabeçalho lateral
 st.sidebar.header("⚙️ Entrada de Dados")
 arquivo_excel = st.sidebar.file_uploader("📁 Carregar Planilha Excel (.xlsx):", type=["xlsx"], key="uploader_xlsx")
 
@@ -52,7 +49,7 @@ if arquivo_excel:
         xl = pd.ExcelFile(arquivo_excel, engine="openpyxl")
         lista_abas_reais = xl.sheet_names
         
-        # 1. PROCESSAMENTO DAS MÉDIAS (Ignorando erros de fórmula #VALOR!)
+        # 1. PROCESSAMENTO DAS MÉDIAS CRONOLÓGICAS
         nome_aba_original = None
         for n_real in lista_abas_reais:
             n_up = str(n_real).upper().strip()
@@ -81,7 +78,7 @@ if arquivo_excel:
             media_v1 = float(media_v1) if pd.notna(media_v1) else 0.0
             media_v2 = float(media_v2) if pd.notna(media_v2) else 0.0
         
-        # 2. CARREGAMENTO DOS DADOS PARA OS GRÁFICOS
+        # 2. CARREGAMENTO DOS DADOS PARA OS GRÁFICOS (Retornado ao padrão de posições numéricas seguras do PDF)
         nome_aba_graficos = None
         for n_real in lista_abas_reais:
             n_up = str(n_real).upper().strip()
@@ -95,31 +92,20 @@ if arquivo_excel:
         if nome_aba_graficos:
             df_raw = pd.read_excel(arquivo_excel, sheet_name=nome_aba_graficos, header=0, engine="openpyxl")
             
-            df_base = pd.DataFrame()
-            for col_real in df_raw.columns:
-                col_upper = str(col_real).upper().strip()
-                if "SIGLA" in col_upper or ("DOCUMENTO" in col_upper and "STATUS" not in col_upper):
-                    df_base["SIGLA"] = df_raw[col_real]
-                if "SETOR" in col_upper:
-                    df_base["SETOR"] = df_raw[col_real]
-                if "RESPONSAVEL" in col_upper or "RESPONSÁVEL" in col_upper:
-                    df_base["RESPONSAVEL"] = df_raw[col_real]
-                if "STATUS" in col_upper:
-                    df_base["STATUS"] = df_raw[col_real]
-                if "PRAZO" in col_upper or "SIT" in col_upper:
-                    df_base["SIT_PRAZO"] = df_raw[col_real]
-
             num_colunas = len(df_raw.columns)
-            if "SIGLA" not in df_base.columns and num_colunas > 0: df_base["SIGLA"] = df_raw.iloc[:, 0]
-            if "SETOR" not in df_base.columns and num_colunas > 1: df_base["SETOR"] = df_raw.iloc[:, 1]
-            if "RESPONSAVEL" not in df_base.columns and num_colunas > 3: df_base["RESPONSAVEL"] = df_raw.iloc[:, 3]
-            if "STATUS" not in df_base.columns and num_colunas > 4: df_base["STATUS"] = df_raw.iloc[:, 4]
-            if "SIT_PRAZO" not in df_base.columns and num_colunas > 5: df_base["SIT_PRAZO"] = df_raw.iloc[:, 5]
+            df_base = pd.DataFrame()
+            
+            # Força o script a ler exatamente as colunas corretas da planilha conforme a estrutura original do seu PDF
+            df_base["SIGLA"] = df_raw.iloc[:, 0] if num_colunas > 0 else None
+            df_base["SETOR"] = df_raw.iloc[:, 1] if num_colunas > 1 else None
+            df_base["RESPONSAVEL"] = df_raw.iloc[:, 3] if num_colunas > 3 else "Não Informado"
+            df_base["STATUS"] = df_raw.iloc[:, 4] if num_colunas > 4 else "Não Informado"
+            df_base["SIT_PRAZO"] = df_raw.iloc[:, 5] if num_colunas > 5 else "Não Informado"
 
             for col in df_base.columns:
                 df_base[col] = df_base[col].fillna("").astype(str).str.strip()
             
-            # Tratamento preventivo de maiúsculas para as duas colaboradoras desligadas
+            # Substituição das ex-colaboradoras padronizando maiúsculas e minúsculas
             if "RESPONSAVEL" in df_base.columns:
                 df_base["RESPONSAVEL"] = df_base["RESPONSAVEL"].apply(
                     lambda x: "Antigo Colaborador" if str(x).upper().strip() in ["SABRINA", "SONALHYA"] else str(x).upper().strip()
@@ -181,7 +167,7 @@ if not df_base.empty:
     
     st.markdown("<br>", unsafe_allow_html=True)
     
-    #--- 5. RENDERIZAÇÃO DOS GRÁFICOS INICIAIS ---
+    #--- 5. RENDERIZAÇÃO DOS GRÁFICOS ---
     linha1_col1, linha1_col2 = st.columns(2)
     
     with linha1_col1:
@@ -191,3 +177,22 @@ if not df_base.empty:
     
     with linha1_col2:
         st.markdown("### ⏱️ Tempo de Análise")
+        dados_g2 = pd.Series({"1º Verf.": media_v1, "2º Verf.": media_v2, "Total Estimado": (media_v1 + media_v2)})
+        st.bar_chart(dados_g2, color=c_g2_color, horizontal=True)
+    
+    st.markdown("---")
+    
+    linha2_col1, linha2_col2 = st.columns(2)
+    
+    with linha2_col1:
+        st.markdown("### 📅 Situação de Prazos")
+        contagem_prazos = df_filtrado["SIT_PRAZO"].dropna().value_counts()
+        dados_prazo = pd.Series({
+            "No Prazo": contagem_prazos.get("No Prazo", 0) if "No Prazo" in contagem_prazos else contagem_prazos.get("Válido", 0),
+            "Prestes a Vencer": contagem_prazos.get("Prestes a Vencer", 0),
+            "Vencido": contagem_prazos.get("Vencido", 0)
+        })
+        st.bar_chart(dados_prazo, color=c_g4_color, horizontal=True)
+
+    with linha2_col2:
+        st.markdown("### 🏆 Documentos Aprovados por Tipo")
