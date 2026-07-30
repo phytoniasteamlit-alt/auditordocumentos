@@ -202,7 +202,7 @@ if arquivo_word:
     else:
         status_impressos = "NÃO SE APLICA"
 
-# Consolidação dos dados para cálculo matemático geral de porcentagem
+# Consolidação dos dados para cálculo de porcentagem
 lista_calculo = []
 for k, v in cabecalho_dados.items():
     lista_calculo.append("SIM" if v else "NÃO")
@@ -217,3 +217,4 @@ itens_texto_fixos = [
     ("FIGURAS, TABELAS E GRÁFICOS", "SIM" if has_tables_or_images else "NÃO"),
     ("PAGINAÇÃO", "SIM" if arquivo_word else "NÃO"),
     ("MARCA D'AGUA", "SIM" if arquivo_word else "NÃO"),
+    ("REFERÊNCIAS", "SIM" if arquivo_word else "NÃO"),
