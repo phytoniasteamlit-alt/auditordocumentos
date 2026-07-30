@@ -202,19 +202,21 @@ if arquivo_word:
     else:
         status_impressos = "NÃO SE APLICA"
 
-# Consolidação dos dados para cálculo de porcentagem
+# Consolidação estável dos itens de texto fixos sem risco de quebra de sintaxe
 lista_calculo = []
 for k, v in cabecalho_dados.items():
     lista_calculo.append("SIM" if v else "NÃO")
 
-itens_texto_fixos = [
-    ("PAPEL", "SIM" if arquivo_word else "NÃO"),
-    ("MARGENS", "SIM" if arquivo_word else "NÃO"),
-    ("MODELO DA FONTE E TAMANHO", "SIM" if fonte_e_tamanho_ok and arquivo_word else "NÃO"),
-    ("ESPAÇAMENTO ENTRE LINHAS", "SIM" if arquivo_word else "NÃO"),
-    ("ALINHAMENTO", "SIM" if arquivo_word else "NÃO"),
-    ("PARÁGRAFO", "SIM" if arquivo_word else "NÃO"),
-    ("FIGURAS, TABELAS E GRÁFICOS", "SIM" if has_tables_or_images else "NÃO"),
-    ("PAGINAÇÃO", "SIM" if arquivo_word else "NÃO"),
-    ("MARCA D'AGUA", "SIM" if arquivo_word else "NÃO"),
-    ("REFERÊNCIAS", "SIM" if arquivo_word else "NÃO"),
+# Processamento individualizado para evitar acúmulo de colchetes longos
+stat_papel = "SIM" if arquivo_word else "NÃO"
+stat_margens = "SIM" if arquivo_word else "NÃO"
+stat_fonte = "SIM" if fonte_e_tamanho_ok and arquivo_word else "NÃO"
+stat_linhas = "SIM" if arquivo_word else "NÃO"
+stat_alinha = "SIM" if arquivo_word else "NÃO"
+stat_parag = "SIM" if arquivo_word else "NÃO"
+stat_figuras = "SIM" if has_tables_or_images else "NÃO"
+stat_paginacao = "SIM" if arquivo_word else "NÃO"
+stat_marca = "SIM" if arquivo_word else "NÃO"
+stat_referencia = "SIM" if arquivo_word else "NÃO"
+stat_anexos = "OPCIONAL"
+
