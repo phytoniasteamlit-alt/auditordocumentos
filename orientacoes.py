@@ -121,6 +121,7 @@ if arquivo_word:
                                 r_celula_out.bold = True
                             elif is_registro_historico:
                                 r_celula_out.font.size = docx.shared.Pt(9)
+                                r_celula_out.bold = False
                     
                     for r_celula in p_celula.runs:
                         f_tam = r_celula.font.size.pt if r_celula.font.size else None
@@ -218,6 +219,3 @@ itens_texto_fixos = [
     ("REFERÊNCIAS", "SIM" if arquivo_word else "NÃO"),
     ("APÊNDICES/ ANEXOS", "OPCIONAL")
 ]
-for item, stat in itens_texto_fixos:
-    lista_calculo.append(stat)
-
