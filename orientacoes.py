@@ -9,12 +9,6 @@ st.set_page_config(page_title="Validador NAQH", page_icon="🔍", layout="wide")
 st.title("Auditor Automatizado - Ficha Oficial NAQH")
 st.markdown("Sistema completo parametrizado com o layout oficial de conferência lateral do Hospital Dr. Jackson Lago.")
 
-# Inicialização de estados de sessão seguros
-if "cached_nome_arquivo" not in st.session_state:
-    st.session_state.cached_nome_arquivo = "Documento Coletado"
-if "cached_tipo" not in st.session_state:
-    st.session_state.cached_tipo = "NORMA"
-
 #--- 2. BARRA LATERAL (CONTROLES E CHECKBOXES) ---
 st.sidebar.header("⚙️ Controles de Auditoria (NAQH)")
 
@@ -22,10 +16,14 @@ tem_impressos_inconformes = st.sidebar.checkbox("⚠️ Há imagens/fotos de imp
 logo_hospital_manual = st.sidebar.checkbox("Autorizar Manualmente: Logomarca do Hospital")
 codigo_manual = st.sidebar.checkbox("Autorizar Manualmente: Código do Documento")
 
-tipo_detectado = st.session_state.cached_tipo
-nome_arquivo_doc = st.session_state.cached_nome_arquivo
+# Inicialização de variáveis padrão de auditoria (Layout Fixo)
+nome_arquivo_doc = "Documento Coletado"
+tipo_detectado = "NORMA"
+has_tables_or_images = False
+fonte_e_tamanho_ok = True
+erros_formatacao = []
+documento_corrigido_bytes = None
 
-# Estrutura base de dados para auditoria do NAQH
 cabecalho_dados = {
     "LOGOMARCA DO HOSPITAL": logo_hospital_manual,
     "TÍTULO DO DOCUMENTO": False,
@@ -40,12 +38,6 @@ historico_dados = {
     "REGISTRO HISTÓRICO DO DOCUMENTO": False
 }
 
-has_tables_or_images = False
-fonte_e_tamanho_ok = True
-erros_formatacao = []
-documento_corrigido_bytes = None
-
-# Variáveis auxiliares para status estável de texto
 stat_papel = "NÃO"
 stat_margens = "NÃO"
 stat_fonte = "NÃO"
@@ -63,20 +55,17 @@ arquivo_word = st.file_uploader("Arraste o arquivo WORD (.docx) aqui para audito
 
 if arquivo_word:
     nome_arquivo_doc = arquivo_word.name
-    st.session_state.cached_nome_arquivo = nome_arquivo_doc
     
     for sigla in ["NOR", "POP", "PROT", "MAN", "REG", "ROT", "POL"]:
         if sigla in arquivo_word.name.upper():
             tipo_detectado = sigla
             break
-    st.session_state.cached_tipo = tipo_detectado
-    
-    # Instâncias para leitura e correção automática
+            
     doc = docx.Document(arquivo_word)
     doc_out = docx.Document(arquivo_word)
     conteudo_linhas = []
     
-    # --- PENTE FINO DE FONTES E TAMANHOS ---
+    # Varredura do Corpo do Texto
     for p_idx, p in enumerate(doc.paragraphs):
         if not p.text.strip():
             continue
@@ -150,7 +139,7 @@ if arquivo_word:
                                     fonte_e_tamanho_ok = False
                                     erros_formatacao.append(f"Dados da tabela de Histórico inválidos: {f_tam}pt (Esperado: 9pt)")
 
-    # --- CORREÇÃO AUTOMÁTICA DE GEOMETRIA DA PÁGINA ---
+    # Correção de Margens
     for secao_out in doc_out.sections:
         secao_out.top_margin = docx.shared.Cm(3.0)
         secao_out.left_margin = docx.shared.Cm(3.0)
@@ -211,7 +200,7 @@ if arquivo_word:
             for erro in erros_unicos[:6]:
                 st.warning(erro)
 
-# --- DEFINIÇÃO DOS STATUS DE EXIBIÇÃO GLOBAL ---
+# --- CONFIGURAÇÃO DOS STATUS DOS IMPRESSOS ---
 status_impressos = "NÃO SE APLICA"
 comentario_impressos = ""
 
@@ -226,8 +215,18 @@ if arquivo_word:
     else:
         status_impressos = "NÃO SE APLICA"
 
-# Consolidação estável dos dados para cálculo de porcentagem
+# Cálculo da porcentagem de conformidade
 lista_calculo = []
 for k, v in cabecalho_dados.items():
     lista_calculo.append("SIM" if v else "NÃO")
+lista_calculo.extend([stat_papel, stat_margens, stat_fonte, stat_linhas, stat_alinha, stat_parag, stat_figuras, stat_paginacao, stat_marca, stat_referencia, stat_anexos])
+for k, v in historico_dados.items():
+    lista_calculo.append("SIM" if v else "NÃO")
+lista_calculo.append(status_impressos)
 
+total_itens = len(lista_calculo)
+itens_conformes = sum(1 for x in lista_calculo if x in ["SIM", "OPCIONAL", "NÃO SE APLICA"])
+porcentagem_conforme = int((itens_conformes / total_itens) * 100) if arquivo_word else 0
+
+#--- 4. INTERFACE GRÁFICA DO ESPELHO DA FICHA (RERENDER SEGURO) ---
+st.markdown("---")
