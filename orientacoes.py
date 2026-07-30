@@ -103,7 +103,7 @@ if arquivo_word:
                     # Verifica Alinhamento das Células de Dados das tabelas (Deve ser Justificado = 3)
                     if i_linha > 0 and p_celula.alignment and p_celula.alignment != docx.enum.text.WD_ALIGN_PARAGRAPH.JUSTIFY:
                         fonte_e_tamanho_ok = False
-                        erros_formatacao.append(f"Alinhamento incorreto na célula de dados da tabela (Esperado: Justificado)")
+                        erros_formatacao.append("Alinhamento incorreto na célula de dados da tabela (Esperado: Justificado)")
 
                     for r_celula in p_celula.runs:
                         f_nome = r_celula.font.name
@@ -160,7 +160,6 @@ if arquivo_word:
     st.success("✔️ Varredura de integridade estrutural e de tipografia finalizada.")
     if not fonte_e_tamanho_ok and erros_formatacao:
         with st.expander("⚠️ Detalhes das Inconformidades de Formatação Identificadas"):
-            # Exibe no máximo as 8 primeiras falhas para manter a legibilidade
             for erro in list(set(erros_formatacao))[:8]:
                 st.warning(erro)
 
@@ -201,7 +200,7 @@ linhas_exibicao.append({
 
 st.table(pd.DataFrame(linhas_exibicao))
 
-#--- 5. CONSTRUÇÃO E FORMATAÇÃO DA STRING DE TEXTO PARA EXPORTAÇÃO COMPATÍVEL WORD ---
+#--- 5. CONSTRUÇÃO DA STRING DE TEXTO PARA EXPORTAÇÃO ---
 texto_documento_word = (
     "SÃO LUÍS | SEMUS\n"
     "PREFEITURA DE SÃO LUÍS\n"
@@ -213,3 +212,7 @@ texto_documento_word = (
     f"SETOR RESPONSÁVEL: NAQH (Núcleo de Avaliação e Qualidade Hospitalar)\n"
     "------------------------------------------------------------\n\n"
     "1. CABEÇALHO (DIRETRIZ DO PRINT 3)\n"
+)
+
+for k, v in cabecalho_dados.items():
+    marcador = "[X] SIM [ ] NÃO" if v else "[ ] SIM [X] NÃO"
