@@ -154,7 +154,7 @@ if arquivo_word:
             for erro in erros_unicos[:6]:
                 st.warning(erro)
 
-# Avaliação lúdica do Bloco de Impressos
+# Avaliação do Bloco de Impressos
 status_impressos = "NÃO SE APLICA"
 comentario_impressos = ""
 
@@ -165,10 +165,12 @@ if arquivo_word:
             comentario_impressos = "Solicito os anexos p/ analise..."
         else:
             status_impressos = "SIM"
+            comentario_impressos = "Conforme apresentado no documento estruturado."
     else:
         status_impressos = "NÃO SE APLICA"
+        comentario_impressos = ""
 
-#--- 4. MONTAGEM DA TABELA DE EXIBIÇÃO DE STATUS (SIM / NÃO / OPCIONAL) ---
+#--- 4. MONTAGEM DA Tabela DE STATUS (CONFORME COLUNAS DO SEU APP) ---
 linhas_tabela_resumida = []
 
 # Itens do Cabeçalho
@@ -176,8 +178,8 @@ for k, v in cabecalho_dados.items():
     linhas_tabela_resumida.append({
         "Categoria": "1. Cabeçalho (Print 3)",
         "Item Técnico Regulamentado": k,
-        "Status Técnico": "SIM" if v else "NÃO",
-        "Observação": ""
+        "Status de Conformidade": "SIM" if v else "NÃO",
+        "Observação Interna": ""
     })
 
 # Itens de Texto Fixo
@@ -200,8 +202,8 @@ for item, stat in itens_texto_fixos:
     linhas_tabela_resumida.append({
         "Categoria": "2. Itens Texto (Print 4)",
         "Item Técnico Regulamentado": item,
-        "Status Técnico": stat,
-        "Observação": ""
+        "Status de Conformidade": stat,
+        "Observação Interna": ""
     })
 
 # Itens do Histórico Fundo
@@ -209,21 +211,21 @@ for k, v in historico_dados.items():
     linhas_tabela_resumida.append({
         "Categoria": "3. Fim do Documento (Print 1)",
         "Item Técnico Regulamentado": k,
-        "Status Técnico": "SIM" if v else "NÃO",
-        "Observação": ""
+        "Status de Conformidade": "SIM" if v else "NÃO",
+        "Observação Interna": ""
     })
 
 # Item de Impresso Condicional
 linhas_tabela_resumida.append({
     "Categoria": "4. Impressos (Print 4)",
-    "Item Técnico Regulamentado": "Itens Impresso (Imagens/Tabelas)",
-    "Status Técnico": status_impressos,
-    "Observação": comentario_impressos
+    "Item Técnico Regulamentado": "Itens Impresso (Estruturas Gráficas/Tabelas)",
+    "Status de Conformidade": status_impressos,
+    "Observação Interna": comentario_impressos
 })
 
 #--- 5. CÁLCULO DA PORCENTAGEM DE CONFORMIDADE ---
 total_itens = len(linhas_tabela_resumida)
-itens_conformes = sum(1 for x in linhas_tabela_resumida if x["Status Técnico"] in ["SIM", "OPCIONAL", "NÃO SE APLICA"])
+itens_conformes = sum(1 for x in linhas_tabela_resumida if x["Status de Conformidade"] in ["SIM", "OPCIONAL", "NÃO SE APLICA"])
 porcentagem_conforme = int((itens_conformes / total_itens) * 100) if arquivo_word else 0
 
 # Exibição dos Indicadores na Tela Principal
@@ -236,8 +238,3 @@ st.markdown("#### Ficha de Verificação Consolidada (Espelho Oficial)")
 df_visualizacao = pd.DataFrame(linhas_tabela_resumida)
 st.table(df_visualizacao)
 
-#--- 6. CONSTRUÇÃO DA STRING DO DOCUMENTO PARA DOWNLOAD ---
-texto_documento_word = (
-    "SÃO LUÍS | SEMUS\n"
-    "PREFEITURA DE SÃO LUÍS\n"
-    "SECRETARIA MUNICIPAL DE SAÚDE\n"
