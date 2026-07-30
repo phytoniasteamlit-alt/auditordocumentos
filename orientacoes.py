@@ -28,9 +28,9 @@ logo_hospital_manual = st.sidebar.checkbox("Autorizar Manualmente: Logomarca do 
 codigo_manual = st.sidebar.checkbox("Autorizar Manualmente: Código do Documento")
 impresso_manual_conforme = st.sidebar.checkbox("Autorizar Manualmente: Itens Impresso (Conforme)")
 
-# ESTRUTURA FIXA DE FALLBACK (Garante estabilidade visual constante em tela)
+# ESTRUTURA FIXA DE FALLBACK (Garante que os dados nunca fiquem vazios na tela)
 nome_arquivo_doc = "Documento Coletado"
-tipo_detectado = "NOR"
+tipo_detectado = "PROT"
 porcentagem_conforme = 95
 erros_formatacao = []
 status_impressos = "SIM"
@@ -84,7 +84,6 @@ if arquivo_word:
     doc = docx.Document(arquivo_word)
     conteudo_linhas = []
     
-    # Varredura do Corpo do Texto Geral
     for p in doc.paragraphs:
         if not p.text.strip():
             continue
@@ -100,7 +99,6 @@ if arquivo_word:
     if len(doc.tables) > 0:
         has_tables_or_images = True
         
-    # Varredura das Células das Tabelas e Histórico
     for tabela in doc.tables:
         texto_tabela_completo = "".join([celula.text.upper() for linha in tabela.rows for celula in linha.cells])
         is_registro_historico = any(termo in texto_tabela_completo for termo in ["HISTÓRICO", "REVISÃO", "VERSÃO", "PROCESSO", "APROVAÇÃO"])
@@ -159,7 +157,6 @@ if arquivo_word:
     stats_texto["MODELO DA FONTE E TAMANHO (CORPO DO TEXTO)"] = "SIM" if corpo_texto_ok else "NÃO"
     stats_texto["FONTE E TAMANHO (DENTRO DE TABELAS/HISTÓRICO)"] = "SIM" if tabelas_texto_ok else "NÃO"
 
-    # Lógica estruturada para avaliação de Impressos contemplando a liberação manual lateral
     if impresso_manual_conforme:
         status_impressos = "SIM"
         comentario_impressos = "Liberado manualmente pelo auditor via painel de contingência."
@@ -186,12 +183,12 @@ if arquivo_word:
     porcentagem_conforme = int((itens_conformes / total_itens) * 100)
     st.success("✔️ Varredura de integridade estrutural e de tipografia finalizada.")
 
-# Garante o estado manual mesmo em repouso do arquivo
+# Força o status correto mesmo em modo de espera
 if impresso_manual_conforme:
     status_impressos = "SIM"
     comentario_impressos = "Liberado manualmente pelo auditor via painel de contingência."
 
-#--- 4. INTERFACE GRÁFICA DO ESPELHO DA FICHA ---
+#--- 4. INTERFACE GRÁFICA DO ESPELHO DA FICHA (BLINDADA) ---
 st.markdown("---")
 st.info(f"📋 **Tipo de Documento Identificado pelo Sistema**: {NOMES_TIPOS.get(tipo_detectado, tipo_detectado.upper())}")
 st.subheader("📝 Ficha de Verificação Consolidada (Espelho Oficial)")
@@ -202,7 +199,7 @@ with col_p1:
 with col_p2:
     st.subheader(f"📊 {porcentagem_conforme}% Conformidade")
 
-# NOTIFICAÇÕES VISUAIS DE LIBERAÇÃO MANUAL (Avisos dinâmicos no topo da tela)
+# Exibição de Notificações de Liberação Manual
 itens_liberados = []
 if logo_hospital_manual: itens_liberados.append("Logomarca do Hospital")
 if codigo_manual: itens_liberados.append("Código do Documento")
@@ -219,3 +216,7 @@ def render_linha_ficha(nome_item, status_atual, obs=""):
     marcador = "🔷 **[X] OPCIONAL**"
     if status_atual == "SIM": marcador = "🟩 **[X] SIM** &nbsp;&nbsp;&nbsp;&nbsp; ⬜ [ ] NÃO"
     elif status_atual == "NÃO": marcador = "⬜ [ ] SIM &nbsp;&nbsp;&nbsp;&nbsp; 🟥 **[X] NÃO**"
+    elif status_atual == "NÃO SE APLICA": marcador = "⬜ [ ] SIM &nbsp;&nbsp;&nbsp;&nbsp; ⬜ [ ] NÃO &nbsp;&nbsp;&nbsp;&nbsp; 🟨 **[X] N/A**"
+    c2.markdown(marcador)
+    st.markdown("<hr style='margin:4px 0px; border-top: 1px dashed #444;' />", unsafe_allow_html=True)
+
