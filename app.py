@@ -45,7 +45,6 @@ arquivo_excel = st.sidebar.file_uploader("📁 Carregar Planilha Excel (.xlsx):"
 df_base = pd.DataFrame()
 media_v1, media_v2 = 0.0, 0.0
 
-# Função auxiliar para limpar acentos de forma segura
 def remover_acentos(texto):
     if pd.isna(texto): return ""
     return "".join(c for c in unicodedata.normalize('NFD', str(texto)) if unicodedata.category(c) != 'Mn').upper().strip()
@@ -63,13 +62,12 @@ if arquivo_excel:
                 break
         
         if not nome_aba_principal and lista_abas_reais:
-            nome_aba_principal = lista_abas_reais
+            nome_aba_principal = lista_abas_reais[0]
             
         if nome_aba_principal:
             df_raw = pd.read_excel(arquivo_excel, sheet_name=nome_aba_principal, header=1, engine="openpyxl")
             df_raw.columns = df_raw.columns.astype(str).str.strip().str.upper()
             
-            # 1. PROCESSAMENTO DAS MÉDIAS
             col_g, col_h = None, None
             for c in df_raw.columns:
                 if "1º" in c or "1O" in c or "V 1" in c or "V1" in c: col_g = c
@@ -90,7 +88,6 @@ if arquivo_excel:
             media_v1 = float(media_v1) if pd.notna(media_v1) else 0.0
             media_v2 = float(media_v2) if pd.notna(media_v2) else 0.0
 
-            # 2. CAPTURA DOS DADOS DOS GRÁFICOS
             df_base = pd.DataFrame()
             for col_real in df_raw.columns:
                 if "SIGLA" in col_real: df_base["SIGLA"] = df_raw[col_real]
@@ -197,3 +194,6 @@ if not df_base.empty:
         
         dados_prazo = pd.Series({
             "No Prazo": contagem_prazos.get("VALIDO", 0) + contagem_prazos.get("NO PRAZO", 0),
+            "Prestes a Vencer": contagem_prazos.get("PRESTES A VENCER", 0),
+            "Vencido": contagem_prazos.get("VENCIDO", 0)
+        })
