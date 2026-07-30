@@ -9,6 +9,17 @@ st.set_page_config(page_title="Validador NAQH", page_icon="🔍", layout="wide")
 st.title("Auditor Automatizado - Ficha Oficial NAQH")
 st.markdown("Sistema completo focado no apontamento detalhado de desvios tipográficos conforme a Norma Zero.")
 
+# Dicionário global de tipos de documentos normativos
+NOMES_TIPOS = {
+    "NOR": "NORMA (NOR)",
+    "POP": "PROCEDIMENTO OPERACIONAL PADRÃO (POP)",
+    "PROT": "PROTOCOLO (PROT)",
+    "MAN": "MANUAL (MAN)",
+    "REG": "REGIMENTO INTERNO (REG)",
+    "ROT": "ROTINA (ROT)",
+    "POL": "POLÍTICA INSTITUCIONAL (POL)"
+}
+
 #--- 2. BARRA LATERAL (CONTROLES E CHECKBOXES) ---
 st.sidebar.header("⚙️ Controles de Auditoria (NAQH)")
 
@@ -16,12 +27,15 @@ tem_impressos_inconformes = st.sidebar.checkbox("⚠️ Há imagens/fotos de imp
 logo_hospital_manual = st.sidebar.checkbox("Autorizar Manualmente: Logomarca do Hospital")
 codigo_manual = st.sidebar.checkbox("Autorizar Manualmente: Código do Documento")
 
-# Inicialização e persistência segura de dados (Garante estabilidade visual imediata)
+# FORÇAR INICIALIZAÇÃO DE ESTADOS GLOBAIS ESTÁVEIS (Evita tela em branco)
 if "nome_arquivo_doc" not in st.session_state:
     st.session_state.nome_arquivo_doc = "Documento Coletado"
 if "tipo_detectado" not in st.session_state:
-    st.session_state.tipo_detectado = "NORMA"
-
+    st.session_state.tipo_detectado = "NOR"
+if "porcentagem_conforme" not in st.session_state:
+    st.session_state.porcentagem_conforme = 90
+if "erros_formatacao" not in st.session_state:
+    st.session_state.erros_formatacao = []
 if "cabecalho_dados" not in st.session_state:
     st.session_state.cabecalho_dados = {
         "LOGOMARCA DO HOSPITAL": True, "TÍTULO DO DOCUMENTO": True, "TIPO DE DOCUMENTO": True,
@@ -44,27 +58,10 @@ if "status_impressos" not in st.session_state:
     st.session_state.status_impressos = "NÃO SE APLICA"
 if "comentario_impressos" not in st.session_state:
     st.session_state.comentario_impressos = ""
-if "porcentagem_conforme" not in st.session_state:
-    st.session_state.porcentagem_conforme = 90
-if "erros_formatacao" not in st.session_state:
-    st.session_state.erros_formatacao = []
 
-# Sincronização dos controles da barra lateral
-if logo_hospital_manual:
-    st.session_state.cabecalho_dados["LOGOMARCA DO HOSPITAL"] = True
-if codigo_manual:
-    st.session_state.cabecalho_dados["CÓDIGO DO DOCUMENTO"] = True
-
-# Dicionário de tradução dos tipos de documentos normativos
-NOMES_TIPOS = {
-    "NOR": "NORMA (NOR)",
-    "POP": "PROCEDIMENTO OPERACIONAL PADRÃO (POP)",
-    "PROT": "PROTOCOLO (PROT)",
-    "MAN": "MANUAL (MAN)",
-    "REG": "REGIMENTO INTERNO (REG)",
-    "ROT": "ROTINA (ROT)",
-    "POL": "POLÍTICA INSTITUCIONAL (POL)"
-}
+# Aplica as autorizações manuais imediatamente no estado global
+if logo_hospital_manual: st.session_state.cabecalho_dados["LOGOMARCA DO HOSPITAL"] = True
+if codigo_manual: st.session_state.cabecalho_dados["CÓDIGO DO DOCUMENTO"] = True
 
 #--- 3. FLUXO DE CARREGAMENTO E ANÁLISE RIGOROSA (WORD .DOCX) ---
 arquivo_word = st.file_uploader("Arraste o arquivo WORD (.docx) aqui para auditoria", type=["docx"])
@@ -76,14 +73,14 @@ if arquivo_word:
     corpo_texto_ok = True
     tabelas_texto_ok = True
     
-    # Reinicia marcações estruturais para nova varredura dinamicamente
+    # Reseta marcações estruturais para novos cálculos dinâmicos
     st.session_state.cabecalho_dados = {k: False for k in st.session_state.cabecalho_dados.keys()}
     st.session_state.historico_dados = {k: False for k in st.session_state.historico_dados.keys()}
     
     if logo_hospital_manual: st.session_state.cabecalho_dados["LOGOMARCA DO HOSPITAL"] = True
     if codigo_manual: st.session_state.cabecalho_dados["CÓDIGO DO DOCUMENTO"] = True
     
-    # Identificação do tipo de documento pelo nome do arquivo original
+    # Detecta a sigla correta pelo nome do arquivo
     st.session_state.tipo_detectado = "NOR"
     for sigla in NOMES_TIPOS.keys():
         if sigla in arquivo_word.name.upper():
@@ -93,7 +90,7 @@ if arquivo_word:
     doc = docx.Document(arquivo_word)
     conteudo_linhas = []
     
-    # 1. Varredura do Corpo do Texto
+    # 1. Pente fino no corpo do texto
     for p in doc.paragraphs:
         if not p.text.strip():
             continue
@@ -106,7 +103,7 @@ if arquivo_word:
             if tamanho_fonte and int(tamanho_fonte) != 11:
                 corpo_texto_ok = False
 
-    # 2. Varredura das Tabelas
+    # 2. Pente fino nas tabelas
     if len(doc.tables) > 0:
         has_tables_or_images = True
         
@@ -136,16 +133,14 @@ if arquivo_word:
                                     tabelas_texto_ok = False
                                     st.session_state.erros_formatacao.append(f"❌ **Dados Internos**: O texto '{text_clean[:15]}...' está com tamanho **{f_tam}pt**. O correto é **9pt (Justificado)**.")
 
-    # 3. Varredura de Cabeçalhos e Rodapés textuais das seções
+    # 3. Cabeçalhos e rodapés técnicos
     for secao in doc.sections:
         if secao.header:
             for p_head in secao.header.paragraphs:
-                if p_head.text.strip():
-                    conteudo_linhas.append(p_head.text)
+                if p_head.text.strip(): conteudo_linhas.append(p_head.text)
         if secao.footer:
             for p_foot in secao.footer.paragraphs:
-                if p_foot.text.strip():
-                    conteudo_linhas.append(p_foot.text)
+                if p_foot.text.strip(): conteudo_linhas.append(p_foot.text)
                 
     texto_completo = "\n".join(conteudo_linhas)
     if texto_completo:
@@ -195,6 +190,8 @@ if arquivo_word:
     st.session_state.porcentagem_conforme = int((itens_conformes / total_itens) * 100)
     st.success("✔️ Varredura de integridade estrutural e de tipografia finalizada.")
 
-#--- 4. INTERFACE GRÁFICA DO ESPELHO DA FICHA (RENDERIZAÇÃO DE SEÇÕES E TIPO DETECTADO) ---
+#--- 4. INTERFACE GRÁFICA DO ESPELHO DA FICHA (IMUNE A CACHE E SEMPRE VISÍVEL) ---
 st.markdown("---")
-# EXIBIÇÃO DO TIPO: Mostra de forma destacada o tipo do documento normativo
+# EXIBIÇÃO FIXA E GARANTIDA DO TIPO DE DOCUMENTO
+st.info(f"📋 **Tipo de Documento Identificado pelo Sistema**: {NOMES_TIPOS.get(st.session_state.tipo_detectado, st.session_state.tipo_detectado.upper())}")
+
