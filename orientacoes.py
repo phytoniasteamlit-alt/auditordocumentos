@@ -147,7 +147,7 @@ if arquivo_word:
     # Atualiza as variáveis de texto para exibição estável
     st.session_state.stats_texto["PAPEL"] = "SIM"
     st.session_state.stats_texto["MARGENS"] = "SIM"
-    st.session_state.stats_texto["MODELO DA FONTE E TAMANHO"] = "SIM" if st.session_state.fonte_e_tamanho_ok else "NÃO"
+    st.session_state.stats_texto["MODELO DA FONTE E TAMANHO"] = "SIM" if fonte_e_tamanho_ok else "NÃO"
     st.session_state.stats_texto["ESPAÇAMENTO ENTRE LINHAS"] = "SIM"
     st.session_state.stats_texto["ALINHAMENTO"] = "SIM"
     st.session_state.stats_texto["PARÁGRAFO"] = "SIM"
@@ -181,6 +181,7 @@ if arquivo_word:
     st.session_state.porcentagem_conforme = int((itens_conformes / total_itens) * 100)
     st.success("✔️ Varredura de integridade estrutural e de tipografia finalizada.")
 
-#--- 4. EXIBIÇÃO DO GUIA DE ERROS COMPACTO E COMPATÍVEL ---
-lista_erros_painel = list(set(st.session_state.erros_formatacao))
-with st.expander("⚠️ Guia de Correção Manual (Fontes e Tamanhos Inconformes)", expanded=True):
+#--- 4. EXIBIÇÃO DO GUIA DE ERROS DIRETOS (SEM BLOCOS COM RECUOS OU TRAVAS LÓGICAS) ---
+st.markdown("### ⚠️ Guia de Correção Manual (Fontes e Tamanhos Inconformes)")
+st.markdown("Abra o seu documento original no Word e ajuste os trechos apontados abaixo:")
+
