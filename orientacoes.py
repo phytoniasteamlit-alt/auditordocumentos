@@ -30,12 +30,12 @@ nome_arquivo_doc = st.session_state.cached_nome_arquivo
 
 # Estrutura base de dados para auditoria do NAQH
 cabecalho_dados = {
-    "Logomarca do Hospital": logo_hospital_manual,
-    "Título do Documento": False,
-    "Tipo de Documento": False,
-    "Código do Documento": codigo_manual,
-    "Versão": False,
-    "Páginas": False
+    "LOGOMARCA DO HOSPITAL": logo_hospital_manual,
+    "TÍTULO DO DOCUMENTO": False,
+    "TIPO DE DOCUMENTO": False,
+    "CÓDIGO DO DOCUMENTO": codigo_manual,
+    "VERSÃO": False,
+    "PÁGINAS": False
 }
 
 historico_dados = {
@@ -129,17 +129,17 @@ if arquivo_word:
         
         # Auditoria do Cabeçalho
         if "HOSPITAL" in p_upper or "SEMUS" in p_upper or logo_hospital_manual:
-            cabecalho_dados["Logomarca do Hospital"] = True
+            cabecalho_dados["LOGOMARCA DO HOSPITAL"] = True
         if "NORMA" in p_upper or "PROCEDIMENTO" in p_upper or "PROTOCOLO" in p_upper:
-            cabecalho_dados["Tipo de Documento"] = True
+            cabecalho_dados["TIPO DE DOCUMENTO"] = True
         if "CÓDIGO" in p_upper or re.search(r"[A-Z]{2,4}_[A-Z0-9]+", p_upper) or codigo_manual:
-            cabecalho_dados["Código do Documento"] = True
+            cabecalho_dados["CÓDIGO DO DOCUMENTO"] = True
         if "VERSÃO:" in p_upper or "1ª" in p_upper or "2ª" in p_upper or "3ª" in p_upper:
-            cabecalho_dados["Versão"] = True
+            cabecalho_dados["VERSÃO"] = True
         if "PÁGINAS" in p_upper or "PÁG." in p_upper:
-            cabecalho_dados["Páginas"] = True
+            cabecalho_dados["PÁGINAS"] = True
         if len(nome_arquivo_doc) > 5:
-            cabecalho_dados["Título do Documento"] = True
+            cabecalho_dados["TÍTULO DO DOCUMENTO"] = True
             
         # Auditoria do Fim do Documento
         if "VALIDADE" in p_upper or "DATA APROVAÇÃO" in p_upper or "DATA DE APROVAÇÃO:" in p_upper:
@@ -170,37 +170,36 @@ if arquivo_word:
         status_impressos = "NÃO SE APLICA"
         comentario_impressos = ""
 
-#--- 4. MONTAGEM DA Tabela DE STATUS (CONFORME COLUNAS DO SEU APP) ---
+#--- 4. MONTAGEM DA TABELA DE STATUS (VISUAL LIMPO E OFICIAL) ---
 linhas_tabela_resumida = []
 
-# Itens do Cabeçalho
+# Itens do Cabeçalho (Nomes em caixa alta correspondendo exatamente aos campos do print)
 for k, v in cabecalho_dados.items():
     linhas_tabela_resumida.append({
-        "Categoria": "1. Cabeçalho (Print 3)",
+        "Categoria": "CABEÇALHO",
         "Item Técnico Regulamentado": k,
         "Status de Conformidade": "SIM" if v else "NÃO",
         "Observação Interna": ""
     })
 
-# Itens de Texto Fixo
+# Itens de Texto (Nomes idênticos aos campos da ficha técnica de vocês)
 itens_texto_fixos = [
-    ("Papel", "SIM" if arquivo_word else "NÃO"),
-    ("Margens", "SIM" if arquivo_word else "NÃO"),
-    ("Modelo da Fonte e Tamanho", "SIM" if fonte_e_tamanho_ok and arquivo_word else "NÃO"),
-    ("Espaçamento Entre Linhas", "SIM" if arquivo_word else "NÃO"),
-    ("Alinhamento", "SIM" if arquivo_word else "NÃO"),
-    ("Parágrafo", "SIM" if arquivo_word else "NÃO"),
-    ("Figuras, Tabelas e Gráficos", "SIM" if has_tables_or_images else "NÃO"),
-    ("Paginação", "SIM" if arquivo_word else "NÃO"),
-    ("Marca d'Dágua", "SIM" if arquivo_word else "NÃO"),
-    ("Cabeçalho", "SIM" if cabecalho_dados["Tipo de Documento"] else "NÃO"),
-    ("Referências", "SIM" if arquivo_word else "NÃO"),
-    ("Apêndices/ Anexos", "OPCIONAL")
+    ("PAPEL", "SIM" if arquivo_word else "NÃO"),
+    ("MARGENS", "SIM" if arquivo_word else "NÃO"),
+    ("MODELO DA FONTE E TAMANHO", "SIM" if fonte_e_tamanho_ok and arquivo_word else "NÃO"),
+    ("ESPAÇAMENTO ENTRE LINHAS", "SIM" if arquivo_word else "NÃO"),
+    ("ALINHAMENTO", "SIM" if arquivo_word else "NÃO"),
+    ("PARÁGRAFO", "SIM" if arquivo_word else "NÃO"),
+    ("FIGURAS, TABELAS E GRÁFICOS", "SIM" if has_tables_or_images else "NÃO"),
+    ("PAGINAÇÃO", "SIM" if arquivo_word else "NÃO"),
+    ("MARCA D'AGUA", "SIM" if arquivo_word else "NÃO"),
+    ("REFERÊNCIAS", "SIM" if arquivo_word else "NÃO"),
+    ("APÊNDICES/ ANEXOS", "OPCIONAL")
 ]
 
 for item, stat in itens_texto_fixos:
     linhas_tabela_resumida.append({
-        "Categoria": "2. Itens Texto (Print 4)",
+        "Categoria": "ITENS TEXTO",
         "Item Técnico Regulamentado": item,
         "Status de Conformidade": stat,
         "Observação Interna": ""
@@ -209,16 +208,16 @@ for item, stat in itens_texto_fixos:
 # Itens do Histórico Fundo
 for k, v in historico_dados.items():
     linhas_tabela_resumida.append({
-        "Categoria": "3. Fim do Documento (Print 1)",
-        "Item Técnico Regulamentado": k,
+        "Categoria": "FIM DO DOCUMENTO",
+        "Item Técnico Regulamentado": k.upper(),
         "Status de Conformidade": "SIM" if v else "NÃO",
         "Observação Interna": ""
     })
 
 # Item de Impresso Condicional
 linhas_tabela_resumida.append({
-    "Categoria": "4. Impressos (Print 4)",
-    "Item Técnico Regulamentado": "Itens Impresso (Estruturas Gráficas/Tabelas)",
+    "Categoria": "IMPRESSOS",
+    "Item Técnico Regulamentado": "ITENS IMPRESSO (ESTRUTURAS GRÁFICAS/TABELAS)",
     "Status de Conformidade": status_impressos,
     "Observação Interna": comentario_impressos
 })
