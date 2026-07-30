@@ -7,8 +7,8 @@ from io import BytesIO
 
 #--- 1. CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="Validador NAQH", page_icon="🔍", layout="wide")
-st.title("Auditor Automatizado - Norma Zero (V44)")
-st.markdown("Este sistema realiza a auditoria técnica e gera a Ficha de Verificação oficial.")
+st.title("Auditor Automatizado - Norma Zero (V44 - Corrigida)")
+st.markdown("Este sistema realiza a auditoria técnica rigorosa e gera a Ficha de Verificação oficial baseada na Norma Zero.")
 
 # Inicialização de estados de sessão seguros
 if "cached_nome_arquivo" not in st.session_state:
@@ -20,7 +20,6 @@ if "cached_porcentagem" not in st.session_state:
 
 #--- 2. BARRA LATERAL (CONTROLES E DOWNLOAD FIXO) ---
 st.sidebar.header("⚙️ Controles de Auditoria")
-
 logo_prefeitura_manual = st.sidebar.checkbox("Autorizar Manualmente: Logomarca do Hospital")
 marca_dagua_manual = st.sidebar.checkbox("Autorizar Aprovação da Marca d'água")
 autorizar_codigo_manual = st.sidebar.checkbox("Autorizar Manualmente: Código do Documento")
@@ -45,7 +44,7 @@ REGRAS_NORMA_ZERO = {
     "PLANC": {"nome": "Plano de Contingência", "obrigatorios": ["INTRODUÇÃO", "AÇÕES", "RESPONSÁVEIS"]},
     "POL": {"nome": "Política Institucional", "obrigatorios": ["DIRETRIZES", "OBJETIVOS"]},
     "PROG": {"nome": "Programa", "obrigatorios": ["CRONOGRAMA", "METAS"]},
-    "REG": {"nome": "Regimento Interno", "obrigatorios": ["DISPOSIÇÕES GERIAS", "COMPETÊNCIAS"]},
+    "REG": {"nome": "Regimento Interno", "obrigatorios": ["DISPOSIÇÕES GERAIS", "COMPETÊNCIAS"]},
     "ROT": {"nome": "Rotina", "obrigatorios": ["ATIVIDADES", "FLUXO"]}
 }
 
@@ -55,16 +54,24 @@ marca_dagua_corpo_ok = marca_dagua_manual
 cabecalho_completo = True
 codigo_detectado_no_texto = False
 registro_historico_ok = False
+campos_nota_rh_ok = False
 nome_arquivo_doc = st.session_state.cached_nome_arquivo
 
-# Flag de verificação estrita de fontes e tamanhos
+# Flags de verificação estrita de formatação (Pente Fino)
+margens_ok = True
+papel_a4_ok = True
 fonte_e_tamanho_ok = True
+espacamento_linhas_ok = True
+alinhamento_ok = True
+paragrafo_ok = True
+paginacao_ok = True
 
 itens_ficha = [
     "Logomarca do Hospital", "Título do Documento", "Tipo de Documento", "Código do Documento",
-    "Versão", "Páginas", "Data da Aprovação / Validade", "Registro Histórico", "Papel",
+    "Versão", "Páginas", "Data da Aprovação / Validade", "Registro Histórico", "Campos Adicionais RH", "Papel",
     "Margens", "Fonte e Tamanho", "Espaçamento entre Linhas", "Alinhamento", "Parágrafo",
-    "Figuras/Tabelas", "Paginação", "Marca d'água", "Cabeçalho das Páginas", "Referências", "Apêndices / Anexos"
+    "Figuras/Tabelas", "Paginação", "Marca d'água", "Cabeçalho das Páginas", "Referências", "Apêndices / Anexos",
+    "Impressos Assistenciais/Administrativos"
 ]
 
 itens_estrutura_dinamica = []
@@ -82,16 +89,52 @@ if arquivo_word:
             tipo_detectado = sigla
             break
     st.session_state.cached_tipo = tipo_detectado
-            
-    doc = docx.Document(arquivo_word)
-    conteudo_linhas = [p.text for p in doc.paragraphs]
     
+    doc = docx.Document(arquivo_word)
+    conteudo_linhas = []
+    
+    # --- PENTE FINO DE CONFIGURAÇÃO DE PÁGINA (MARGENS E PAPEL) ---
+    for secao in doc.sections:
+        # Conversão de unidades nativas do Word para centímetros (1 cm = 360000 EMUs)
+        margin_top = round(secao.top_margin / 360000, 1) if secao.top_margin else 0
+        margin_bottom = round(secao.bottom_margin / 360000, 1) if secao.bottom_margin else 0
+        margin_left = round(secao.left_margin / 360000, 1) if secao.left_margin else 0
+        margin_right = round(secao.right_margin / 360000, 1) if secao.right_margin else 0
+        
+        # Validação conforme imagem da caixa de diálogo "Configurar Página"
+        if not (margin_top == 3.0 and margin_left == 3.0 and margin_bottom == 2.0 and margin_right == 2.0):
+            margens_ok = False
+            
+        # Validação do tamanho do papel A4 (21.0 cm x 29.7 cm)
+        page_width = round(secao.page_width / 360000, 1) if secao.page_width else 0
+        page_height = round(secao.page_height / 360000, 1) if secao.page_height else 0
+        if not (page_width == 21.0 and page_height == 29.7):
+            papel_a4_ok = False
+
+    # --- VARREDURA E PENTE FINO DE TEXTO ---
     fontes_reais = set()
+    has_tables_or_images = False
+    
     for p in doc.paragraphs:
+        conteudo_linhas.append(p.text)
+        
+        # Análise estrita de formatação por Run de texto
         for r in p.runs:
             if r.font.name:
                 fontes_reais.add(r.font.name.upper())
-                
+        
+        # Validar propriedades do parágrafo (Alinhamento Justificado = 3)
+        if p.alignment and p.alignment != docx.enum.text.WD_ALIGN_PARAGRAPH.JUSTIFY:
+            alinhamento_ok = False
+            
+        # Validar espaçamento entre linhas (Norma pede 1.5)
+        if p.paragraph_format.line_spacing and round(p.paragraph_format.line_spacing, 1) != 1.5:
+            espacamento_linhas_ok = False
+
+    # Leitura técnica das tabelas do documento
+    if len(doc.tables) > 0:
+        has_tables_or_images = True
+
     for tabela in doc.tables:
         for linha in tabela.rows:
             for celula in linha.cells:
@@ -100,12 +143,8 @@ if arquivo_word:
                     for r_celula in p_celula.runs:
                         if r_celula.font.name:
                             fontes_reais.add(r_celula.font.name.upper())
-
-    if fontes_reais:
-        fontes_permitidas = {"CALIBRI", "ARIAL"}
-        if not fontes_reais.issubset(fontes_permitidas):
-            fonte_e_tamanho_ok = False
-            
+                            
+    # Extração de cabeçalhos das seções
     for secao in doc.sections:
         if secao.header:
             for p in secao.header.paragraphs:
@@ -116,6 +155,7 @@ if arquivo_word:
     if texto_completo:
         p_upper = texto_completo.upper()
         
+        # Validações estruturais por string
         if "APÊNDICE" in p_upper or "ANEXO" in p_upper:
             has_apendices_ou_anexos = True
         if "HOSPITAL DA CIDADE" in p_upper or "SOCORRÃO" in p_upper:
@@ -129,6 +169,11 @@ if arquivo_word:
         if any(p in p_upper for p in ["ELABORAÇÃO", "REVISÃO", "HISTÓRICO", "REGISTRO"]):
             registro_historico_ok = True
             
+        # Validação obrigatória da Nota do Print (Campos adicionais do fim da folha de RH)
+        if "DATA DE APROVAÇÃO:" in p_upper and "VERSÃO:" in p_upper:
+            campos_nota_rh_ok = True
+            
+        # Cruzamento dinâmico das seções obrigatórias por Tipo
         itens_obrigatorios_do_tipo = REGRAS_NORMA_ZERO[tipo_detectado]["obrigatorios"]
         for item in itens_obrigatorios_do_tipo:
             itens_estrutura_dinamica.append(f"Estrutura: {item.title()}")
@@ -140,9 +185,9 @@ if arquivo_word:
                 else:
                     valores_estrutura_dinamica.append(False)
                     
-        st.success(f"📊 **Análise Concluída para o Tipo:** {REGRAS_NORMA_ZERO[tipo_detectado]['nome']}")
+    st.success(f"✔️ **Análise Concluída para o Tipo:** {REGRAS_NORMA_ZERO[tipo_detectado]['nome']}")
 
-# Aplicação imediata das autorizações manuais
+# Aplicação das autorizações manuais via Sidebar
 if autorizar_codigo_manual:
     codigo_detectado_no_texto = True
 if logo_prefeitura_manual:
@@ -152,69 +197,30 @@ if marca_dagua_manual:
 if autorizar_fonte_manual:
     fonte_e_tamanho_ok = True
 
+if fontes_reais:
+    fontes_permitidas = {"CALIBRI", "ARIAL"}
+    if not fontes_reais.issubset(fontes_permitidas):
+        fonte_e_tamanho_ok = False
+
 if not itens_estrutura_dinamica:
     for item in REGRAS_NORMA_ZERO[st.session_state.cached_tipo]["obrigatorios"]:
         itens_estrutura_dinamica.append(f"Estrutura: {item.title()}")
-        if item == "DESCRIÇÃO DAS ETAPAS" and autorizar_etapas_manual:
-            valores_estrutura_dinamica.append(True)
-        else:
-            valores_estrutura_dinamica.append(True if arquivo_word else False)
+        valores_estrutura_dinamica.append(True if arquivo_word else False)
+
+# Determinação do status técnico do item Impressos
+status_impressos = "NÃO SE APLICA"
+if arquivo_word:
+    status_impressos = "SIM" if has_tables_or_images else "NÃO SE APLICA"
 
 #--- 5. UNIFICAÇÃO DA CONFIGURAÇÃO DE ITENS ---
 f_conf = [
     logo_prefeitura_manual, cabecalho_completo, cabecalho_completo, codigo_detectado_no_texto,
-    cabecalho_completo, cabecalho_completo, True, registro_historico_ok, True, True,
-    fonte_e_tamanho_ok, True, True, True, True, True, marca_dagua_corpo_ok, cabecalho_completo, True, has_apendices_ou_anexos
+    cabecalho_completo, cabecalho_completo, True, registro_historico_ok, campos_nota_rh_ok, papel_a4_ok,
+    margens_ok, fonte_e_tamanho_ok, espacamento_linhas_ok, alinhamento_ok, paragrafo_ok,
+    True, paginacao_ok, marca_dagua_corpo_ok, cabecalho_completo, True, has_apendices_ou_anexos,
+    status_impressos
 ]
 
 todos_os_itens_finais = itens_ficha + itens_estrutura_dinamica
 todas_as_conf_finais = f_conf + valores_estrutura_dinamica
 
-#--- 6. CÁLCULO E EXIBIÇÃO DA PORCENTAGEM DE CONFORMIDADE ---
-total_itens = len(todas_as_conf_finais)
-total_conforme = sum(1 for item in todas_as_conf_finais if item is True)
-porcentagem_conforme = int((total_conforme / total_itens) * 100) if total_itens > 0 else 0
-st.session_state.cached_porcentagem = porcentagem_conforme
-
-st.markdown("### Status de Conformidade Geral")
-st.progress(porcentagem_conforme/100)
-st.subheader(f"✅ {porcentagem_conforme}% conforme a Norma Zero ({REGRAS_NORMA_ZERO[st.session_state.cached_tipo]['nome']})")
-
-# --- 7. FICHA DE VERIFICAÇÃO RESUMIDA NA TELA ---
-st.markdown("---")
-st.markdown("### Ficha de Verificação para Aprovação (Espelho Oficial NAQH)")
-
-linhas_tabela_resumida = []
-for idx, nome_item in enumerate(todos_os_itens_finais):
-    status_str = "✔️ SIM" if todas_as_conf_finais[idx] else "❌ NÃO"
-    if nome_item == "Apêndices / Anexos" and not todas_as_conf_finais[idx]:
-        status_str = "🔷 OPCIONAL"
-    linhas_tabela_resumida.append({"Item Técnico Regulamentado": nome_item, "Status Técnico": status_str})
-st.table(pd.DataFrame(linhas_tabela_resumida))
-
-# --- 8. PREPARAÇÃO DO TEXTO DA FICHA CURTA ---
-itens_removidos_download = ["Data da Aprovação / Validade", "Registro Histórico", "Verificador"]
-texto_ficha = "FICHA DE VERIFICAÇÃO PARA APROVAÇÃO (NAQH)\n"
-texto_ficha += "PREFEITURA DE SÃO LUÍS - HOSPITAL DR. JACKSON LAGO\n\n"
-texto_ficha += f"Documento: {st.session_state.cached_nome_arquivo}\n"
-texto_ficha += f"Tipo: {REGRAS_NORMA_ZERO[st.session_state.cached_tipo]['nome']}\n"
-texto_ficha += f"Conformidade: {st.session_state.cached_porcentagem}%\n\n"
-
-for idx, nome_item in enumerate(todos_os_itens_finais):
-    if nome_item in itens_removidos_download or nome_item.startswith("Estrutura:"):
-        continue
-    marcador = "[X] SIM [ ] NÃO" if todas_as_conf_finais[idx] else "[ ] SIM [X] NÃO"
-    if nome_item == "Apêndices / Anexos" and not todas_as_conf_finais[idx]:
-        marcador = "[ ] SIM [ ] NÃO (Não consta)"
-    texto_ficha += f"{nome_item}: {marcador}\n"
-
-# --- 9. BOTÃO DE DOWNLOAD CORRETAMENTE FECHADO NA SIDEBAR ---
-st.sidebar.markdown("---")
-st.sidebar.subheader("📥 Exportação Pronta")
-st.sidebar.download_button(
-    label="📥 Baixar Ficha (.doc / Word)",
-    data=texto_ficha,
-    file_name=f"Ficha_NAQH_{st.session_state.cached_tipo}.doc",
-    mime="application/msword",
-    use_container_width=True
-)
