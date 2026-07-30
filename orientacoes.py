@@ -23,25 +23,25 @@ if "tipo_detectado" not in st.session_state:
     st.session_state.tipo_detectado = "NORMA"
 if "cabecalho_dados" not in st.session_state:
     st.session_state.cabecalho_dados = {
-        "LOGOMARCA DO HOSPITAL": True, "TÍTULO DO DOCUMENTO": True, "TIPO DE DOCUMENTO": True,
-        "CÓDIGO DO DOCUMENTO": True, "VERSÃO": True, "PÁGINAS": True
+        "LOGOMARCA DO HOSPITAL": False, "TÍTULO DO DOCUMENTO": False, "TIPO DE DOCUMENTO": False,
+        "CÓDIGO DO DOCUMENTO": False, "VERSÃO": False, "PÁGINAS": False
     }
 if "historico_dados" not in st.session_state:
     st.session_state.historico_dados = {
-        "DATA DA APROVAÇÃO / VALIDADE": True, "REGISTRO HISTÓRICO DO DOCUMENTO": True
+        "DATA DA APROVAÇÃO / VALIDADE": False, "REGISTRO HISTÓRICO DO DOCUMENTO": False
     }
 if "stats_texto" not in st.session_state:
     st.session_state.stats_texto = {
-        "PAPEL": "SIM", "MARGENS": "SIM", "MODELO DA FONTE E TAMANHO": "NÃO", "ESPAÇAMENTO ENTRE LINHAS": "SIM",
-        "ALINHAMENTO": "SIM", "PARÁGRAFO": "SIM", "FIGURAS, TABELAS E GRÁFICOS": "SIM", "PAGINAÇÃO": "SIM",
-        "MARCA D'AGUA": "SIM", "REFERÊNCIAS": "SIM", "APÊNDICES/ ANEXOS": "OPCIONAL"
+        "PAPEL": "NÃO", "MARGENS": "NÃO", "MODELO DA FONTE E TAMANHO": "NÃO", "ESPAÇAMENTO ENTRE LINHAS": "NÃO",
+        "ALINHAMENTO": "NÃO", "PARÁGRAFO": "NÃO", "FIGURAS, TABELAS E GRÁFICOS": "NÃO", "PAGINAÇÃO": "NÃO",
+        "MARCA D'AGUA": "NÃO", "REFERÊNCIAS": "NÃO", "APÊNDICES/ ANEXOS": "OPCIONAL"
     }
 if "status_impressos" not in st.session_state:
     st.session_state.status_impressos = "NÃO SE APLICA"
 if "comentario_impressos" not in st.session_state:
     st.session_state.comentario_impressos = ""
 if "porcentagem_conforme" not in st.session_state:
-    st.session_state.porcentagem_conforme = 85
+    st.session_state.porcentagem_conforme = 0
 if "erros_formatacao" not in st.session_state:
     st.session_state.erros_formatacao = []
 if "fonte_e_tamanho_ok" not in st.session_state:
@@ -144,10 +144,10 @@ if arquivo_word:
         if any(term in p_upper for term in ["REGISTRO HISTÓRICO", "DESCRIÇÃO DA ATUALIZAÇÃO", "VERSÃO INICIAL"]):
             st.session_state.historico_dados["REGISTRO HISTÓRICO DO DOCUMENTO"] = True
 
-    # Atualiza as variáveis de texto para exibição estável
+    # CORREÇÃO DA VARIÁVEL GLOBAL AQUI:
     st.session_state.stats_texto["PAPEL"] = "SIM"
     st.session_state.stats_texto["MARGENS"] = "SIM"
-    st.session_state.stats_texto["MODELO DA FONTE E TAMANHO"] = "SIM" if fonte_e_tamanho_ok else "NÃO"
+    st.session_state.stats_texto["MODELO DA FONTE E TAMANHO"] = "SIM" if st.session_state.fonte_e_tamanho_ok else "NÃO"
     st.session_state.stats_texto["ESPAÇAMENTO ENTRE LINHAS"] = "SIM"
     st.session_state.stats_texto["ALINHAMENTO"] = "SIM"
     st.session_state.stats_texto["PARÁGRAFO"] = "SIM"
@@ -181,7 +181,7 @@ if arquivo_word:
     st.session_state.porcentagem_conforme = int((itens_conformes / total_itens) * 100)
     st.success("✔️ Varredura de integridade estrutural e de tipografia finalizada.")
 
-#--- 4. EXIBIÇÃO DO GUIA DE ERROS DIRETOS (SEM BLOCOS COM RECUOS OU TRAVAS LÓGICAS) ---
+#--- 4. EXIBIÇÃO DO GUIA DE ERROS DIRETOS ---
 st.markdown("### ⚠️ Guia de Correção Manual (Fontes e Tamanhos Inconformes)")
 st.markdown("Abra o seu documento original no Word e ajuste os trechos apontados abaixo:")
 
