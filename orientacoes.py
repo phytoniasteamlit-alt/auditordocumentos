@@ -26,6 +26,8 @@ st.sidebar.header("⚙️ Controles de Auditoria (NAQH)")
 tem_impressos_inconformes = st.sidebar.checkbox("⚠️ Há imagens/fotos de impressos ilegíveis ou inconformes?")
 logo_hospital_manual = st.sidebar.checkbox("Autorizar Manualmente: Logomarca do Hospital")
 codigo_manual = st.sidebar.checkbox("Autorizar Manualmente: Código do Documento")
+# NOVO CONTROLE MANUAL EXCLUSIVO PARA IMPRESSOS
+impresso_manual_conforme = st.sidebar.checkbox("Autorizar Manualmente: Itens Impresso (Conforme)")
 
 # ESTRUTURA FIXA DE FALLBACK (Garante estabilidade visual constante em tela)
 nome_arquivo_doc = "Documento Coletado"
@@ -158,7 +160,11 @@ if arquivo_word:
     stats_texto["MODELO DA FONTE E TAMANHO (CORPO DO TEXTO)"] = "SIM" if corpo_texto_ok else "NÃO"
     stats_texto["FONTE E TAMANHO (DENTRO DE TABELAS/HISTÓRICO)"] = "SIM" if tabelas_texto_ok else "NÃO"
 
-    if has_tables_or_images:
+    # Lógica estruturada para avaliação de Impressos contemplando a liberação manual lateral
+    if impresso_manual_conforme:
+        status_impressos = "SIM"
+        comentario_impressos = "Liberado manualmente pelo auditor via painel de contingência."
+    elif has_tables_or_images:
         if tem_impressos_inconformes:
             status_impressos = "NÃO"
             comentario_impressos = "Solicito os anexos p/ analise..."
@@ -167,6 +173,7 @@ if arquivo_word:
             comentario_impressos = "Conforme apresentado."
     else:
         status_impressos = "NÃO SE APLICA"
+        comentario_impressos = ""
 
     lista_calculo = []
     for v in cabecalho_dados.values():
@@ -180,6 +187,11 @@ if arquivo_word:
     itens_conformes = sum(1 for x in lista_calculo if x in ["SIM", "OPCIONAL", "NÃO SE APLICA"])
     porcentagem_conforme = int((itens_conformes / total_itens) * 100)
     st.success("✔️ Varredura de integridade estrutural e de tipografia finalizada.")
+
+# Garante o estado manual mesmo em repouso do arquivo
+if impresso_manual_conforme:
+    status_impressos = "SIM"
+    comentario_impressos = "Liberado manualmente pelo auditor via painel de contingência."
 
 #--- 4. INTERFACE GRÁFICA DO ESPELHO DA FICHA ---
 st.markdown("---")
@@ -208,22 +220,3 @@ st.markdown("### 🔹 CABEÇALHO")
 for k, v in cabecalho_dados.items():
     render_linha_ficha(k, "SIM" if v else "NÃO")
 
-st.markdown("<br>", unsafe_allow_html=True)
-
-st.markdown("### 🔹 ITENS TEXTO")
-for item, stat in stats_texto.items():
-    render_linha_ficha(item, stat)
-
-st.markdown("<br>", unsafe_allow_html=True)
-
-st.markdown("### 🔹 FIM DO DOCUMENTO")
-for k, v in historico_dados.items():
-    render_linha_ficha(k, "SIM" if v else "NÃO")
-
-st.markdown("<br>", unsafe_allow_html=True)
-
-st.markdown("### 🔹 IMPRESSOS")
-render_linha_ficha("ITENS IMPRESSO (ESTRUTURAS GRÁFICAS/TABELAS)", status_impressos, obs=comentario_impressos)
-
-#--- 5. EXIBIÇÃO DO GUIA DE ERROS COMPACTO E 100% DINÂMICO ---
-st.markdown("<br><br>", unsafe_allow_html=True)
