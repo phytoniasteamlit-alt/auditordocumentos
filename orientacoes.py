@@ -204,7 +204,7 @@ st.markdown("<br>", unsafe_allow_html=True)
 st.markdown("### 🔹 IMPRESSOS")
 render_linha_ficha("ITENS IMPRESSO (ESTRUTURAS GRÁFICAS/TABELAS)", st.session_state.status_impressos, obs=st.session_state.comentario_impressos)
 
-#--- 6. CONSTRUÇÃO DA STRING DA FICHA PARA EXPORTAÇÃO (CORRIGIDA SEM LAÇOS FOR) ---
+#--- 6. CONSTRUÇÃO DA STRING DA FICHA PARA EXPORTAÇÃO (CORRIGIDA) ---
 texto_documento_word = f"""SÃO LUÍS | SEMUS
 PREFEITURA DE SÃO LUÍS
 SECRETARIA MUNICIPAL DE SAÚDE
