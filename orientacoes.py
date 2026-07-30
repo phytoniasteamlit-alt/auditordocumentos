@@ -16,7 +16,7 @@ tem_impressos_inconformes = st.sidebar.checkbox("⚠️ Há imagens/fotos de imp
 logo_hospital_manual = st.sidebar.checkbox("Autorizar Manualmente: Logomarca do Hospital")
 codigo_manual = st.sidebar.checkbox("Autorizar Manualmente: Código do Documento")
 
-# Inicialização e persistência de dados fora do fluxo condicional (Garante estabilidade visual)
+# Inicialização e persistência segura de dados (Garante estabilidade visual imediata)
 if "nome_arquivo_doc" not in st.session_state:
     st.session_state.nome_arquivo_doc = "Documento Coletado"
 if "tipo_detectado" not in st.session_state:
@@ -80,7 +80,7 @@ if arquivo_word:
     doc = docx.Document(arquivo_word)
     conteudo_linhas = []
     
-    # 1. Varredura do Corpo do Texto
+    # Varredura do Corpo do Texto
     for p in doc.paragraphs:
         if not p.text.strip():
             continue
@@ -93,7 +93,7 @@ if arquivo_word:
             if tamanho_fonte and int(tamanho_fonte) != 11:
                 corpo_texto_ok = False
 
-    # 2. Varredura das Tabelas
+    # Varredura das Tabelas
     if len(doc.tables) > 0:
         has_tables_or_images = True
         
@@ -123,7 +123,7 @@ if arquivo_word:
                                     tabelas_texto_ok = False
                                     st.session_state.erros_formatacao.append(f"❌ **Dados Internos**: O texto '{text_clean[:15]}...' está com tamanho **{f_tam}pt**. O correto é **9pt (Justificado)**.")
 
-    # 3. Varredura de Cabeçalhos e Rodapés textuais das seções
+    # Varredura de Cabeçalhos e Rodapés textuais das seções
     for secao in doc.sections:
         if secao.header:
             for p_head in secao.header.paragraphs:
@@ -182,16 +182,23 @@ if arquivo_word:
     st.session_state.porcentagem_conforme = int((itens_conformes / total_itens) * 100)
     st.success("✔️ Varredura de integridade estrutural e de tipografia finalizada.")
 
-#--- 4. EXIBIÇÃO DO GUIA DE ERROS DIRETOS E DINÂMICOS (CORRIGIDO SEM ELSE EM BRANCO) ---
-st.markdown("### ⚠️ Guia de Correção Manual (Fontes e Tamanhos Inconformes)")
-st.markdown("Abra o seu documento original no Word e ajuste os trechos apontados abaixo:")
-
-lista_erros_painel = list(set(st.session_state.erros_formatacao))
-if lista_erros_painel:
-    for erro in lista_erros_painel[:12]:
-        st.info(erro)
-else:
-    st.success("✔️ Nenhuma inconformidade de tamanho ou fonte foi detectada em tabelas ou no corpo do texto do arquivo atual.")
-
-#--- 5. INTERFACE GRÁFICA DO ESPELHO DA FICHA (RENDERIZAÇÃO GLOBAL) ---
+#--- 4. INTERFACE GRÁFICA DO ESPELHO DA FICHA (POSICIONADA NO TOPO - CORRIGIDA) ---
 st.markdown("---")
+st.subheader("📝 Ficha de Verificação Consolidada (Espelho Oficial)")
+
+col_p1, col_p2 = st.columns(2)
+with col_p1:
+    st.progress(st.session_state.porcentagem_conforme / 100)
+with col_p2:
+    st.subheader(f"📊 {st.session_state.porcentagem_conforme}% Conformidade")
+
+st.markdown("---")
+
+def render_linha_ficha(nome_item, status_atual, obs=""):
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown(f"**{nome_item}**")
+        if obs:
+            st.caption(f"_{obs}_")
+    with c2:
+        if status_atual == "SIM":
