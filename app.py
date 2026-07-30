@@ -102,10 +102,10 @@ if arquivo_excel:
             for col in df_base.columns:
                 df_base[col] = df_base[col].fillna("").astype(str).str.strip()
             
-            # ALTERADO: Substitui automaticamente as duas colaboradoras desligadas mantendo os dados consolidados
+            # CORREÇÃO SEGURA: Tratamento preventivo de maiúsculas e espaços para Sabrina e Sonalhya
             if "RESPONSAVEL" in df_base.columns:
                 df_base["RESPONSAVEL"] = df_base["RESPONSAVEL"].apply(
-                    lambda x: "Antigo Colaborador" if str(x).upper() in ["SABRINA", "SONALHYA"] else x
+                    lambda x: "Antigo Colaborador" if str(x).upper().strip() in ["SABRINA", "SONALHYA"] else str(x).upper().strip()
                 )
             
             if "STATUS" in df_base.columns:
@@ -184,7 +184,6 @@ if not df_base.empty:
     
     with linha2_col1:
         st.markdown("### Situação de Prazos")
-        # Força as 3 barras a existirem mapeando chaves para que "Prestes a Vencer" apareça fixo na legenda
         contagem_prazos = df_filtrado["SIT_PRAZO"].dropna().value_counts()
         dados_prazo = pd.Series({
             "No Prazo": contagem_prazos.get("No Prazo", 0) if "No Prazo" in contagem_prazos else contagem_prazos.get("Válido", 0),
@@ -197,3 +196,6 @@ if not df_base.empty:
         st.markdown("### Documentos Aprovados por Tipo")
         df_aprov_por_tipo = df_filtrado[df_filtrado["STATUS"].astype(str).str.upper().str.contains("APROVADO|OK|SIM", na=False)]
         dados_tipo = df_aprov_por_tipo["SIGLA"].dropna().value_counts()
+        st.bar_chart(dados_tipo, color="#34D399", horizontal=True)
+    
+    #--- 6. GRÁFICOS DE PRODUTIVIDADE POR RESPONSÁVEL CORRIGIDOS ---
