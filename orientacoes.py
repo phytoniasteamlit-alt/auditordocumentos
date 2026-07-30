@@ -7,7 +7,7 @@ from io import BytesIO
 #--- 1. CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="Validador NAQH", page_icon="🔍", layout="wide")
 st.title("Auditor Automatizado - Ficha Oficial NAQH")
-st.markdown("Sistema completo com cálculo de conformidade, pente fino tipográfico e geração da Ficha de Verificação.")
+st.markdown("Sistema completo parametrizado com o layout oficial de conferência lateral do Hospital Dr. Jackson Lago.")
 
 # Inicialização de estados de sessão seguros
 if "cached_nome_arquivo" not in st.session_state:
@@ -18,10 +18,7 @@ if "cached_tipo" not in st.session_state:
 #--- 2. BARRA LATERAL (CONTROLES E CHECKBOXES) ---
 st.sidebar.header("⚙️ Controles de Auditoria (NAQH)")
 
-# Parâmetro para o Bloco de Impressos
 tem_impressos_inconformes = st.sidebar.checkbox("⚠️ Há imagens/fotos de impressos ilegíveis ou inconformes?")
-
-# Liberações manuais de contingência para o Cabeçalho
 logo_hospital_manual = st.sidebar.checkbox("Autorizar Manualmente: Logomarca do Hospital")
 codigo_manual = st.sidebar.checkbox("Autorizar Manualmente: Código do Documento")
 
@@ -39,8 +36,8 @@ cabecalho_dados = {
 }
 
 historico_dados = {
-    "Data da Aprovação / Validade": False,
-    "Registro Histórico do Documento": False
+    "DATA DA APROVAÇÃO / VALIDADE": False,
+    "REGISTRO HISTÓRICO DO DOCUMENTO": False
 }
 
 has_tables_or_images = False
@@ -54,7 +51,6 @@ if arquivo_word:
     nome_arquivo_doc = arquivo_word.name
     st.session_state.cached_nome_arquivo = nome_arquivo_doc
     
-    # Identificação do Tipo de Documento pelo Nome do Arquivo
     for sigla in ["NOR", "POP", "PROT", "MAN", "REG", "ROT", "POL"]:
         if sigla in arquivo_word.name.upper():
             tipo_detectado = sigla
@@ -64,16 +60,13 @@ if arquivo_word:
     doc = docx.Document(arquivo_word)
     conteudo_linhas = []
     
-    # --- PENTE FINO DE FONTES E TAMANHOS ---
     for p in doc.paragraphs:
         if not p.text.strip():
             continue
         conteudo_linhas.append(p.text)
-        
         for r in p.runs:
             nome_fonte = r.font.name
             tamanho_fonte = r.font.size.pt if r.font.size else None
-            
             if nome_fonte and nome_fonte.upper() not in ["CALIBRI", "ARIAL"]:
                 fonte_e_tamanho_ok = False
                 erros_formatacao.append(f"Fonte incorreta no corpo: '{nome_fonte}'")
@@ -99,10 +92,8 @@ if arquivo_word:
                 for p_celula in celula.paragraphs:
                     if not p_celula.text.strip():
                         continue
-
                     for r_celula in p_celula.runs:
                         f_tam = r_celula.font.size.pt if r_celula.font.size else None
-                        
                         if is_registro_historico:
                             if i_linha == 0:
                                 if f_tam and int(f_tam) != 10:
@@ -126,8 +117,6 @@ if arquivo_word:
     
     if texto_completo:
         p_upper = texto_completo.upper()
-        
-        # Auditoria do Cabeçalho
         if "HOSPITAL" in p_upper or "SEMUS" in p_upper or logo_hospital_manual:
             cabecalho_dados["LOGOMARCA DO HOSPITAL"] = True
         if "NORMA" in p_upper or "PROCEDIMENTO" in p_upper or "PROTOCOLO" in p_upper:
@@ -141,11 +130,10 @@ if arquivo_word:
         if len(nome_arquivo_doc) > 5:
             cabecalho_dados["TÍTULO DO DOCUMENTO"] = True
             
-        # Auditoria do Fim do Documento
         if "VALIDADE" in p_upper or "DATA APROVAÇÃO" in p_upper or "DATA DE APROVAÇÃO:" in p_upper:
-            historico_dados["Data da Aprovação / Validade"] = True
+            historico_dados["DATA DA APROVAÇÃO / VALIDADE"] = True
         if any(term in p_upper for term in ["REGISTRO HISTÓRICO", "DESCRIÇÃO DA ATUALIZAÇÃO", "VERSÃO INICIAL"]):
-            historico_dados["Registro Histórico do Documento"] = True
+            historico_dados["REGISTRO HISTÓRICO DO DOCUMENTO"] = True
 
     st.success("✔️ Varredura de integridade estrutural e de tipografia finalizada.")
     erros_unicos = list(set(erros_formatacao))
@@ -154,7 +142,6 @@ if arquivo_word:
             for erro in erros_unicos[:6]:
                 st.warning(erro)
 
-# Avaliação do Bloco de Impressos
 status_impressos = "NÃO SE APLICA"
 comentario_impressos = ""
 
@@ -168,21 +155,12 @@ if arquivo_word:
             comentario_impressos = "Conforme apresentado no documento estruturado."
     else:
         status_impressos = "NÃO SE APLICA"
-        comentario_impressos = ""
 
-#--- 4. MONTAGEM DA TABELA DE STATUS (VISUAL LIMPO E OFICIAL) ---
-linhas_tabela_resumida = []
-
-# Itens do Cabeçalho (Nomes em caixa alta correspondendo exatamente aos campos do print)
+# Consolidação da lista de dados para cálculo matemático correto
+lista_calculo = []
 for k, v in cabecalho_dados.items():
-    linhas_tabela_resumida.append({
-        "Categoria": "CABEÇALHO",
-        "Item Técnico Regulamentado": k,
-        "Status de Conformidade": "SIM" if v else "NÃO",
-        "Observação Interna": ""
-    })
+    lista_calculo.append("SIM" if v else "NÃO")
 
-# Itens de Texto (Nomes idênticos aos campos da ficha técnica de vocês)
 itens_texto_fixos = [
     ("PAPEL", "SIM" if arquivo_word else "NÃO"),
     ("MARGENS", "SIM" if arquivo_word else "NÃO"),
@@ -196,44 +174,65 @@ itens_texto_fixos = [
     ("REFERÊNCIAS", "SIM" if arquivo_word else "NÃO"),
     ("APÊNDICES/ ANEXOS", "OPCIONAL")
 ]
-
 for item, stat in itens_texto_fixos:
-    linhas_tabela_resumida.append({
-        "Categoria": "ITENS TEXTO",
-        "Item Técnico Regulamentado": item,
-        "Status de Conformidade": stat,
-        "Observação Interna": ""
-    })
+    lista_calculo.append(stat)
 
-# Itens do Histórico Fundo
 for k, v in historico_dados.items():
-    linhas_tabela_resumida.append({
-        "Categoria": "FIM DO DOCUMENTO",
-        "Item Técnico Regulamentado": k.upper(),
-        "Status de Conformidade": "SIM" if v else "NÃO",
-        "Observação Interna": ""
-    })
+    lista_calculo.append("SIM" if v else "NÃO")
+lista_calculo.append(status_impressos)
 
-# Item de Impresso Condicional
-linhas_tabela_resumida.append({
-    "Categoria": "IMPRESSOS",
-    "Item Técnico Regulamentado": "ITENS IMPRESSO (ESTRUTURAS GRÁFICAS/TABELAS)",
-    "Status de Conformidade": status_impressos,
-    "Observação Interna": comentario_impressos
-})
-
-#--- 5. CÁLCULO DA PORCENTAGEM DE CONFORMIDADE ---
-total_itens = len(linhas_tabela_resumida)
-itens_conformes = sum(1 for x in linhas_tabela_resumida if x["Status de Conformidade"] in ["SIM", "OPCIONAL", "NÃO SE APLICA"])
+total_itens = len(lista_calculo)
+itens_conformes = sum(1 for x in lista_calculo if x in ["SIM", "OPCIONAL", "NÃO SE APLICA"])
 porcentagem_conforme = int((itens_conformes / total_itens) * 100) if arquivo_word else 0
 
-# Exibição dos Indicadores na Tela Principal
+#--- 4. EXIBIÇÃO EM COLUNAS LATERAIS (ESTILO FICHA IMPRESSA) ---
 st.markdown("---")
-st.markdown("### Status de Conformidade Geral com a Norma Zero")
-st.progress(porcentagem_conforme / 100)
-st.subheader(f"📊 {porcentagem_conforme}% de Conformidade Regulamentar")
+st.subheader("📋 Ficha de Verificação Consolidada (Espelho Oficial)")
 
-st.markdown("#### Ficha de Verificação Consolidada (Espelho Oficial)")
-df_visualizacao = pd.DataFrame(linhas_tabela_resumida)
-st.table(df_visualizacao)
+# Indicador de Porcentagem limpo no topo
+col_p1, col_p2 = st.columns([3, 1])
+with col_p1:
+    st.progress(porcentagem_conforme / 100)
+with col_p2:
+    st.subheader(f"📊 {porcentagem_conforme}% Conformidade")
+
+st.markdown("---")
+
+# Função auxiliar para desenhar o layout de rádio horizontal como caixas de checagem fixas lateralmente
+def render_linha_ficha(nome_item, status_atual, obs=""):
+    c1, c2 = st.columns([3, 2])
+    with c1:
+        st.markdown(f"**{nome_item}**")
+        if obs:
+            st.caption(f"_{obs}_")
+    with c2:
+        # Renderiza caixas limpas indicando visualmente a marcação lateral conforme a ficha
+        if status_atual == "SIM":
+            st.markdown("🟩 **[X] SIM** &nbsp;&nbsp;&nbsp;&nbsp; ⬜ [ ] NÃO")
+        elif status_atual == "NÃO":
+            st.markdown("⬜ [ ] SIM &nbsp;&nbsp;&nbsp;&nbsp; 🟥 **[X] NÃO**")
+        elif status_atual == "OPCIONAL":
+            st.markdown("🔷 **[X] OPCIONAL**")
+        else:
+            st.markdown("⬜ [ ] SIM &nbsp;&nbsp;&nbsp;&nbsp; ⬜ [ ] NÃO &nbsp;&nbsp;&nbsp;&nbsp; 🟨 **[X] N/A**")
+    st.markdown("<hr style='margin:4px 0px; border-top: 1px dashed #444;' />", unsafe_allow_html=True)
+
+# 1. BLOCO CABEÇALHO
+st.markdown("### 🔹 CABEÇALHO")
+for k, v in cabecalho_dados.items():
+    render_linha_ficha(k, "SIM" if v else "NÃO")
+
+st.markdown("<br>", unsafe_allow_html=True)
+
+# 2. BLOCO ITENS TEXTO
+st.markdown("### 🔹 ITENS TEXTO")
+for item, stat in itens_texto_fixos:
+    render_linha_ficha(item, stat)
+
+st.markdown("<br>", unsafe_allow_html=True)
+
+# 3. BLOCO FIM DO DOCUMENTO
+st.markdown("### 🔹 FIM DO DOCUMENTO")
+for k, v in historico_dados.items():
+    render_linha_ficha(k, "SIM" if v else "NÃO")
 
