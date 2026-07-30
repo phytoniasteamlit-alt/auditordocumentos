@@ -6,7 +6,7 @@ from io import BytesIO
 #--- 1. CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="PAINEL DE INDICADORES NORMA ZERO", page_icon="📋", layout="wide")
 
-# --- BLOCO DE CUSTOMIZAÇÃO VISUAL AVANÇADA ---
+# --- BLOCO DE CUSTOMIZAÇÃO VISUAL AVANÇADA (CSS INJECT NATIVO) ---
 st.markdown("""
 <style>
 [data-testid="stDataFrame"] td, [data-testid="stDataFrame"] th { font-size: 16px !important; font-weight: 600 !important; color: #FFFFFF !important; }
@@ -16,7 +16,7 @@ section[data-testid="stFileUploaderDropzone"] { border: 2px dashed #38BDF8 !impo
 </style>
 """, unsafe_allow_html=True)
 
-# --- CABEÇALHO DO HOSPITAL ---
+# --- CABEÇALHO DO HOSPITAL (LADO A LADO) ---
 col_titulo, col_hospital = st.columns([0.65, 0.35])
 with col_titulo:
     st.markdown("# PAINEL DE INDICADORES NORMA ZERO")
@@ -47,7 +47,7 @@ if arquivo_excel:
         xl = pd.ExcelFile(arquivo_excel, engine="openpyxl")
         lista_abas_reais = xl.sheet_names
         
-        # 1. PROCESSAMENTO DAS MÉDIAS
+        # 1. PROCESSAMENTO DAS MÉDIAS (Ignorando erros de fórmula #VALOR!)
         nome_aba_original = None
         for n_real in lista_abas_reais:
             n_up = str(n_real).upper().strip()
@@ -76,7 +76,7 @@ if arquivo_excel:
             media_v1 = float(media_v1) if pd.notna(media_v1) else 0.0
             media_v2 = float(media_v2) if pd.notna(media_v2) else 0.0
         
-        # 2. CARREGAMENTO DOS DADOS DOS GRÁFICOS
+        # 2. CARREGAMENTO DOS DADOS PARA OS GRÁFICOS
         nome_aba_graficos = None
         for n_real in lista_abas_reais:
             n_up = str(n_real).upper().strip()
@@ -102,7 +102,7 @@ if arquivo_excel:
             for col in df_base.columns:
                 df_base[col] = df_base[col].fillna("").astype(str).str.strip()
             
-            # ALTERADO: Substitui automaticamente Sabrina e Sonalhya por "Antigo Colaborador" para manter os dados no cálculo
+            # ALTERADO: Substitui automaticamente as duas colaboradoras desligadas mantendo os dados consolidados
             if "RESPONSAVEL" in df_base.columns:
                 df_base["RESPONSAVEL"] = df_base["RESPONSAVEL"].apply(
                     lambda x: "Antigo Colaborador" if str(x).upper() in ["SABRINA", "SONALHYA"] else x
@@ -113,7 +113,7 @@ if arquivo_excel:
                     lambda x: "AG Aguardando" if "VERIFICADO AGU" in x.upper() or "AGUARDANDO" in x.upper() else x
                 )
             
-            # Limpeza robusta contra erros de preenchimento da planilha (#VALOR!, letras perdidas como 'A')
+            # Limpeza robusta contra sujeiras e fórmulas quebradas da planilha do Excel
             valores_vazios = ["0", "0.0", "NAN", "NONE", "", "NAN NAN", "NÃO INFORMADO", "A", "#VALOR!"]
             for col in df_base.columns:
                 df_base.loc[df_base[col].str.upper().isin(valores_vazios), col] = None
@@ -165,15 +165,15 @@ if not df_base.empty:
     
     st.markdown("<br>", unsafe_allow_html=True)
     
-    #--- 5. RENDERIZAÇÃO SEGURA DOS GRÁFICOS ---
-    linha1_col1, line1_col2 = st.columns(2)
+    #--- 5. RENDERIZAÇÃO DOS GRÁFICOS INICIAIS ---
+    linha1_col1, linha1_col2 = st.columns(2)
     
     with linha1_col1:
         st.markdown("### Documentos por Status")
         dados_g1 = df_filtrado["STATUS"].dropna().value_counts()
         st.bar_chart(dados_g1, color=c_g1_color, horizontal=True)
     
-    with line1_col2:
+    with linha1_col2:
         st.markdown("### Tempo de Análise")
         dados_g2 = pd.Series({"1º Verf.": media_v1, "2º Verf.": media_v2, "Total Estimado": (media_v1 + media_v2)})
         st.bar_chart(dados_g2, color=c_g2_color, horizontal=True)
@@ -184,12 +184,12 @@ if not df_base.empty:
     
     with linha2_col1:
         st.markdown("### Situação de Prazos")
-        # ALTERADO: Criando um dicionário padrão completo para forçar a aparição das 3 categorias solicitadas
+        # Força as 3 barras a existirem mapeando chaves para que "Prestes a Vencer" apareça fixo na legenda
         contagem_prazos = df_filtrado["SIT_PRAZO"].dropna().value_counts()
         dados_prazo = pd.Series({
-            "Vencido": contagem_prazos.get("Vencido", 0),
             "No Prazo": contagem_prazos.get("No Prazo", 0) if "No Prazo" in contagem_prazos else contagem_prazos.get("Válido", 0),
-            "Prestes a Vencer": contagem_prazos.get("Prestes a Vencer", 0)
+            "Prestes a Vencer": contagem_prazos.get("Prestes a Vencer", 0),
+            "Vencido": contagem_prazos.get("Vencido", 0)
         })
         st.bar_chart(dados_prazo, color=c_g4_color, horizontal=True)
 
@@ -197,6 +197,3 @@ if not df_base.empty:
         st.markdown("### Documentos Aprovados por Tipo")
         df_aprov_por_tipo = df_filtrado[df_filtrado["STATUS"].astype(str).str.upper().str.contains("APROVADO|OK|SIM", na=False)]
         dados_tipo = df_aprov_por_tipo["SIGLA"].dropna().value_counts()
-        st.bar_chart(dados_tipo, color="#34D399", horizontal=True)
-    
-    st.markdown("---")
