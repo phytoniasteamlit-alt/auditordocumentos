@@ -182,6 +182,7 @@ if arquivo_word:
     st.session_state.porcentagem_conforme = int((itens_conformes / total_itens) * 100)
 
     st.success("✔️ Varredura de integridade estrutural e de tipografia finalizada.")
+    
+    # CORREÇÃO DA INDENTAÇÃO DO GUIA DE ERROS AQUI:
     erros_unicos = list(set(st.session_state.erros_formatacao))
     if not st.session_state.fonte_e_tamanho_ok and erros_unicos:
-        with st.expander("⚠️ Guia de Correção Manual (Fontes e Tamanhos Inconformes)"):
