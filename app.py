@@ -4,6 +4,7 @@ import openpyxl
 from io import BytesIO
 
 #--- 1. CONFIGURAÇÃO DA PÁGINA ---
+# CORRIGIDO: Retornado o ícone original da prancheta com caneta
 st.set_page_config(page_title="PAINEL DE INDICADORES NORMA ZERO", page_icon="📋", layout="wide")
 
 # --- BLOCO DE CUSTOMIZAÇÃO VISUAL AVANÇADA (CSS INJECT NATIVO) ---
@@ -22,12 +23,15 @@ with col_titulo:
     st.markdown("# PAINEL DE INDICADORES NORMA ZERO")
 
 with col_hospital:
+    # CORRIGIDO: Inserido novamente o ícone de cruz médica vermelha e a bonequinha da coordenação conforme o PDF original
     st.markdown("""
     <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px; margin-top: 10px;">
     <div style="display: flex; align-items: center; gap: 10px;">
+    <span style="font-size: 34px; color: #EF4444; font-weight: bold; line-height: 1;">🏥</span>
     <span style="font-size: 22px; color: #FFFFFF; font-weight: 800; letter-spacing: 0.5px;">HOSPITAL DA CIDADE</span>
     </div>
     <div style="display: flex; align-items: center; gap: 6px; margin-right: 2px;">
+    <span style="font-size: 20px; line-height: 1;">👩‍💼</span>
     <span style="font-size: 15px; color: #94A3B8; font-weight: 600; letter-spacing: 0.3px;">Coord.: Fabrícia Rocha</span>
     </div>
     </div>
@@ -36,8 +40,9 @@ with col_hospital:
 st.markdown("---")
 
 #--- 2. CARREGAMENTO DO ARQUIVO ---
+# CORRIGIDO: Retornado o ícone de engrenagem no cabeçalho lateral
 st.sidebar.header("⚙️ Entrada de Dados")
-arquivo_excel = st.sidebar.file_uploader("Carregar Planilha Excel (.xlsx):", type=["xlsx"], key="uploader_xlsx")
+arquivo_excel = st.sidebar.file_uploader("📁 Carregar Planilha Excel (.xlsx):", type=["xlsx"], key="uploader_xlsx")
 
 df_base = pd.DataFrame()
 media_v1, media_v2 = 0.0, 0.0
@@ -85,17 +90,15 @@ if arquivo_excel:
                 break
         
         if not nome_aba_graficos:
-            nome_aba_graficos = lista_abas_reais[0] if lista_abas_reais else None
+            nome_aba_graficos = lista_abas_reais if lista_abas_reais else None
         
         if nome_aba_graficos:
             df_raw = pd.read_excel(arquivo_excel, sheet_name=nome_aba_graficos, header=0, engine="openpyxl")
             
-            # Mapeamento dinâmico por aproximação textual de nomes de colunas para evitar quebras por posição física
             df_base = pd.DataFrame()
-            
             for col_real in df_raw.columns:
                 col_upper = str(col_real).upper().strip()
-                if "SIGLA" in col_upper or "DOCUMENTO" in col_upper and "STATUS" not in col_upper:
+                if "SIGLA" in col_upper or ("DOCUMENTO" in col_upper and "STATUS" not in col_upper):
                     df_base["SIGLA"] = df_raw[col_real]
                 if "SETOR" in col_upper:
                     df_base["SETOR"] = df_raw[col_real]
@@ -106,7 +109,6 @@ if arquivo_excel:
                 if "PRAZO" in col_upper or "SIT" in col_upper:
                     df_base["SIT_PRAZO"] = df_raw[col_real]
 
-            # Casos de contingência caso os cabeçalhos textuais falhem na verificação direta
             num_colunas = len(df_raw.columns)
             if "SIGLA" not in df_base.columns and num_colunas > 0: df_base["SIGLA"] = df_raw.iloc[:, 0]
             if "SETOR" not in df_base.columns and num_colunas > 1: df_base["SETOR"] = df_raw.iloc[:, 1]
@@ -114,11 +116,10 @@ if arquivo_excel:
             if "STATUS" not in df_base.columns and num_colunas > 4: df_base["STATUS"] = df_raw.iloc[:, 4]
             if "SIT_PRAZO" not in df_base.columns and num_colunas > 5: df_base["SIT_PRAZO"] = df_raw.iloc[:, 5]
 
-            # Padronização e Limpeza
             for col in df_base.columns:
                 df_base[col] = df_base[col].fillna("").astype(str).str.strip()
             
-            # Tratamento preventivo de maiúsculas e espaços para Sabrina e Sonalhya
+            # Tratamento preventivo de maiúsculas para as duas colaboradoras desligadas
             if "RESPONSAVEL" in df_base.columns:
                 df_base["RESPONSAVEL"] = df_base["RESPONSAVEL"].apply(
                     lambda x: "Antigo Colaborador" if str(x).upper().strip() in ["SABRINA", "SONALHYA"] else str(x).upper().strip()
@@ -129,7 +130,6 @@ if arquivo_excel:
                     lambda x: "AG Aguardando" if "VERIFICADO AGU" in x.upper() or "AGUARDANDO" in x.upper() else x
                 )
             
-            # Limpeza contra erros textuais residuais e fórmulas quebradas do Excel
             valores_vazios = ["0", "0.0", "NAN", "NONE", "", "NAN NAN", "NÃO INFORMADO", "A", "#VALOR!"]
             for col in df_base.columns:
                 df_base.loc[df_base[col].str.upper().isin(valores_vazios), col] = None
@@ -141,7 +141,7 @@ if arquivo_excel:
 #--- 3. MENUS LATERAIS DE FILTROS ---
 if not df_base.empty:
     st.sidebar.markdown("---")
-    st.sidebar.subheader("Filtros de Visualização")
+    st.sidebar.subheader("🔍 Filtros de Visualização")
     
     lista_responsaveis = sorted([str(r) for r in df_base["RESPONSAVEL"].dropna().unique() if str(r).strip() != ""])
     lista_responsaveis.insert(0, "Todos")
@@ -158,13 +158,13 @@ if not df_base.empty:
         df_filtrado = df_filtrado[df_filtrado["SIGLA"] == documento_selecionado]
     
     st.sidebar.markdown("---")
-    st.sidebar.subheader("Qtd por Documento (Sigla)")
+    st.sidebar.subheader("📊 Qtd por Documento (Sigla)")
     df_lateral_contagem = df_filtrado["SIGLA"].dropna().value_counts().reset_index()
     df_lateral_contagem.columns = ["Documento", "Qtd"]
     st.sidebar.dataframe(df_lateral_contagem, use_container_width=True, hide_index=True)
     
     st.sidebar.markdown("---")
-    st.sidebar.subheader("Configuração dos Gráficos")
+    st.sidebar.subheader("🎨 Configuração dos Gráficos")
     c_g1_color = st.sidebar.color_picker("G1 - Cor Status:", "#FBBF24", key="c1")
     c_g2_color = st.sidebar.color_picker("G2 - Cor Tempo:", "#38BDF8", key="c2")
     c_g4_color = st.sidebar.color_picker("G4 - Cor Prazo:", "#C084FC", key="c4")
@@ -174,10 +174,10 @@ if not df_base.empty:
     aprovados = len(df_filtrado[df_filtrado["STATUS"].astype(str).str.upper().str.contains("APROVADO|OK|SIM", na=False)])
     
     kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
-    with kpi_col1: st.metric(label="TOTAL DOCUMENTOS", value=f"{total_docs}")
-    with kpi_col2: st.metric(label="APROVADOS", value=f"{aprovados}")
-    with kpi_col3: st.metric(label="1º VERF.", value=f"{media_v1:.1f} d")
-    with kpi_col4: st.metric(label="2º VERF.", value=f"{media_v2:.1f} d")
+    with kpi_col1: st.metric(label="📄 TOTAL DOCUMENTOS", value=f"{total_docs}")
+    with kpi_col2: st.metric(label="✅ APROVADOS", value=f"{aprovados}")
+    with kpi_col3: st.metric(label="⏳ 1º VERF.", value=f"{media_v1:.1f} d")
+    with kpi_col4: st.metric(label="⏳ 2º VERF.", value=f"{media_v2:.1f} d")
     
     st.markdown("<br>", unsafe_allow_html=True)
     
@@ -185,9 +185,9 @@ if not df_base.empty:
     linha1_col1, linha1_col2 = st.columns(2)
     
     with linha1_col1:
-        st.markdown("### Documentos por Status")
+        st.markdown("### 📊 Documentos por Status")
         dados_g1 = df_filtrado["STATUS"].dropna().value_counts()
         st.bar_chart(dados_g1, color=c_g1_color, horizontal=True)
     
     with linha1_col2:
-        st.markdown("### Tempo de Análise")
+        st.markdown("### ⏱️ Tempo de Análise")
