@@ -45,6 +45,19 @@ fonte_e_tamanho_ok = True
 erros_formatacao = []
 documento_corrigido_bytes = None
 
+# Variáveis auxiliares para status estável de texto
+stat_papel = "NÃO"
+stat_margens = "NÃO"
+stat_fonte = "NÃO"
+stat_linhas = "NÃO"
+stat_alinha = "NÃO"
+stat_parag = "NÃO"
+stat_figuras = "NÃO"
+stat_paginacao = "NÃO"
+stat_marca = "NÃO"
+stat_referencia = "NÃO"
+stat_anexos = "OPCIONAL"
+
 #--- 3. FLUXO DE CARREGAMENTO E ANÁLISE RIGOROSA (WORD .DOCX) ---
 arquivo_word = st.file_uploader("Arraste o arquivo WORD (.docx) aqui para auditoria", type=["docx"])
 
@@ -69,7 +82,6 @@ if arquivo_word:
             continue
         conteudo_linhas.append(p.text)
         
-        # Correção no documento de saída: Forçar Justificado e Espaçamento 1.5
         if p_idx < len(doc_out.paragraphs):
             p_out = doc_out.paragraphs[p_idx]
             p_out.alignment = docx.enum.text.WD_ALIGN_PARAGRAPH.JUSTIFY
@@ -175,6 +187,18 @@ if arquivo_word:
         if any(term in p_upper for term in ["REGISTRO HISTÓRICO", "DESCRIÇÃO DA ATUALIZAÇÃO", "VERSÃO INICIAL"]):
             historico_dados["REGISTRO HISTÓRICO DO DOCUMENTO"] = True
 
+    stat_papel = "SIM"
+    stat_margens = "SIM"
+    stat_fonte = "SIM" if fonte_e_tamanho_ok else "NÃO"
+    stat_linhas = "SIM"
+    stat_alinha = "SIM"
+    stat_parag = "SIM"
+    stat_figuras = "SIM" if has_tables_or_images else "NÃO"
+    stat_paginacao = "SIM"
+    stat_marca = "SIM"
+    stat_referencia = "SIM"
+    stat_anexos = "OPCIONAL"
+
     buffer_doc = BytesIO()
     doc_out.save(buffer_doc)
     documento_corrigido_bytes = buffer_doc.getvalue()
@@ -202,21 +226,8 @@ if arquivo_word:
     else:
         status_impressos = "NÃO SE APLICA"
 
-# Consolidação estável dos itens de texto fixos sem risco de quebra de sintaxe
+# Consolidação estável dos dados para cálculo de porcentagem
 lista_calculo = []
 for k, v in cabecalho_dados.items():
     lista_calculo.append("SIM" if v else "NÃO")
-
-# Processamento individualizado para evitar acúmulo de colchetes longos
-stat_papel = "SIM" if arquivo_word else "NÃO"
-stat_margens = "SIM" if arquivo_word else "NÃO"
-stat_fonte = "SIM" if fonte_e_tamanho_ok and arquivo_word else "NÃO"
-stat_linhas = "SIM" if arquivo_word else "NÃO"
-stat_alinha = "SIM" if arquivo_word else "NÃO"
-stat_parag = "SIM" if arquivo_word else "NÃO"
-stat_figuras = "SIM" if has_tables_or_images else "NÃO"
-stat_paginacao = "SIM" if arquivo_word else "NÃO"
-stat_marca = "SIM" if arquivo_word else "NÃO"
-stat_referencia = "SIM" if arquivo_word else "NÃO"
-stat_anexos = "OPCIONAL"
 
