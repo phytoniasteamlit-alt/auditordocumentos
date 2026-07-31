@@ -1,128 +1,194 @@
 import streamlit as st
 import pandas as pd
-import altair as alt
+import plotly.express as px
 
-#--- 1. CONFIGURAÇÃO DA PÁGINA ---
-st.set_page_config(page_title="Dashboard Executivo NAQH", page_icon="📊", layout="wide")
+# Configuração da página da Streamlit em modo amplo
+st.set_page_config(
+    page_title="Painel de Indicadores Norma Zero",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-st.markdown("# 📊 Dashboard Executivo de Indicadores — NAQH")
-st.markdown("Monitoramento técnico de conformidade regulatória e volumetria documental.")
+# --- CABEÇALHO SUPERIOR (LADO DIREITO) ---
+# Criação do layout do topo com duas colunas para posicionar as informações da coordenação à direita
+header_left, header_right = st.columns([2, 1])
+
+with header_right:
+    st.markdown(
+        """
+        <div style="text-align: right; line-height: 1.2; padding-bottom: 10px;">
+            <span style="font-size: 16px; font-weight: bold;">🏥 Hospital da Cidade</span><br>
+            <span style="font-size: 14px; color: #888;">👩‍⚕️ Coord: Fabrícia Rocha 🏆</span>
+        </div>
+        """, 
+        unsafe_allow_name_allowed=True
+    )
+
+with header_left:
+    st.title("📊 Painel de Indicadores Norma Zero")
+
 st.markdown("---")
 
-#--- 2. BARRA LATERAL (UPLOADS E FILTROS COMPACTOS) ---
+# --- PAINEL DE CONTROLE (SIDEBAR) ---
 st.sidebar.header("⚙️ Painel de Controle")
+uploaded_file = st.sidebar.file_uploader("Carregar Planilha Excel (.xlsx):", type=["xlsx"])
 
-arquivo_excel = st.sidebar.file_uploader("📥 Carregar Planilha Excel (.xlsx):", type=["xlsx"])
-
-if arquivo_excel:
+if uploaded_file is not None:
     try:
-        # 'header=2' ignora as linhas mescladas de título do topo da sua planilha
-        df = pd.read_excel(arquivo_excel, engine="openpyxl", header=2)
-        df.columns = df.columns.astype(str)
-        df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
+        # Tratamento Profilático contra erros de dados
+        # Carrega a aba correta ignorando eventuais problemas de formatação nas colunas adjacentes
+        df = pd.read_excel(uploaded_file, sheet_name="DADOS_GRÁFICOS")
         
-        if not df.empty:
-            col_lista = list(df.columns)
-            col_tipo = col_lista[0] if len(col_lista) > 0 else "Tipo"
-            col_setor = col_lista[1] if len(col_lista) > 1 else "Setor"
-            
-            st.sidebar.markdown("---")
-            st.sidebar.subheader("🔍 Filtros de Segmentação")
-            
-            # Filtros na lateral para controle global externo
-            tipos_selecionados = st.sidebar.multiselect(f"Filtrar por {col_tipo}:", options=df[col_tipo].dropna().unique(), default=df[col_tipo].dropna().unique())
-            setores_selecionados = st.sidebar.multiselect(f"Filtrar por {col_setor}:", options=df[col_setor].dropna().unique(), default=df[col_setor].dropna().unique())
-
-            # Base de dados pré-filtrada pelo menu lateral
-            df_base = df[(df[col_setor].isin(setores_selecionados)) & (df[col_tipo].isin(tipos_selecionados))]
-
-            #--- SELETORES DE INTERATIVIDADE CLÁSSICOS (BLINDADOS CONTRA ERROS) ---
-            selecao_clique_tipo = alt.selection_single(fields=[col_tipo], name="clique_tipo")
-            selecao_clique_setor = alt.selection_single(fields=[col_setor], name="clique_setor")
-
-            # Preparação dos dados agrupados para os gráficos
-            dados_tipo = df_base[col_tipo].value_counts().reset_index()
-            dados_tipo.columns = [col_tipo, 'Quantidade']
-
-            dados_setor = df_base[col_setor].value_counts().reset_index()
-            dados_setor.columns = [col_setor, 'Quantidade']
-
-            #--- 3. MONTAGEM DOS DOIS GRÁFICOS INTERATIVOS LADO A LADO ---
-            st.markdown("### 📊 Análise Gráfica de Demandas Interativa")
-            st.markdown("💡 *Dica: Clique em qualquer barra de um dos gráficos abaixo para filtrar os números e a tabela automaticamente!*")
-            
-            col_g1, col_g2 = st.columns(2)
-
-            with col_g1:
-                grafico_tipo = alt.Chart(dados_tipo).mark_bar().encode(
-                    x=alt.X(f'{col_tipo}:N', sort='-y', title=col_tipo),
-                    y=alt.Y('Quantidade:Q', title='Quantidade'),
-                    color=alt.condition(selecao_clique_tipo, alt.value("#1f77b4"), alt.value("#4A5260")),
-                    opacity=alt.condition(selecao_clique_tipo, alt.value(1.0), alt.value(0.3)),
-                    tooltip=[col_tipo, 'Quantidade']
-                ).add_selection(selecao_clique_tipo).properties(height=350, title=f"Volumetria por {col_tipo}")
+        # 1. Remover espaços em branco invisíveis do início e fim dos textos das colunas
+        for col in df.columns:
+            if df[col].dtype == "object":
+                df[col] = df[col].astype(str).str.strip()
                 
-                evento_tipo = st.altair_chart(grafico_tipo, use_container_width=True, on_select="rerun")
+        # 2. Substituir strings de erro do Excel (#VALOR!, 0 ou textos nulos) por valores limpos
+        df = df.replace(["#VALOR!", "0", "0.0", "None", "nan", "NaN"], None)
+        
+        # 3. Remover linhas completamente vazias para não inflar a contagem de documentos
+        df = df.dropna(subset=["SIGLA DO DOCUMENTO", "NOME DO DOCUMENTO", "RESPONSÁVEL"], how="all")
 
-            with col_g2:
-                grafico_setor = alt.Chart(dados_setor).mark_bar().encode(
-                    x=alt.X(f'{col_setor}:N', sort='-y', title=col_setor),
-                    y=alt.Y('Quantidade:Q', title='Quantidade'),
-                    color=alt.condition(selecao_clique_setor, alt.value("#2ca02c"), alt.value("#4A5260")),
-                    opacity=alt.condition(selecao_clique_setor, alt.value(1.0), alt.value(0.3)),
-                    tooltip=[col_setor, 'Quantidade']
-                ).add_selection(selecao_clique_setor).properties(height=350, title=f"Demandas por {col_setor}")
-                
-                evento_setor = st.altair_chart(grafico_setor, use_container_width=True, on_select="rerun")
+        # --- PROCESSAMENTO DOS INDICADORES (METRICS) ---
+        # Garantindo mapeamento seguro das colunas textuais
+        status_normativo = df["(Vencido, No Prazo, Prestes a Vencer)"].fillna("Não Informado")
+        status_documento = df["STATUS DO DOCUMENTO NORMATIVO"].fillna("Não Informado")
+        
+        total_docs = len(df)
+        aprovados = len(df[status_documento.str.upper() == "APROVADO"])
+        
+        # Contagem para o 1º Verf e 2º Verf baseado na coluna de Status do Documento Normativo
+        # Caso seus dados usem termos exatos diferentes, substitua nos filtros abaixo
+        verf_1 = len(df[status_documento.str.contains("VERIFICADO AGUARDA", case=False, na=False)])
+        verf_2 = len(df[status_documento.str.contains("EM VERIFICAÇÃO", case=False, na=False)])
 
-            #--- 4. APLICAÇÃO DINÂMICA DO CLIQUE NA BASE DE DATOS ---
-            df_filtrado = df_base.copy()
-            
-            # Filtro inteligente pelo clique no gráfico de tipos
-            if evento_tipo and "clique_tipo" in evento_tipo.get("selection", {}):
-                valores_clicados_tipo = evento_tipo["selection"]["clique_tipo"]
-                if valores_clicados_tipo:
-                    df_filtrado = df_filtrado[df_filtrado[col_tipo].isin([v[col_tipo] for v in valores_clicados_tipo])]
+        # --- EXIBIÇÃO DAS CAIXAS DE MÉTRICAS INDEPENDENTES ---
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric(label="📄 Total de Documentos", value=total_docs)
+        m2.metric(label="✅ Aprovados", value=aprovados)
+        m3.metric(label="⏰ T - 1º Verf", value=verf_1)
+        m4.metric(label="⏰ T - 2º Verf", value=verf_2)
+        
+        st.markdown("---")
 
-            # Filtro inteligente pelo clique no gráfico de setores
-            if evento_setor and "clique_setor" in evento_setor.get("selection", {}):
-                valores_clicados_setor = evento_setor["selection"]["clique_setor"]
-                if valores_clicados_setor:
-                    df_filtrado = df_filtrado[df_filtrado[col_setor].isin([v[col_setor] for v in valores_clicados_setor])]
-
-            st.markdown("---")
+        # --- FILAS DE GRÁFICOS (ROWS) ---
+        
+        # --- BLOC0 1: GRÁFICOS DE VISÃO GERAL (Pizzas/Roscas) ---
+        row1_col1, row1_col2 = st.columns(2)
+        
+        with row1_col1:
+            st.subheader("1️⃣ Válidos, Vencidos, no Prazo")
+            df_g1 = df["(Vencido, No Prazo, Prestes a Vencer)"].value_counts().reset_index()
+            df_g1.columns = ["Status Temporal", "Quantidade"]
             
-            #--- 5. CARTÕES DESIGN PREMIUM (KPIs RECALCULADOS PELO CLIQUE) ---
-            kpi_col1, kpi_kpi2, kpi_col3 = st.columns(3)
-            total_docs = len(df_filtrado)
-            
-            # CORREÇÃO DA VARIÁVEL: Pega estritamente a primeira ocorrência textual para evitar erro de DataFrame
-            col_status_lista = [c for c in df.columns if "OK" in str(c).upper() or "STATUS" in str(c).upper() or "SITUA" in str(c).upper()]
-            
-            if col_status_lista:
-                alvo_status = col_status_lista[0]
-                aprovados = len(df_filtrado[df_filtrado[alvo_status].astype(str).str.upper().str.contains("APROVADO|OK|SIM|✔️", regex=True)])
+            if not df_g1.empty:
+                fig1 = px.pie(df_g1, names="Status Temporal", values="Quantidade", hole=0.4,
+                              color_discrete_sequence=px.colors.qualitative.Pastel)
+                fig1.update_layout(margin=dict(l=20, r=20, t=30, b=20))
+                st.plotly_chart(fig1, use_container_width=True)
             else:
-                aprovados = total_docs
+                st.warning("Sem dados suficientes para gerar o gráfico 1.")
+
+        with row1_col2:
+            st.subheader("2️⃣ Status por Documentos")
+            df_g2 = df["STATUS DO DOCUMENTO NORMATIVO"].value_counts().reset_index()
+            df_g2.columns = ["Status", "Quantidade"]
+            
+            if not df_g2.empty:
+                fig2 = px.pie(df_g2, names="Status", values="Quantidade", hole=0.4,
+                              color_discrete_sequence=px.colors.qualitative.Safe)
+                fig2.update_layout(margin=dict(l=20, r=20, t=30, b=20))
+                st.plotly_chart(fig2, use_container_width=True)
+            else:
+                st.warning("Sem dados suficientes para gerar o gráfico 2.")
+
+        st.markdown("---")
+
+        # --- BLOCO 2: GRÁFICOS INTERATIVOS COM FILTROS MULTIPLOS ---
+        
+        # Gráfico 3: Nº de documentos por status com filtro dinâmico
+        st.subheader("3️⃣ Número de Documentos por Status")
+        status_disponiveis = df["STATUS DO DOCUMENTO NORMATIVO"].dropna().unique().tolist()
+        
+        if status_disponiveis:
+            status_selecionados = st.multiselect(
+                "Filtrar por Status do Documento:", 
+                options=status_disponiveis, 
+                default=status_disponiveis
+            )
+            df_g3 = df[df["STATUS DO DOCUMENTO NORMATIVO"].isin(status_selecionados)]
+            
+            if not df_g3.empty:
+                df_g3_counts = df_g3["STATUS DO DOCUMENTO NORMATIVO"].value_counts().reset_index()
+                df_g3_counts.columns = ["Status", "Total"]
+                fig3 = px.bar(df_g3_counts, x="Status", y="Total", text="Total", color="Status",
+                              labels={"Total": "Nº de Documentos"}, color_discrete_sequence=px.colors.qualitative.Set2)
+                fig3.update_traces(textposition="outside")
+                st.plotly_chart(fig3, use_container_width=True)
+            else:
+                st.info("Selecione pelo menos um status para renderizar o gráfico.")
+        else:
+            st.warning("Coluna de status indisponível ou vazia.")
+
+        st.markdown("---")
+        
+        row2_col1, row2_col2 = st.columns(2)
+
+        # Gráfico 4: Documentos por Profissional
+        with row2_col1:
+            st.subheader("4️⃣ Documentos por Profissional")
+            profissionais = df["RESPONSÁVEL"].dropna().unique().tolist()
+            
+            if profissionais:
+                prof_selecionado = st.selectbox("Selecionar Profissional:", options=["Todos"] + profissionais)
                 
-            taxa_aprovacao = int((aprovados / total_docs) * 100) if total_docs > 0 else 0
+                if prof_selecionado == "Todos":
+                    df_g4 = df
+                else:
+                    df_g4 = df[df["RESPONSÁVEL"] == prof_selecionado]
+                
+                if not df_g4.empty:
+                    df_g4_counts = df_g4.groupby(["RESPONSÁVEL", "STATUS DO DOCUMENTO NORMATIVO"]).size().reset_index(name="Quantidade")
+                    fig4 = px.bar(df_g4_counts, x="STATUS DO DOCUMENTO NORMATIVO", y="Quantidade", color="STATUS DO DOCUMENTO NORMATIVO",
+                                  facet_col="RESPONSÁVEL", facet_col_wrap=2, barmode="group")
+                    st.plotly_chart(fig4, use_container_width=True)
+                else:
+                    st.info("Nenhum dado encontrado para o profissional selecionado.")
+            else:
+                st.warning("Coluna de profissionais indisponível.")
 
-            with kpi_col1:
-                st.markdown(f"<div style='background-color: #1E222D; padding: 20px; border-radius: 10px; border-left: 5px solid #1f77b4; text-align: center;'><span style='color: #8C949E; font-size: 14px; font-weight: bold; text-transform: uppercase;'>📄 Total Selecionado</span><h2 style='color: #FFFFFF; margin: 10px 0 0 0; font-size: 32px;'>{total_docs}</h2></div>", unsafe_allow_html=True)
-
-            with kpi_kpi2:
-                st.markdown(f"<div style='background-color: #1E222D; padding: 20px; border-radius: 10px; border-left: 5px solid #2ca02c; text-align: center;'><span style='color: #8C949E; font-size: 14px; font-weight: bold; text-transform: uppercase;'>✅ Concluídos / Aprovados</span><h2 style='color: #2ca02c; margin: 10px 0 0 0; font-size: 32px;'>{aprovados}</h2></div>", unsafe_allow_html=True)
-
-            with kpi_col3:
-                st.markdown(f"<div style='background-color: #1E222D; padding: 20px; border-radius: 10px; border-left: 5px solid #ff7f0e; text-align: center;'><span style='color: #8C949E; font-size: 14px; font-weight: bold; text-transform: uppercase;'>📈 Índice de Eficiência</span><h2 style='color: #ff7f0e; margin: 10px 0 0 0; font-size: 32px;'>{taxa_aprovacao}%</h2></div>", unsafe_allow_html=True)
-
-            st.markdown("<br>", unsafe_allow_html=True)
+        # Gráfico 5: Documentos Aprovados por Tipo
+        with row2_col2:
+            st.subheader("5️⃣ Documentos Aprovados por Tipo")
+            tipos_disponiveis = df["SIGLA DO DOCUMENTO"].dropna().unique().tolist()
             
-            #--- 6. VISUALIZAÇÃO DA TABELA TÉCNICA DINÂMICA ---
-            st.markdown("### 📋 Banco de Dados Estruturado (Filtro Ativo)")
-            st.dataframe(df_filtrado, use_container_width=True)
-            
+            if tipos_disponiveis:
+                tipos_selecionados = st.multiselect(
+                    "Filtrar por Tipo de Documento (Sigla):", 
+                    options=tipos_disponiveis, 
+                    default=tipos_disponiveis
+                )
+                
+                # Filtrar apenas os registros que estão 'Aprovado' e pertencem às siglas escolhidas
+                df_g5 = df[(df["STATUS DO DOCUMENTO NORMATIVO"].str.upper() == "APROVADO") & 
+                           (df["SIGLA DO DOCUMENTO"].isin(tipos_selecionados))]
+                
+                if not df_g5.empty:
+                    df_g5_counts = df_g5["SIGLA DO DOCUMENTO"].value_counts().reset_index()
+                    df_g5_counts.columns = ["Tipo de Documento", "Quantidade Aprovada"]
+                    fig5 = px.bar(df_g5_counts, x="Tipo de Documento", y="Quantidade Aprovada", text="Quantidade Aprovada",
+                                  color="Tipo de Documento", color_discrete_sequence=px.colors.qualitative.Bold)
+                    fig5.update_traces(textposition="outside")
+                    st.plotly_chart(fig5, use_container_width=True)
+                else:
+                    st.info("Nenhum documento 'Aprovado' encontrado para os filtros selecionados.")
+            else:
+                st.warning("Coluna de siglas indisponível.")
+
     except Exception as e:
-        st.error(f"⚠️ Falha técnica ao processar a interatividade do Excel: {e}")
+        st.error(f"Erro ao processar o arquivo: {e}")
+        st.info("Certifique-se de que a aba carregada chama-se exatamente 'DADOS_GRÁFICOS' e possui as colunas estruturadas padrão.")
 else:
-    st.info("💡 **Painel Pronto:** Carregue a planilha Excel no menu lateral para ativar os gráficos interativos por clique.")
+    # Estado inicial amigável orientando o usuário a subir o arquivo
+    st.info("💡 Por favor, use o menu lateral para carregar a sua planilha Excel e ativar os gráficos interativos.")
