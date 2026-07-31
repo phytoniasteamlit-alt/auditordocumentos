@@ -181,18 +181,18 @@ if not df_base.empty:
     st.markdown("<br>", unsafe_allow_html=True)
     
     #--- 5. RENDERIZAÇÃO DOS GRÁFICOS ---
-    # BLINDAGEM DE EXECUÇÃO: Garante que os gráficos inferiores só renderizam se houver registros válidos carregados
-    if not df_filtrado.empty:
+    # LINHA 1: Documentos por Status e Situação de Prazos
+    linha1_col1, linha1_col2 = st.columns(2)
+    with linha1_col1:
+        st.markdown("### Documentos por Status")
+        dados_g1 = df_filtrado["STATUS"].dropna().value_counts()
+        st.bar_chart(dados_g1, color=c_g1_color, horizontal=True)
         
-        # LINHA 1: Documentos por Status e Situação de Prazos
-        linha1_col1, linha1_col2 = st.columns(2)
-        with linha1_col1:
-            st.markdown("### Documentos por Status")
-            dados_g1 = df_filtrado["STATUS"].dropna().value_counts()
-            st.bar_chart(dados_g1, color=c_g1_color, horizontal=True)
-            
-        with linha1_col2:
-            st.markdown("### Situação de Prazos")
-            s_prazos_limpos = df_filtrado["SIT_PRAZO"].apply(remover_acentos)
-            contagem_prazos = s_prazos_limpos.value_counts()
-            
+    with linha1_col2:
+        st.markdown("### Situação de Prazos")
+        s_prazos_limpos = df_filtrado["SIT_PRAZO"].apply(remover_acentos)
+        contagem_prazos = s_prazos_limpos.value_counts()
+        
+        dados_prazo = pd.Series(0, index=["No Prazo", "Prestes a Vencer", "Vencido"])
+        dados_prazo["No Prazo"] = int(contagem_prazos.get("VALIDO", 0) + contagem_prazos.get("NO PRAZO", 0))
+        dados_prazo["Prestes a Vencer"] = int(contagem_prazos.get("PRESTES A VENCER", 0))
