@@ -1,198 +1,128 @@
 import streamlit as st
 import pandas as pd
-import openpyxl
-import unicodedata
-from io import BytesIO
+import altair as alt
 
 #--- 1. CONFIGURAÇÃO DA PÁGINA ---
-st.set_page_config(page_title="PAINEL DE INDICADORES NORMA ZERO", page_icon="📝", layout="wide")
+st.set_page_config(page_title="Dashboard Executivo NAQH", page_icon="📊", layout="wide")
 
-# --- BLOCO DE CUSTOMIZAÇÃO VISUAL AVANÇADA (CSS INJECT NATIVO) ---
-st.markdown("""
-<style>
-[data-testid="stDataFrame"] td, [data-testid="stDataFrame"] th { font-size: 16px !important; font-weight: 600 !important; color: #FFFFFF !important; }
-[data-testid="stDataFrame"] td:last-child { color: #FBBF24 !important; font-size: 18px !important; font-weight: bold !important; }
-div[data-testid="stSelectbox"] label p, div[data-testid="stFileUploader"] label p { font-size: 15px !important; font-weight: bold !important; color: #38BDF8 !important; }
-section[data-testid="stFileUploaderDropzone"] { border: 2px dashed #38BDF8 !important; background-color: #1E293B !important; }
-/* Rolagem interna controlada para a tabela da barra lateral */
-[data-testid="stSidebar"] [data-testid="stDataFrame"] { max-height: 220px !important; overflow-y: auto !important; }
-</style>
-""", unsafe_allow_html=True)
-
-# --- CABEÇALHO DO HOSPITAL ---
-col_titulo, col_hospital = st.columns([0.65, 0.35])
-
-with col_titulo:
-    st.markdown("# PAINEL DE INDICADORES NORMA ZERO")
-
-with col_hospital:
-    st.markdown("""
-    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px; margin-top: 10px;">
-        <div style="display: flex; align-items: center; gap: 10px;">
-            <span style="font-size: 34px; color: #EF4444; font-weight: bold; line-height: 1;">🏥</span>
-            <span style="font-size: 22px; color: #FFFFFF; font-weight: 800; letter-spacing: 0.5px;">HOSPITAL DA CIDADE</span>
-        </div>
-        <div style="display: flex; align-items: center; gap: 6px; margin-right: 2px;">
-            <span style="font-size: 20px; line-height: 1;">👩‍💼</span>
-            <span style="font-size: 15px; color: #94A3B8; font-weight: 600; letter-spacing: 0.3px;">Coord.: Fabrícia Rocha</span>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
+st.markdown("# 📊 Dashboard Executivo de Indicadores — NAQH")
+st.markdown("Monitoramento técnico de conformidade regulatória e volumetria documental.")
 st.markdown("---")
 
-#--- 2. CARREGAMENTO DO ARQUIVO ---
-st.sidebar.header("⚙️ Entrada de Dados")
-arquivo_excel = st.sidebar.file_uploader("📁 Carregar Planilha Excel (.xlsx):", type=["xlsx"], key="uploader_xlsx")
+#--- 2. BARRA LATERAL (UPLOADS E FILTROS COMPACTOS) ---
+st.sidebar.header("⚙️ Painel de Controle")
 
-df_base = pd.DataFrame()
-media_v1, media_v2 = 0.0, 0.0
-
-def remover_acentos(texto):
-    if pd.isna(texto): return ""
-    return "".join(c for c in unicodedata.normalize('NFD', str(texto)) if unicodedata.category(c) != 'Mn').upper().strip()
+arquivo_excel = st.sidebar.file_uploader("📥 Carregar Planilha Excel (.xlsx):", type=["xlsx"])
 
 if arquivo_excel:
     try:
-        xl = pd.ExcelFile(arquivo_excel, engine="openpyxl")
-        lista_abas_reais = xl.sheet_names
+        # 'header=2' ignora as linhas mescladas de título do topo da sua planilha
+        df = pd.read_excel(arquivo_excel, engine="openpyxl", header=2)
+        df.columns = df.columns.astype(str)
+        df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
         
-        nome_aba_principal = None
-        for n_real in lista_abas_reais:
-            if "GRAF" in str(n_real).upper().strip():
-                nome_aba_principal = n_real
-                break
-        
-        if not nome_aba_principal:
-            for n_real in lista_abas_reais:
-                if "DADOS" in str(n_real).upper().strip():
-                    nome_aba_principal = n_real
-                    break
-        
-        if not nome_aba_principal and lista_abas_reais:
-            nome_aba_principal = lista_abas_reais
-        
-        if nome_aba_principal:
-            df_raw = pd.read_excel(arquivo_excel, sheet_name=nome_aba_principal, header=0, engine="openpyxl")
+        if not df.empty:
+            col_lista = list(df.columns)
+            col_tipo = col_lista[0] if len(col_lista) > 0 else "Tipo"
+            col_setor = col_lista[1] if len(col_lista) > 1 else "Setor"
             
-            df_raw.columns = [str(c).strip() for c in df_raw.columns]
-            colunas_planilha = {str(col).upper().strip(): col for col in df_raw.columns}
+            st.sidebar.markdown("---")
+            st.sidebar.subheader("🔍 Filtros de Segmentação")
             
-            def buscar_coluna(nomes_possiveis, padrao="Não Informado"):
-                for nome in nomes_possiveis:
-                    if nome in colunas_planilha:
-                        return df_raw[colunas_planilha[nome]]
-                return pd.Series([padrao] * len(df_raw))
+            # Filtros na lateral para controle global externo
+            tipos_selecionados = st.sidebar.multiselect(f"Filtrar por {col_tipo}:", options=df[col_tipo].dropna().unique(), default=df[col_tipo].dropna().unique())
+            setores_selecionados = st.sidebar.multiselect(f"Filtrar por {col_setor}:", options=df[col_setor].dropna().unique(), default=df[col_setor].dropna().unique())
 
-            # PROCESSAMENTO DE MÉDIAS MANTIDO APENAS PARA OS CARDS DO TOPO
-            total_colunas = len(df_raw.columns)
-            
-            try:
-                if total_colunas > 6:
-                    s_g = df_raw.iloc[:, 6].astype(str).str.replace(" dias", "", regex=False).str.replace(",", ".", regex=False)
-                    df_g_nums = pd.to_numeric(s_g, errors='coerce').dropna()
-                    df_g_filtrado = df_g_nums[(df_g_nums >= 0) & (df_g_nums < 365)]
-                    media_v1 = df_g_filtrado.mean() if not df_g_filtrado.empty else 0.0
-            except:
-                media_v1 = 0.0
-                
-            try:
-                if total_colunas > 7:
-                    s_h = df_raw.iloc[:, 7].astype(str).str.replace(" dias", "", regex=False).str.replace(",", ".", regex=False)
-                    df_h_nums = pd.to_numeric(s_h, errors='coerce').dropna()
-                    df_h_filtrado = df_h_nums[(df_h_nums >= 0) & (df_h_nums < 365)]
-                    media_v2 = df_h_filtrado.mean() if not df_h_filtrado.empty else 0.0
-            except:
-                media_v2 = 0.0
-            
-            media_v1 = float(media_v1) if pd.notna(media_v1) else 0.0
-            media_v2 = float(media_v2) if pd.notna(media_v2) else 0.0
+            # Base de dados pré-filtrada pelo menu lateral
+            df_base = df[(df[col_setor].isin(setores_selecionados)) & (df[col_tipo].isin(tipos_selecionados))]
 
-            # CAPTURA DOS DADOS
-            df_base = pd.DataFrame()
-            df_base["SIGLA"] = buscar_coluna(["SIGLA DO DOCUMENTO", "SIGLA"], "N/A")
-            df_base["SETOR"] = buscar_coluna(["SETOR"], "N/A")
-            df_base["RESPONSAVEL"] = buscar_coluna(["RESPONSAVEL", "RESPONSÁVEL"], "Não Informado")
-            df_base["STATUS"] = buscar_coluna(["STATUS DO DOCUMENTO NORMATIVO", "STATUS"], "Não Informado")
-            df_base["SIT_PRAZO"] = buscar_coluna(["VENCIDO, NO PRAZO, PRESTES A VENCER", "(VENCIDO, NO PRAZO, PRESTES A VENCER)", "SIT_PRAZO"], "Não Informado")
+            #--- SELETORES DE INTERATIVIDADE CLÁSSICOS (BLINDADOS CONTRA ERROS) ---
+            selecao_clique_tipo = alt.selection_single(fields=[col_tipo], name="clique_tipo")
+            selecao_clique_setor = alt.selection_single(fields=[col_setor], name="clique_setor")
+
+            # Preparação dos dados agrupados para os gráficos
+            dados_tipo = df_base[col_tipo].value_counts().reset_index()
+            dados_tipo.columns = [col_tipo, 'Quantidade']
+
+            dados_setor = df_base[col_setor].value_counts().reset_index()
+            dados_setor.columns = [col_setor, 'Quantidade']
+
+            #--- 3. MONTAGEM DOS DOIS GRÁFICOS INTERATIVOS LADO A LADO ---
+            st.markdown("### 📊 Análise Gráfica de Demandas Interativa")
+            st.markdown("💡 *Dica: Clique em qualquer barra de um dos gráficos abaixo para filtrar os números e a tabela automaticamente!*")
             
-            df_base = df_base.dropna(subset=["SIGLA", "STATUS"], how="all")
-            for col in df_base.columns:
-                df_base[col] = df_base[col].fillna("").astype(str).str.strip()
-            
-            valores_vazios = ["0", "0.0", "NAN", "NONE", "", "NAN NAN", "NÃO INFORMADO", "#VALOR!", "SIGLA DO DOCUMENTO", "STATUS DO DOCUMENTO NORMATIVO"]
-            for col in df_base.columns:
-                df_base = df_base[~df_base[col].str.upper().isin(valores_vazios)]
-            
-            if "RESPONSAVEL" in df_base.columns:
-                df_base["RESPONSAVEL"] = df_base["RESPONSAVEL"].apply(
-                    lambda x: "Antigo Colaborador" if str(x).upper().strip() in ["SABRINA", "SONALHYA"] else str(x).upper().strip()
-                )
-            
-            if "STATUS" in df_base.columns:
-                df_base["STATUS"] = df_base["STATUS"].apply(
-                    lambda x: "AG Aguardando" if "VERIFICADO AGU" in x.upper() or "AGUARDANDO" in x.upper() else str(x).upper().strip()
-                )
+            col_g1, col_g2 = st.columns(2)
+
+            with col_g1:
+                grafico_tipo = alt.Chart(dados_tipo).mark_bar().encode(
+                    x=alt.X(f'{col_tipo}:N', sort='-y', title=col_tipo),
+                    y=alt.Y('Quantidade:Q', title='Quantidade'),
+                    color=alt.condition(selecao_clique_tipo, alt.value("#1f77b4"), alt.value("#4A5260")),
+                    opacity=alt.condition(selecao_clique_tipo, alt.value(1.0), alt.value(0.3)),
+                    tooltip=[col_tipo, 'Quantidade']
+                ).add_selection(selecao_clique_tipo).properties(height=350, title=f"Volumetria por {col_tipo}")
                 
+                evento_tipo = st.altair_chart(grafico_tipo, use_container_width=True, on_select="rerun")
+
+            with col_g2:
+                grafico_setor = alt.Chart(dados_setor).mark_bar().encode(
+                    x=alt.X(f'{col_setor}:N', sort='-y', title=col_setor),
+                    y=alt.Y('Quantidade:Q', title='Quantidade'),
+                    color=alt.condition(selecao_clique_setor, alt.value("#2ca02c"), alt.value("#4A5260")),
+                    opacity=alt.condition(selecao_clique_setor, alt.value(1.0), alt.value(0.3)),
+                    tooltip=[col_setor, 'Quantidade']
+                ).add_selection(selecao_clique_setor).properties(height=350, title=f"Demandas por {col_setor}")
+                
+                evento_setor = st.altair_chart(grafico_setor, use_container_width=True, on_select="rerun")
+
+            #--- 4. APLICAÇÃO DINÂMICA DO CLIQUE NA BASE DE DATOS ---
+            df_filtrado = df_base.copy()
+            
+            # Filtro inteligente pelo clique no gráfico de tipos
+            if evento_tipo and "clique_tipo" in evento_tipo.get("selection", {}):
+                valores_clicados_tipo = evento_tipo["selection"]["clique_tipo"]
+                if valores_clicados_tipo:
+                    df_filtrado = df_filtrado[df_filtrado[col_tipo].isin([v[col_tipo] for v in valores_clicados_tipo])]
+
+            # Filtro inteligente pelo clique no gráfico de setores
+            if evento_setor and "clique_setor" in evento_setor.get("selection", {}):
+                valores_clicados_setor = evento_setor["selection"]["clique_setor"]
+                if valores_clicados_setor:
+                    df_filtrado = df_filtrado[df_filtrado[col_setor].isin([v[col_setor] for v in valores_clicados_setor])]
+
+            st.markdown("---")
+            
+            #--- 5. CARTÕES DESIGN PREMIUM (KPIs RECALCULADOS PELO CLIQUE) ---
+            kpi_col1, kpi_kpi2, kpi_col3 = st.columns(3)
+            total_docs = len(df_filtrado)
+            
+            # CORREÇÃO DA VARIÁVEL: Pega estritamente a primeira ocorrência textual para evitar erro de DataFrame
+            col_status_lista = [c for c in df.columns if "OK" in str(c).upper() or "STATUS" in str(c).upper() or "SITUA" in str(c).upper()]
+            
+            if col_status_lista:
+                alvo_status = col_status_lista[0]
+                aprovados = len(df_filtrado[df_filtrado[alvo_status].astype(str).str.upper().str.contains("APROVADO|OK|SIM|✔️", regex=True)])
+            else:
+                aprovados = total_docs
+                
+            taxa_aprovacao = int((aprovados / total_docs) * 100) if total_docs > 0 else 0
+
+            with kpi_col1:
+                st.markdown(f"<div style='background-color: #1E222D; padding: 20px; border-radius: 10px; border-left: 5px solid #1f77b4; text-align: center;'><span style='color: #8C949E; font-size: 14px; font-weight: bold; text-transform: uppercase;'>📄 Total Selecionado</span><h2 style='color: #FFFFFF; margin: 10px 0 0 0; font-size: 32px;'>{total_docs}</h2></div>", unsafe_allow_html=True)
+
+            with kpi_kpi2:
+                st.markdown(f"<div style='background-color: #1E222D; padding: 20px; border-radius: 10px; border-left: 5px solid #2ca02c; text-align: center;'><span style='color: #8C949E; font-size: 14px; font-weight: bold; text-transform: uppercase;'>✅ Concluídos / Aprovados</span><h2 style='color: #2ca02c; margin: 10px 0 0 0; font-size: 32px;'>{aprovados}</h2></div>", unsafe_allow_html=True)
+
+            with kpi_col3:
+                st.markdown(f"<div style='background-color: #1E222D; padding: 20px; border-radius: 10px; border-left: 5px solid #ff7f0e; text-align: center;'><span style='color: #8C949E; font-size: 14px; font-weight: bold; text-transform: uppercase;'>📈 Índice de Eficiência</span><h2 style='color: #ff7f0e; margin: 10px 0 0 0; font-size: 32px;'>{taxa_aprovacao}%</h2></div>", unsafe_allow_html=True)
+
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            #--- 6. VISUALIZAÇÃO DA TABELA TÉCNICA DINÂMICA ---
+            st.markdown("### 📋 Banco de Dados Estruturado (Filtro Ativo)")
+            st.dataframe(df_filtrado, use_container_width=True)
+            
     except Exception as e:
-        st.error(f"Erro crítico no processamento dos dados da planilha: {e}")
-
-#--- 3. MENUS LATERAIS DE FILTROS ---
-if not df_base.empty:
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("🔍 Filtros de Visualização")
-    
-    lista_responsaveis = sorted([str(r) for r in df_base["RESPONSAVEL"].dropna().unique() if str(r).strip() != ""])
-    lista_responsaveis.insert(0, "Todos")
-    responsavel_selecionado = st.sidebar.selectbox("Selecione o Responsável (Filtro Geral):", lista_responsaveis)
-    
-    lista_documentos = sorted([str(d) for d in df_base["SIGLA"].dropna().unique() if str(d).strip() != ""])
-    lista_documentos.insert(0, "Todos")
-    documento_selecionado = st.sidebar.selectbox("Filtrar por Tipo de Documento:", lista_documentos)
-    
-    df_filtrado = df_base.copy()
-    if responsavel_selecionado != "Todos":
-        df_filtrado = df_filtrado[df_filtrado["RESPONSAVEL"] == responsavel_selecionado]
-    if documento_selecionado != "Todos":
-        df_filtrado = df_filtrado[df_filtrado["SIGLA"] == documento_selecionado]
-    
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("📊 Qtd por Documento (Sigla)")
-    df_lateral_contagem = df_filtrado["SIGLA"].dropna().value_counts().reset_index()
-    df_lateral_contagem.columns = ["Documento", "Qtd"]
-    st.sidebar.dataframe(df_lateral_contagem, use_container_width=True, hide_index=True, height=180)
-    
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("🎨 Configuração dos Gráficos")
-    c_g1_color = st.sidebar.color_picker("G1 - Cor Geral / Tipo:", "#FBBF24", key="c1")
-    c_g4_color = st.sidebar.color_picker("G4 - Cor Prazo:", "#C084FC", key="c4")
-    c_prof_color = st.sidebar.color_picker("G5 - Cor Profissional:", "#38BDF8", key="c5")
-    
-    #--- 4. INDICADORES DO TOPO (CARDS) ---
-    total_docs = len(df_filtrado)
-    aprovados = len(df_filtrado[df_filtrado["STATUS"].str.contains("APROVADO|OK|SIM", na=False)])
-    
-    kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
-    with kpi_col1: st.metric(label="📊 TOTAL DOCUMENTOS", value=f"{total_docs}")
-    with kpi_col2: st.metric(label="✅ APROVADOS", value=f"{aprovados}")
-    with kpi_col3: st.metric(label="⏳ 1º VERF.", value=f"{media_v1:.1f} d")
-    with kpi_col4: st.metric(label="⏳ 2º VERF.", value=f"{media_v2:.1f} d")
-    
-    st.markdown("<br>", unsafe_allow_html=True)
-    
-    #--- 5. RENDERIZAÇÃO DOS GRÁFICOS ---
-    # LINHA 1: Documentos por Status e Situação de Prazos
-    linha1_col1, linha1_col2 = st.columns(2)
-    with linha1_col1:
-        st.markdown("### Documentos por Status")
-        dados_g1 = df_filtrado["STATUS"].dropna().value_counts()
-        st.bar_chart(dados_g1, color=c_g1_color, horizontal=True)
-        
-    with linha1_col2:
-        st.markdown("### Situação de Prazos")
-        s_prazos_limpos = df_filtrado["SIT_PRAZO"].apply(remover_acentos)
-        contagem_prazos = s_prazos_limpos.value_counts()
-        
-        dados_prazo = pd.Series(0, index=["No Prazo", "Prestes a Vencer", "Vencido"])
-        dados_prazo["No Prazo"] = int(contagem_prazos.get("VALIDO", 0) + contagem_prazos.get("NO PRAZO", 0))
-        dados_prazo["Prestes a Vencer"] = int(contagem_prazos.get("PRESTES A VENCER", 0))
+        st.error(f"⚠️ Falha técnica ao processar a interatividade do Excel: {e}")
+else:
+    st.info("💡 **Painel Pronto:** Carregue a planilha Excel no menu lateral para ativar os gráficos interativos por clique.")
