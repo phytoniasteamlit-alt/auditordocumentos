@@ -86,6 +86,8 @@ if uploaded_file is not None:
             df["STATUS DO DOCUMENTO NORMATIVO"] = df["STATUS DO DOCUMENTO NORMATIVO"].replace({
                 "VERIFICADO AGUARDA DEVOLUÇÃO SETOR": "AG. DEV - SETOR"
             })
+            # [BLINDAGEM] Força toda a coluna de status a ficar em maiúscula para evitar falhas de digitação
+            df["STATUS DO DOCUMENTO NORMATIVO"] = df["STATUS DO DOCUMENTO NORMATIVO"].astype(str).str.upper()
             
     except Exception as e:
         st.error(f"Erro ao processar o arquivo: {e}")
@@ -197,7 +199,7 @@ else:
     st.warning("Coluna de status indisponível ou vazia.")
 
 # ==============================================================================
-# 6. GRÁFICO 4: DOCUMENTOS POR PROFISSIONAL (AGORA EM TELA CHEIA)
+# 6. GRÁFICO 4: DOCUMENTOS POR PROFISSIONAL
 # ==============================================================================
 st.markdown("---")
 st.subheader("4 Documentos por Profissional")
@@ -240,7 +242,3 @@ else:
     st.warning("Coluna de profissionais indisponível.")
 
 # ==============================================================================
-# 7. GRÁFICO 5: DOCUMENTOS APROVADOS POR TIPO (AGORA EM TELA CHEIA)
-# ==============================================================================
-st.markdown("---")
-st.subheader("5 Documentos Aprovados por Tipo")
