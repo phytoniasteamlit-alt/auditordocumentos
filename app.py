@@ -187,6 +187,6 @@ if not df_base.empty:
         dados_prazo["Vencido"] = int(contagem_prazos.get("VENCIDO", 0))
         st.bar_chart(dados_prazo, color=c_g4_color, horizontal=True)
     
-    # CORREÇÃO DA LINHA INVISÍVEL DIVISÓRIA (Garante a renderização forçada)
-    st.markdown("<div style='margin-bottom: 50px;'></div>", unsafe_allow_html=True)
-    
+    # CORREÇÃO DA LINHA INVISÍVEL DIVISÓRIA (Substituído st.markdown por contêiner nativo invisível)
+    espacador_invisivel = st.container(border=False)
+    with espacador_invisivel:
