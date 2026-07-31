@@ -65,13 +65,13 @@ if uploaded_file is not None:
     try:
         df = pd.read_excel(uploaded_file, sheet_name="DADOS_GRÁFICOS")
         
-        # 1. Remover espaços em branco invisíveis do início e fim dos textos das colunas
+        # 1. Limpeza de espaços e padronização para MAIÚSCULAS para evitar erros de cruzamento de texto
         for col in df.columns:
             if df[col].dtype == "object":
-                df[col] = df[col].astype(str).str.strip()
+                df[col] = df[col].astype(str).str.strip().str.upper()
                 
         # 2. Substituir strings de erro do Excel por valores nulos limpos
-        df = df.replace(["#VALOR!", "0", "0.0", "None", "nan", "NaN"], None)
+        df = df.replace(["#VALOR!", "0", "0.0", "NONE", "NAN", "NAN"], None)
         
         # 3. Remover linhas completamente vazias para não inflar a contagem de documentos
         df = df.dropna(subset=["SIGLA DO DOCUMENTO", "NOME DO DOCUMENTO", "RESPONSÁVEL"], how="all")
@@ -79,15 +79,13 @@ if uploaded_file is not None:
         # Altera a legenda "A" para "Agd Dev Setor" em memória na coluna temporal
         col_vencido = "(Vencido, No Prazo, Prestes a Vencer)"
         if col_vencido in df.columns:
-            df[col_vencido] = df[col_vencido].replace({"A": "Agd Dev Setor"})
+            df[col_vencido] = df[col_vencido].replace({"A": "AGD DEV SETOR"})
             
         # Altera o status longo para "AG. DEV - SETOR" diretamente na memória
         if "STATUS DO DOCUMENTO NORMATIVO" in df.columns:
             df["STATUS DO DOCUMENTO NORMATIVO"] = df["STATUS DO DOCUMENTO NORMATIVO"].replace({
                 "VERIFICADO AGUARDA DEVOLUÇÃO SETOR": "AG. DEV - SETOR"
             })
-            # [BLINDAGEM] Força toda a coluna de status a ficar em maiúscula para evitar falhas de digitação
-            df["STATUS DO DOCUMENTO NORMATIVO"] = df["STATUS DO DOCUMENTO NORMATIVO"].astype(str).str.upper()
             
     except Exception as e:
         st.error(f"Erro ao processar o arquivo: {e}")
@@ -100,9 +98,9 @@ else:
 # ==============================================================================
 # 3. PROCESSAMENTO DOS INDICADORES CRÍTICOS (METRICS)
 # ==============================================================================
-status_documento = df["STATUS DO DOCUMENTO NORMATIVO"].fillna("Não Informado")
+status_documento = df["STATUS DO DOCUMENTO NORMATIVO"].fillna("NÃO INFORMADO")
 total_docs = len(df)
-aprovados = len(df[status_documento.str.upper() == "APROVADO"])
+aprovados = len(df[status_documento == "APROVADO"])
 
 # Contagem baseada nos textos limpos e abreviados da coluna
 verf_1 = len(df[status_documento.str.contains("AG. DEV - SETOR", case=False, na=False)])
@@ -205,7 +203,7 @@ st.markdown("---")
 st.subheader("4 Documentos por Profissional")
 
 profissionais_totais = df["RESPONSÁVEL"].dropna().unique().tolist()
-profissionais_ativos = [p for p in profissionais_totais if p.upper() not in ["SABRINA", "SONALHYA"]]
+profissionais_ativos = [p for p in profissionais_totais if p not in ["SABRINA", "SONALHYA", "SONALIA"]]
 
 if profissionais_ativos:
     prof_selecionado = st.selectbox("Selecionar Profissional para Análise:", options=["Todos"] + profissionais_ativos)
@@ -242,3 +240,7 @@ else:
     st.warning("Coluna de profissionais indisponível.")
 
 # ==============================================================================
+# 7. GRÁFICO 5: DOCUMENTOS APROVADOS POR TIPO
+# ==============================================================================
+st.markdown("---")
+st.subheader("5 Documentos Aprovados por Tipo")
