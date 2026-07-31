@@ -57,14 +57,12 @@ if arquivo_excel:
         xl = pd.ExcelFile(arquivo_excel, engine="openpyxl")
         lista_abas_reais = xl.sheet_names
         
-        # PROCURA DIRETAMENTE PELA ABA "DADOS_GRÁFICOS" INFORMADA
         nome_aba_principal = None
         for n_real in lista_abas_reais:
             if "GRAF" in str(n_real).upper().strip():
                 nome_aba_principal = n_real
                 break
         
-        # Caso a aba mude de nome futuramente, busca um termo alternativo coerente
         if not nome_aba_principal:
             for n_real in lista_abas_reais:
                 if "DADOS" in str(n_real).upper().strip():
@@ -75,10 +73,8 @@ if arquivo_excel:
             nome_aba_principal = lista_abas_reais[0]
         
         if nome_aba_principal:
-            # Lê estritamente a aba selecionada mapeando a primeira linha como cabeçalho
             df_raw = pd.read_excel(arquivo_excel, sheet_name=nome_aba_principal, header=0, engine="openpyxl")
             
-            # Limpa espaços fantasmas nos cabeçalhos das colunas
             df_raw.columns = [str(c).strip() for c in df_raw.columns]
             colunas_planilha = {str(col).upper().strip(): col for col in df_raw.columns}
             
@@ -88,25 +84,31 @@ if arquivo_excel:
                         return df_raw[colunas_planilha[nome]]
                 return pd.Series([padrao] * len(df_raw))
 
-            # 1. CORREÇÃO CRÍTICA DO PROCESSAMENTO DAS MÉDIAS (Substituído .shape por len das colunas)
+            # 1. TRATAMENTO PROTEGIDO CONTRA ERROS DE FÓRMULA (#VALOR!) NAS MÉDIAS
             total_colunas = len(df_raw.columns)
             
-            if total_colunas > 6:
-                s_g = df_raw.iloc[:, 6].astype(str).str.replace(" dias", "", regex=False).str.replace(",", ".", regex=False)
-                df_g_nums = pd.to_numeric(s_g, errors='coerce').dropna()
-                df_g_filtrado = df_g_nums[(df_g_nums >= 0) & (df_g_nums < 365)]
-                media_v1 = df_g_filtrado.mean() if not df_g_filtrado.empty else 0.0
-            
-            if total_colunas > 7:
-                s_h = df_raw.iloc[:, 7].astype(str).str.replace(" dias", "", regex=False).str.replace(",", ".", regex=False)
-                df_h_nums = pd.to_numeric(s_h, errors='coerce').dropna()
-                df_h_filtrado = df_h_nums[(df_h_nums >= 0) & (df_h_nums < 365)]
-                media_v2 = df_h_filtrado.mean() if not df_h_filtrado.empty else 0.0
+            try:
+                if total_colunas > 6:
+                    s_g = df_raw.iloc[:, 6].astype(str).str.replace(" dias", "", regex=False).str.replace(",", ".", regex=False)
+                    df_g_nums = pd.to_numeric(s_g, errors='coerce').dropna()
+                    df_g_filtrado = df_g_nums[(df_g_nums >= 0) & (df_g_nums < 365)]
+                    media_v1 = df_g_filtrado.mean() if not df_g_filtrado.empty else 0.0
+            except:
+                media_v1 = 0.0
+                
+            try:
+                if total_colunas > 7:
+                    s_h = df_raw.iloc[:, 7].astype(str).str.replace(" dias", "", regex=False).str.replace(",", ".", regex=False)
+                    df_h_nums = pd.to_numeric(s_h, errors='coerce').dropna()
+                    df_h_filtrado = df_h_nums[(df_h_nums >= 0) & (df_h_nums < 365)]
+                    media_v2 = df_h_filtrado.mean() if not df_h_filtrado.empty else 0.0
+            except:
+                media_v2 = 0.0
             
             media_v1 = float(media_v1) if pd.notna(media_v1) else 0.0
             media_v2 = float(media_v2) if pd.notna(media_v2) else 0.0
 
-            # 2. CAPTURA DOS DADOS MAPEADOS DE FORMA SEGURA POR NOMES DE CABEÇALHO
+            # 2. CAPTURA DOS DADOS MAIS SEGUROS
             df_base = pd.DataFrame()
             df_base["SIGLA"] = buscar_coluna(["SIGLA DO DOCUMENTO", "SIGLA"], "N/A")
             df_base["SETOR"] = buscar_coluna(["SETOR"], "N/A")
@@ -114,17 +116,14 @@ if arquivo_excel:
             df_base["STATUS"] = buscar_coluna(["STATUS DO DOCUMENTO NORMATIVO", "STATUS"], "Não Informado")
             df_base["SIT_PRAZO"] = buscar_coluna(["VENCIDO, NO PRAZO, PRESTES A VENCER", "(VENCIDO, NO PRAZO, PRESTES A VENCER)", "SIT_PRAZO"], "Não Informado")
             
-            # Limpeza inicial de linhas em branco do Excel
             df_base = df_base.dropna(subset=["SIGLA", "STATUS"], how="all")
             for col in df_base.columns:
                 df_base[col] = df_base[col].fillna("").astype(str).str.strip()
             
-            # Filtro para remover registros com lixo estrutural
             valores_vazios = ["0", "0.0", "NAN", "NONE", "", "NAN NAN", "NÃO INFORMADO", "#VALOR!", "SIGLA DO DOCUMENTO", "STATUS DO DOCUMENTO NORMATIVO"]
             for col in df_base.columns:
                 df_base = df_base[~df_base[col].str.upper().isin(valores_vazios)]
             
-            # Substituição e padronização das colaboradoras desligadas
             if "RESPONSAVEL" in df_base.columns:
                 df_base["RESPONSAVEL"] = df_base["RESPONSAVEL"].apply(
                     lambda x: "Antigo Colaborador" if str(x).upper().strip() in ["SABRINA", "SONALHYA"] else str(x).upper().strip()
@@ -192,3 +191,13 @@ if not df_base.empty:
     with linha1_col2:
         st.markdown("### Tempo de Análise")
         dados_g2 = pd.Series({"1º Verf.": media_v1, "2º Verf.": media_v2, "Total Estimado": (media_v1 + media_v2)})
+        st.bar_chart(dados_g2, color=c_g2_color, horizontal=True)
+    
+    st.markdown("---")
+    linha2_col1, linha2_col2 = st.columns(2)
+    
+    with linha2_col1:
+        st.markdown("### Situação de Prazos")
+        s_prazos_limpos = df_filtrado["SIT_PRAZO"].apply(remover_acentos)
+        contagem_prazos = s_prazos_limpos.value_counts()
+        
