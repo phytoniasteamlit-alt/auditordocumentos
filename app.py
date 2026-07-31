@@ -12,7 +12,8 @@ st.set_page_config(
 )
 
 # --- CABEÇALHO SUPERIOR (LADO DIREITO / ESQUERDA) ---
-header_left, header_right = st.columns()
+# [CORREÇÃO] Passado o número 2 para indicar a criação de duas colunas no topo
+header_left, header_right = st.columns(2)
 
 with header_right:
     st.markdown(
@@ -181,7 +182,7 @@ st.markdown("---")
 # ==============================================================================
 row2_col1, row2_col2 = st.columns(2)
 
-# GRÁFICO 4: Documentos por Profissional (Otimizado sem facetas para evitar embolar)
+# GRÁFICO 4: Documentos por Profissional
 with row2_col1:
     st.subheader("4 Documentos por Profissional")
     
@@ -204,8 +205,7 @@ with row2_col1:
         if not df_g4.empty:
             df_g4_counts = df_g4.groupby(["RESPONSÁVEL", "STATUS DO DOCUMENTO NORMATIVO"]).size().reset_index(name="Quantidade")
             
-            # [MELHORIA VISUAL DEFINITIVA] Barras horizontais agrupadas por Profissional no eixo Y.
-            # Remove o facet_col para acabar de vez com o embolado de mini-títulos na tela.
+            # Barras horizontais agrupadas por Profissional no eixo Y
             fig4 = px.bar(
                 df_g4_counts, 
                 x="Quantidade", 
@@ -224,7 +224,7 @@ with row2_col1:
                 }
             )
             fig4.update_traces(textposition="outside")
-            fig4.update_yaxes(categoryorder="total ascending") # Ordena do profissional com mais documentos para o menor
+            fig4.update_yaxes(categoryorder="total ascending")
             st.plotly_chart(fig4, use_container_width=True)
         else:
             st.info("Nenhum dado encontrado para o profissional selecionado.")
@@ -243,3 +243,6 @@ with row2_col2:
             default=tipos_disponiveis
         )
         
+        df_g5 = df[(df["STATUS DO DOCUMENTO NORMATIVO"].str.upper() == "APROVADO") & (df["SIGLA DO DOCUMENTO"].isin(tipos_selecionados))]
+        
+        if not df_g5.empty:
