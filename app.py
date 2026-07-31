@@ -5,7 +5,7 @@ import unicodedata
 from io import BytesIO
 
 #--- 1. CONFIGURAÇÃO DA PÁGINA ---
-st.set_page_config(page_title="PAINEL DE INDICADORES NORMA ZERO", page_icon="📋", layout="wide")
+st.set_page_config(page_title="PAINEL DE INDICADORES NORMA ZERO", page_icon="📝", layout="wide")
 
 # --- BLOCO DE CUSTOMIZAÇÃO VISUAL AVANÇADA (CSS INJECT NATIVO) ---
 st.markdown("""
@@ -21,20 +21,21 @@ section[data-testid="stFileUploaderDropzone"] { border: 2px dashed #38BDF8 !impo
 
 # --- CABEÇALHO DO HOSPITAL ---
 col_titulo, col_hospital = st.columns([0.65, 0.35])
+
 with col_titulo:
     st.markdown("# PAINEL DE INDICADORES NORMA ZERO")
 
 with col_hospital:
     st.markdown("""
     <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px; margin-top: 10px;">
-    <div style="display: flex; align-items: center; gap: 10px;">
-    <span style="font-size: 34px; color: #EF4444; font-weight: bold; line-height: 1;">🏥</span>
-    <span style="font-size: 22px; color: #FFFFFF; font-weight: 800; letter-spacing: 0.5px;">HOSPITAL DA CIDADE</span>
-    </div>
-    <div style="display: flex; align-items: center; gap: 6px; margin-right: 2px;">
-    <span style="font-size: 20px; line-height: 1;">👩‍💼</span>
-    <span style="font-size: 15px; color: #94A3B8; font-weight: 600; letter-spacing: 0.3px;">Coord.: Fabrícia Rocha</span>
-    </div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 34px; color: #EF4444; font-weight: bold; line-height: 1;">🏥</span>
+            <span style="font-size: 22px; color: #FFFFFF; font-weight: 800; letter-spacing: 0.5px;">HOSPITAL DA CIDADE</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; margin-right: 2px;">
+            <span style="font-size: 20px; line-height: 1;">👩‍💼</span>
+            <span style="font-size: 15px; color: #94A3B8; font-weight: 600; letter-spacing: 0.3px;">Coord.: Fabrícia Rocha</span>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -65,18 +66,18 @@ if arquivo_excel:
         
         if not nome_aba_principal and lista_abas_reais:
             nome_aba_principal = lista_abas_reais[0]
-            
+        
         if nome_aba_principal:
-            # Lendo a partir da linha 1 (header=0) para pegar a estrutura inteira de colunas do Excel
+            # Lendo a partir da linha 1 (header=0) para pegar a estrutura de colunas correta
             df_raw = pd.read_excel(arquivo_excel, sheet_name=nome_aba_principal, header=0, engine="openpyxl")
             
-            # 1. PROCESSAMENTO DAS MÉDIAS (Colunas G e H fixas por posição para evitar erros de fórmulas)
+            # 1. PROCESSAMENTO DAS MÉDIAS (Colunas G e H fixas por posição)
             if df_raw.shape[1] > 6:
                 s_g = df_raw.iloc[:, 6].astype(str).str.replace(" dias", "", regex=False).str.replace(",", ".", regex=False)
                 df_g_nums = pd.to_numeric(s_g, errors='coerce').dropna()
                 df_g_filtrado = df_g_nums[(df_g_nums >= 0) & (df_g_nums < 365)]
                 media_v1 = df_g_filtrado.mean() if not df_g_filtrado.empty else 0.0
-                
+            
             if df_raw.shape[1] > 7:
                 s_h = df_raw.iloc[:, 7].astype(str).str.replace(" dias", "", regex=False).str.replace(",", ".", regex=False)
                 df_h_nums = pd.to_numeric(s_h, errors='coerce').dropna()
@@ -87,7 +88,6 @@ if arquivo_excel:
             media_v2 = float(media_v2) if pd.notna(media_v2) else 0.0
 
             # 2. CAPTURA DOS DADOS TRAVADA POR POSIÇÃO DA PLANILHA (A, B, D, E, F)
-            df_base = pd.DataFrame()
             num_colunas = df_raw.shape[1]
             
             df_base["SIGLA"] = df_raw.iloc[:, 0] if num_colunas > 0 else "N/A"
@@ -95,17 +95,17 @@ if arquivo_excel:
             df_base["RESPONSAVEL"] = df_raw.iloc[:, 3] if num_colunas > 3 else "Não Informado"
             df_base["STATUS"] = df_raw.iloc[:, 4] if num_colunas > 4 else "Não Informado"
             df_base["SIT_PRAZO"] = df_raw.iloc[:, 5] if num_colunas > 5 else "Não Informado"
-
+            
             # Limpeza inicial de linhas em branco do Excel
             df_base = df_base.dropna(subset=["SIGLA", "STATUS"], how="all")
-
             for col in df_base.columns:
                 df_base[col] = df_base[col].fillna("").astype(str).str.strip()
             
-            valores_vazios = ["0", "0.0", "NAN", "NONE", "", "NAN NAN", "NÃO INFORMADO", "A", "#VALOR!", "SIGLA DO DOCUMENTO", "STATUS DO DOCUMENTO NORMATIVO"]
+            # CORREÇÃO: "A" isolado removido para evitar falsos positivos de remoção de linhas
+            valores_vazios = ["0", "0.0", "NAN", "NONE", "", "NAN NAN", "NÃO INFORMADO", "#VALOR!", "SIGLA DO DOCUMENTO", "STATUS DO DOCUMENTO NORMATIVO"]
             for col in df_base.columns:
                 df_base = df_base[~df_base[col].str.upper().isin(valores_vazios)]
-
+            
             # Substituição e padronização das colaboradoras desligadas
             if "RESPONSAVEL" in df_base.columns:
                 df_base["RESPONSAVEL"] = df_base["RESPONSAVEL"].apply(
@@ -114,7 +114,7 @@ if arquivo_excel:
             
             if "STATUS" in df_base.columns:
                 df_base["STATUS"] = df_base["STATUS"].apply(
-                    lambda x: "AG Aguardando" if "VERIFICADO AGU" in x.upper() or "AGUARDANDO" in x.upper() else x
+                    lambda x: "AG Aguardando" if "VERIFICADO AGU" in x.upper() or "AGUARDANDO" in x.upper() else x.upper().strip()
                 )
                 
     except Exception as e:
@@ -153,26 +153,26 @@ if not df_base.empty:
     
     #--- 4. INDICADORES DO TOPO (CARDS) ---
     total_docs = len(df_filtrado)
-    aprovados = len(df_filtrado[df_filtrado["STATUS"].astype(str).str.upper().str.contains("APROVADO|OK|SIM", na=False)])
+    aprovados = len(df_filtrado[df_filtrado["STATUS"].str.contains("APROVADO|OK|SIM", na=False)])
     
     kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
-    with kpi_col1: st.metric(label="📄 TOTAL DOCUMENTOS", value=f"{total_docs}")
+    with kpi_col1: st.metric(label="📊 TOTAL DOCUMENTOS", value=f"{total_docs}")
     with kpi_col2: st.metric(label="✅ APROVADOS", value=f"{aprovados}")
     with kpi_col3: st.metric(label="⏳ 1º VERF.", value=f"{media_v1:.1f} d")
     with kpi_col4: st.metric(label="⏳ 2º VERF.", value=f"{media_v2:.1f} d")
     
     st.markdown("<br>", unsafe_allow_html=True)
     
-    #--- 5. RENDERIZAÇÃO DOS GRÁFICOS INICIAIS ---
+    #--- 5. RENDERIZAÇÃO DOS GRÁFICOS ---
     linha1_col1, linha1_col2 = st.columns(2)
     
     with linha1_col1:
-        st.markdown("### 📊 Documentos por Status")
+        st.markdown("### Documentos por Status")
         dados_g1 = df_filtrado["STATUS"].dropna().value_counts()
         st.bar_chart(dados_g1, color=c_g1_color, horizontal=True)
     
     with linha1_col2:
-        st.markdown("### ⏱️ Tempo de Análise")
+        st.markdown("### Tempo de Análise")
         dados_g2 = pd.Series({"1º Verf.": media_v1, "2º Verf.": media_v2, "Total Estimado": (media_v1 + media_v2)})
         st.bar_chart(dados_g2, color=c_g2_color, horizontal=True)
     
@@ -181,7 +181,7 @@ if not df_base.empty:
     linha2_col1, linha2_col2 = st.columns(2)
     
     with linha2_col1:
-        st.markdown("### 📅 Situação de Prazos")
+        st.markdown("### Situação de Prazos")
         s_prazos_limpos = df_filtrado["SIT_PRAZO"].apply(remover_acentos)
         contagem_prazos = s_prazos_limpos.value_counts()
         
@@ -191,8 +191,8 @@ if not df_base.empty:
             "Vencido": contagem_prazos.get("VENCIDO", 0)
         })
         st.bar_chart(dados_prazo, color=c_g4_color, horizontal=True)
-
+        
     with linha2_col2:
-        st.markdown("### 🏆 Documentos Aprovados por Tipo")
-        df_aprov_por_tipo = df_filtrado[df_filtrado["STATUS"].astype(str).str.upper().str.contains("APROVADO|OK|SIM", na=False)]
+        st.markdown("### Documentos Aprovados por Tipo")
+        df_aprov_por_tipo = df_filtrado[df_filtrado["STATUS"].str.contains("APROVADO|OK|SIM", na=False)]
         dados_tipo = df_aprov_por_tipo["SIGLA"].dropna().value_counts()
