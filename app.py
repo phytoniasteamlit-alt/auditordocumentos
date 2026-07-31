@@ -65,7 +65,7 @@ if uploaded_file is not None:
     try:
         df = pd.read_excel(uploaded_file, sheet_name="DADOS_GRÁFICOS")
         
-        # 1. Limpeza padrão de espaços extras e conversão para maiúsculas direta
+        # 1. Limpeza de espaços invisíveis e conversão forçada para maiúsculas
         for col in df.columns:
             if df[col].dtype == "object":
                 df[col] = df[col].astype(str).str.strip().str.upper()
@@ -73,7 +73,7 @@ if uploaded_file is not None:
         # 2. Substituir strings de erro do Excel por valores nulos limpos
         df = df.replace(["#VALOR!", "0", "0.0", "NONE", "NAN", "NAN"], None)
         
-        # 3. Remover linhas completamente vazias para não inflar a contagem de documentos
+        # 3. Remover linhas totalmente vazias para evitar inflar contagens
         df = df.dropna(subset=["SIGLA DO DOCUMENTO", "NOME DO DOCUMENTO", "RESPONSÁVEL"], how="all")
 
         # Altera a legenda "A" para "Agd Dev Setor" em memória na coluna temporal
@@ -102,7 +102,7 @@ status_documento = df["STATUS DO DOCUMENTO NORMATIVO"].fillna("NÃO INFORMADO")
 total_docs = len(df)
 aprovados = len(df[status_documento == "APROVADO"])
 
-# Filtros diretos e seguros sem usar .contains() de risco para ignorar NaN
+# Filtros diretos por igualdade para evitar quebras por linhas vazias
 verf_1 = len(df[status_documento == "AG. DEV - SETOR"])
 verf_2 = len(df[status_documento == "EM VERIFICAÇÃO"])
 
@@ -240,9 +240,10 @@ else:
     st.warning("Coluna de profissionais indisponível.")
 
 # ==============================================================================
-# 7. GRÁFICO 5: DOCUMENTOS APROVADOS POR TIPO (MUDANÇA VISUAL E BLINDAGEM DE FILTRO)
+# 7. GRÁFICO 5: DOCUMENTOS APROVADOS POR TIPO (FILTRAGEM CORRIGIDA POR IGUALDADE)
 # ==============================================================================
 st.markdown("---")
 st.subheader("5 Documentos Aprovados por Tipo")
 tipos_disponiveis = df["SIGLA DO DOCUMENTO"].dropna().unique().tolist()
 
+if tipos_disponiveis:
