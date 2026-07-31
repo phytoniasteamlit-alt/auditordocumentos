@@ -104,7 +104,6 @@ aprovados = len(df[status_documento.str.upper() == "APROVADO"])
 
 # Contagem baseada nos textos limpos e abreviados da coluna
 verf_1 = len(df[status_documento.str.contains("AG. DEV - SETOR", case=False, na=False)])
-# [CORRIGIDO] Trocado o hífen por sinal de igual (na=False) para eliminar o erro de sintaxe
 verf_2 = len(df[status_documento.str.contains("EM VERIFICAÇÃO", case=False, na=False)])
 
 # --- EXIBIÇÃO DAS CAIXAS DE MÉTRICAS INDEPENDENTES ---
@@ -197,47 +196,51 @@ if status_disponiveis:
 else:
     st.warning("Coluna de status indisponível ou vazia.")
 
+# ==============================================================================
+# 6. GRÁFICO 4: DOCUMENTOS POR PROFISSIONAL (AGORA EM TELA CHEIA)
+# ==============================================================================
 st.markdown("---")
+st.subheader("4 Documentos por Profissional")
 
-# ==============================================================================
-# 6. ANÁLISE POR PROFISSIONAL (REMOÇÃO DE EX-FUNCIONÁRIAS E CORREÇÃO VISUAL)
-# ==============================================================================
-row2_col1, row2_col2 = st.columns(2)
+profissionais_totais = df["RESPONSÁVEL"].dropna().unique().tolist()
+profissionais_ativos = [p for p in profissionais_totais if p.upper() not in ["SABRINA", "SONALHYA"]]
 
-# GRÁFICO 4: Documentos por Profissional
-with row2_col1:
-    st.subheader("4 Documentos por Profissional")
+if profissionais_ativos:
+    prof_selecionado = st.selectbox("Selecionar Profissional para Análise:", options=["Todos"] + profissionais_ativos)
     
-    profissionais_totais = df["RESPONSÁVEL"].dropna().unique().tolist()
-    profissionais_ativos = [p for p in profissionais_totais if p.upper() not in ["SABRINA", "SONALHYA"]]
-    
-    if profissionais_ativos:
-        prof_selecionado = st.selectbox("Selecionar Profissional:", options=["Todos"] + profissionais_ativos)
+    if prof_selecionado == "Todos":
+        df_g4 = df[df["RESPONSÁVEL"].isin(profissionais_ativos)]
+    else:
+        df_g4 = df[df["RESPONSÁVEL"] == prof_selecionado]
         
-        if prof_selecionado == "Todos":
-            df_g4 = df[df["RESPONSÁVEL"].isin(profissionais_ativos)]
-        else:
-            df_g4 = df[df["RESPONSÁVEL"] == prof_selecionado]
-            
-        if not df_g4.empty:
-            df_g4_counts = df_g4.groupby(["RESPONSÁVEL", "STATUS DO DOCUMENTO NORMATIVO"]).size().reset_index(name="Quantidade")
-            
-            fig4 = px.bar(
-                df_g4_counts, 
-                x="Quantidade", 
-                y="RESPONSÁVEL", 
-                color="STATUS DO DOCUMENTO NORMATIVO",
-                barmode="group",
-                orientation="h",
-                height=500,
-                text="Quantidade",
-                labels={"RESPONSÁVEL": "Profissional", "Quantidade": "Nº de Documentos"},
-                category_orders={"STATUS DO DOCUMENTO NORMATIVO": ["APROVADO", "AG. DEV - SETOR", "EM VERIFICAÇÃO", "CANCELADO"]},
-                color_discrete_map={
-                    "APROVADO": "#2ca02c",
-                    "AG. DEV - SETOR": "#d62728",
-                    "EM VERIFICAÇÃO": "#bcbd22",
-                    "CANCELADO": "#7f7f7f"
-                }
-            )
-            fig4.update_traces(textposition="outside")
+    df_g4_counts = df_g4.groupby(["RESPONSÁVEL", "STATUS DO DOCUMENTO NORMATIVO"]).size().reset_index(name="Quantidade")
+    
+    fig4 = px.bar(
+        df_g4_counts, 
+        x="Quantidade", 
+        y="RESPONSÁVEL", 
+        color="STATUS DO DOCUMENTO NORMATIVO",
+        barmode="group",
+        orientation="h",
+        height=450,
+        text="Quantidade",
+        labels={"RESPONSÁVEL": "Profissional", "Quantidade": "Nº de Documentos"},
+        category_orders={"STATUS DO DOCUMENTO NORMATIVO": ["APROVADO", "AG. DEV - SETOR", "EM VERIFICAÇÃO", "CANCELADO"]},
+        color_discrete_map={
+            "APROVADO": "#2ca02c",
+            "AG. DEV - SETOR": "#d62728",
+            "EM VERIFICAÇÃO": "#bcbd22",
+            "CANCELADO": "#7f7f7f"
+        }
+    )
+    fig4.update_traces(textposition="outside")
+    fig4.update_yaxes(categoryorder="total ascending")
+    st.plotly_chart(fig4, use_container_width=True)
+else:
+    st.warning("Coluna de profissionais indisponível.")
+
+# ==============================================================================
+# 7. GRÁFICO 5: DOCUMENTOS APROVADOS POR TIPO (AGORA EM TELA CHEIA)
+# ==============================================================================
+st.markdown("---")
+st.subheader("5 Documentos Aprovados por Tipo")
