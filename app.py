@@ -12,7 +12,6 @@ st.set_page_config(
 )
 
 # --- CABEÇALHO SUPERIOR (LADO DIREITO / ESQUERDA) ---
-# [CORREÇÃO] Passado o número 2 para indicar a criação de duas colunas no topo
 header_left, header_right = st.columns(2)
 
 with header_right:
@@ -55,12 +54,12 @@ if uploaded_file is not None:
         # 3. Remover linhas completamente vazias para não inflar a contagem de documentos
         df = df.dropna(subset=["SIGLA DO DOCUMENTO", "NOME DO DOCUMENTO", "RESPONSÁVEL"], how="all")
 
-        # [CORREÇÃO] Altera a legenda "A" para "Agd Dev Setor" em memória na coluna temporal
+        # Altera a legenda "A" para "Agd Dev Setor" em memória na coluna temporal
         col_vencido = "(Vencido, No Prazo, Prestes a Vencer)"
         if col_vencido in df.columns:
             df[col_vencido] = df[col_vencido].replace({"A": "Agd Dev Setor"})
             
-        # [NOVA ABREVIAÇÃO] Altera o status longo para "AG. DEV - SETOR" diretamente na memória
+        # Altera o status longo para "AG. DEV - SETOR" diretamente na memória
         if "STATUS DO DOCUMENTO NORMATIVO" in df.columns:
             df["STATUS DO DOCUMENTO NORMATIVO"] = df["STATUS DO DOCUMENTO NORMATIVO"].replace({
                 "VERIFICADO AGUARDA DEVOLUÇÃO SETOR": "AG. DEV - SETOR"
@@ -231,7 +230,7 @@ with row2_col1:
     else:
         st.warning("Coluna de profissionais indisponível.")
 
-# GRÁFICO 5: Documentos Aprovados por Tipo
+# GRÁFICO 5: Documentos Aprovados por Tipo (BLOCO REINDENTADO E CORRIGIDO)
 with row2_col2:
     st.subheader("5 Documentos Aprovados por Tipo")
     tipos_disponiveis = df["SIGLA DO DOCUMENTO"].dropna().unique().tolist()
