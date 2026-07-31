@@ -177,26 +177,20 @@ else:
 st.markdown("---")
 
 # ==============================================================================
-# 6. ANÁLISE POR PROFISSIONAL (REMOÇÃO DEFINITIVA DE SABRINA E SONALHYA DO GRÁFICO)
+# 6. ANÁLISE POR PROFISSIONAL (EIXOS LIMPOS E EMPILHAMENTO ORGANIZADO)
 # ==============================================================================
 row2_col1, row2_col2 = st.columns(2)
 
-# GRÁFICO 4: Documentos por Profissional
+# GRÁFICO 4: Documentos por Profissional (Ocultação de ex-funcionárias e ajuste de cores)
 with row2_col1:
     st.subheader("4 Documentos por Profissional")
     
     profissionais_totais = df["RESPONSÁVEL"].dropna().unique().tolist()
-    
-    # Isola estritamente quem está ativo no quadro de funcionários
     profissionais_ativos = [p for p in profissionais_totais if p.upper() not in ["SABRINA", "SONALHYA"]]
     
     if profissionais_ativos:
-        prof_selecionado = st.selectbox(
-            "Selecionar Profissional:",
-            options=["Todos"] + profissionais_ativos
-        )
+        prof_selecionado = st.selectbox("Selecionar Profissional:", options=["Todos"] + profissionais_ativos)
         
-        # [AJUSTE] Se for "Todos", exibe o gráfico apenas com as pessoas ativas na lista de barras
         if prof_selecionado == "Todos":
             df_g4 = df[df["RESPONSÁVEL"].isin(profissionais_ativos)]
         else:
@@ -205,7 +199,6 @@ with row2_col1:
         if not df_g4.empty:
             df_g4_counts = df_g4.groupby(["RESPONSÁVEL", "STATUS DO DOCUMENTO NORMATIVO"]).size().reset_index(name="Quantidade")
             
-            # [CORREÇÃO DE COR] Adicionado 'category_orders' para travar o alinhamento correto das cores das legendas com as barras
             fig4 = px.bar(
                 df_g4_counts, 
                 x="Quantidade", 
@@ -232,12 +225,14 @@ with row2_col1:
     else:
         st.warning("Coluna de profissionais indisponível.")
 
-# GRÁFICO 5: Documentos Aprovados por Tipo
+# GRÁFICO 5: Documentos Aprovados por Tipo (Parênteses e linhas simplificadas para evitar erros)
 with row2_col2:
     st.subheader("5 Documentos Aprovados por Tipo")
     tipos_disponiveis = df["SIGLA DO DOCUMENTO"].dropna().unique().tolist()
     
     if tipos_disponiveis:
-        tipos_selecionados = st.multiselect(
-            "Filtrar por Tipo de Documento (Sigla):",
-            options=tipos_disponiveis, 
+        tipos_selecionados = st.multiselect("Filtrar por Tipo de Documento (Sigla):", options=tipos_disponiveis, default=tipos_disponiveis)
+        
+        df_g5 = df[(df["STATUS DO DOCUMENTO NORMATIVO"].str.upper() == "APROVADO") & (df["SIGLA DO DOCUMENTO"].isin(tipos_selecionados))]
+        
+        if not df_g5.empty:
