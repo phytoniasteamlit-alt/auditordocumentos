@@ -194,7 +194,5 @@ if not df_base.empty:
         s_prazos_limpos = df_filtrado["SIT_PRAZO"].apply(remover_acentos)
         contagem_prazos = s_prazos_limpos.value_counts()
         
-        # SOLUÇÃO DO SINTAX ERROR: Dicionário criado de forma direta e limpa
-        dicionario_prazos = {
-            "No Prazo": contagem_prazos.get("VALIDO", 0) + contagem_prazos.get("NO PRAZO", 0),
-            "Prestes a Vencer": contagem_prazos.get("PRESTES A VENCER", 0),
+        # CORREÇÃO DEFINITIVA CONTRA SYNTAX ERROR: Criando a série sem usar chaves {} ou parênteses complexos
+        dados_prazo = pd.Series(0, index=["No Prazo", "Prestes a Vencer", "Vencido"])
