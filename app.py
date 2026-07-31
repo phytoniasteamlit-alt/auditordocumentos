@@ -12,7 +12,7 @@ st.set_page_config(
 )
 
 # --- CABEÇALHO SUPERIOR (LADO DIREITO / ESQUERDA) ---
-header_left, header_right = st.columns()
+header_left, header_right = st.columns([3, 1])
 
 with header_right:
     st.markdown(
@@ -116,7 +116,7 @@ with row1_col1:
     else:
         st.warning("Sem dados suficientes para gerar o gráfico 1.")
 
-# GRÁFICO 2: Status por Documentos (Com abreviação AG. DEV - SETOR ativa)
+# GRÁFICO 2: Status por Documentos
 with row1_col2:
     st.subheader("2 Status por Documentos")
     df_g2 = df["STATUS DO DOCUMENTO NORMATIVO"].value_counts().reset_index()
@@ -140,7 +140,7 @@ st.markdown("---")
 # 5. GRÁFICOS INTERATIVOS COM MAPA DE CORES CUSTOMIZADO
 # ==============================================================================
 
-# Gráfico 3 com o título curto solicitado
+# Gráfico 3
 st.subheader("3 Nº Documentos por Status")
 
 status_disponiveis = df["STATUS DO DOCUMENTO NORMATIVO"].dropna().unique().tolist()
@@ -184,7 +184,7 @@ st.markdown("---")
 # ==============================================================================
 row2_col1, row2_col2 = st.columns(2)
 
-# GRÁFICO 4: Documentos por Profissional (Invertido e com mais altura)
+# GRÁFICO 4: Documentos por Profissional
 with row2_col1:
     st.subheader("4 Documentos por Profissional")
     
@@ -207,7 +207,7 @@ with row2_col1:
         if not df_g4.empty:
             df_g4_counts = df_g4.groupby(["RESPONSÁVEL", "STATUS DO DOCUMENTO NORMATIVO"]).size().reset_index(name="Quantidade")
             
-            # Barras horizontais e altura estendida para arrumar a compressão visual e o texto do eixo Y
+            # Barras horizontais e altura estendida para arrumar a compressão visual
             fig4 = px.bar(
                 df_g4_counts, 
                 x="Quantidade", 
@@ -232,7 +232,7 @@ with row2_col1:
     else:
         st.warning("Coluna de profissionais indisponível.")
 
-# GRÁFICO 5: Documentos Aprovados por Tipo
+# GRÁFICO 5: Documentos Aprovados por Tipo (PARÊNTESE CORRIGIDO AQUI)
 with row2_col2:
     st.subheader("5 Documentos Aprovados por Tipo")
     tipos_disponiveis = df["SIGLA DO DOCUMENTO"].dropna().unique().tolist()
@@ -240,3 +240,7 @@ with row2_col2:
     if tipos_disponiveis:
         tipos_selecionados = st.multiselect(
             "Filtrar por Tipo de Documento (Sigla):",
+            options=tipos_disponiveis, 
+            default=tipos_disponiveis
+        )
+        
