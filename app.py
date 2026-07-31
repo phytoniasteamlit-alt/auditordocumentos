@@ -31,7 +31,7 @@ with header_left:
 st.markdown("---")
 
 # ==============================================================================
-# 2. PAINEL DE CONTROLE (SIDEBAR) & TRATAMENTO DE DADOS
+# 2. PAINEL DE CONTROLE (SIDEBAR TOTALMENTE LIMPA PARA LIBERAR A ROLAGEM)
 # ==============================================================================
 st.sidebar.header("⚙️ Painel de Controle")
 uploaded_file = st.sidebar.file_uploader(
@@ -39,15 +39,20 @@ uploaded_file = st.sidebar.file_uploader(
     type=["xlsx"]
 )
 
-# --- PAINEL DE CUSTOMIZAÇÃO VISUAL (SIDEBAR) ---
-st.sidebar.markdown("---")
-st.sidebar.subheader("🎨 Customização Visual")
-
-paleta_selecionada = st.sidebar.selectbox(
-    "Tema de Cores Geral (Gráficos 1, 2 e 5):",
-    options=["Padrão Hospitalar", "Tons Pastéis", "Vibrante", "Esmeralda"],
-    index=0
-)
+# [MUDANÇA CRÍTICA] Customização Visual movida para um Expander no topo da página principal 
+# Isso encurta a Sidebar e força o navegador a liberar a rolagem vertical até o fim!
+with st.expander("🎨 Customização Visual e Estilo dos Gráficos (Clique para abrir/fechar)"):
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        paleta_selecionada = st.selectbox(
+            "Tema de Cores Geral (Gráficos 1, 2 e 5):",
+            options=["Padrão Hospitalar", "Tons Pastéis", "Vibrante", "Esmeralda"],
+            index=0
+        )
+    with c2:
+        tipo_grafico_5 = st.radio("Estilo do Gráfico 5:", options=["Barras Verticais", "Barras Horizontais"], index=0, horizontal=True)
+    with c3:
+        tipo_grafico_6 = st.radio("Estilo do Gráfico 6:", options=["Barras Verticais", "Barras Horizontais"], index=0, horizontal=True)
 
 if paleta_selecionada == "Tons Pastéis":
     cor_sequencia = px.colors.qualitative.Pastel
@@ -57,9 +62,6 @@ elif paleta_selecionada == "Esmeralda":
     cor_sequencia = px.colors.sequential.Mint
 else:
     cor_sequencia = px.colors.qualitative.Safe
-
-tipo_grafico_5 = st.sidebar.radio("Estilo do Gráfico 5:", options=["Barras Verticais", "Barras Horizontais"], index=0)
-tipo_grafico_6 = st.sidebar.radio("Estilo do Gráfico 6:", options=["Barras Verticais", "Barras Horizontais"], index=0)
 
 if uploaded_file is not None:
     try:
@@ -72,8 +74,6 @@ if uploaded_file is not None:
                 
         # Substituir strings de erro do Excel por valores nulos limpos
         df = df.replace(["#VALOR!", "0", "0.0", "NONE", "NAN", "NAN"], None)
-        
-        # Remover linhas totalmente vazias para evitar inflar contagens
         df = df.dropna(subset=["SIGLA DO DOCUMENTO", "NOME DO DOCUMENTO", "RESPONSÁVEL"], how="all")
 
         # Altera a legenda "A" para "AGD DEV SETOR" em memória na coluna temporal
@@ -100,12 +100,9 @@ else:
 status_documento = df["STATUS DO DOCUMENTO NORMATIVO"].fillna("NÃO INFORMADO")
 total_docs = len(df)
 aprovados = len(df[status_documento == "APROVADO"])
-
-# Filtros diretos por igualdade para evitar quebras por linhas vazias
 verf_1 = len(df[status_documento == "AG. DEV - SETOR"])
 verf_2 = len(df[status_documento == "EM VERIFICAÇÃO"])
 
-# --- EXIBIÇÃO DAS CAIXAS DE MÉTRICAS INDEPENDENTES ---
 m1, m2, m3, m4 = st.columns(4)
 m1.metric(label="📄 Total de Documentos", value=total_docs)
 m2.metric(label="✅ Aprovados", value=aprovados)
@@ -119,24 +116,20 @@ st.markdown("---")
 # ==============================================================================
 row1_col1, row1_col2 = st.columns(2)
 
-# GRÁFICO 1: Status Temporal
 with row1_col1:
     st.subheader("1 Válidos, Vencidos, no Prazo")
     df_g1 = df[col_vencido].value_counts().reset_index()
     df_g1.columns = [col_vencido, "Quantidade"]
-    
     if not df_g1.empty:
         fig1 = px.pie(df_g1, names=col_vencido, values="Quantidade", hole=0.4, color_discrete_sequence=cor_sequencia)
         fig1.update_traces(textinfo='value+label', textposition='inside')
         fig1.update_layout(margin=dict(l=20, r=20, t=30, b=20), showlegend=False)
         st.plotly_chart(fig1, use_container_width=True)
 
-# GRÁFICO 2: Status por Documentos
 with row1_col2:
     st.subheader("2 Status por Documentos")
     df_g2 = df["STATUS DO DOCUMENTO NORMATIVO"].value_counts().reset_index()
     df_g2.columns = ["Status", "Quantidade"]
-    
     if not df_g2.empty:
         fig2 = px.pie(df_g2, names="Status", values="Quantidade", hole=0.4, color_discrete_sequence=cor_sequencia)
         fig2.update_traces(textinfo='value+label', textposition='inside')
@@ -148,24 +141,16 @@ st.markdown("---")
 # ==============================================================================
 # 5. GRÁFICOS INTERATIVOS COM MAPA DE CORES CUSTOMIZADO
 # ==============================================================================
-
-# Gráfico 3
 st.subheader("3 Nº Documentos por Status")
 status_disponiveis = df["STATUS DO DOCUMENTO NORMATIVO"].dropna().unique().tolist()
-
-status_selecionados = st.multiselect(
-    "Filtrar por Status do Documento:",
-    options=status_disponiveis,
-    default=status_disponiveis
-)
+status_selecionados = st.multiselect("Filtrar por Status do Documento:", options=status_disponiveis, default=status_disponiveis)
 
 df_g3 = df[df["STATUS DO DOCUMENTO NORMATIVO"].isin(status_selecionados)]
 df_g3_counts = df_g3["STATUS DO DOCUMENTO NORMATIVO"].value_counts().reset_index()
 df_g3_counts.columns = ["Status", "Total"]
 
 fig3 = px.bar(
-    df_g3_counts, x="Status", y="Total", text="Total", color="Status",
-    labels={"Total": "N° de Documentos"},
+    df_g3_counts, x="Status", y="Total", text="Total", color="Status", labels={"Total": "N° de Documentos"},
     color_discrete_map={"APROVADO": "#2ca02c", "AG. DEV - SETOR": "#d62728", "EM VERIFICAÇÃO": "#bcbd22", "CANCELADO": "#7f7f7f"}
 )
 fig3.update_traces(textposition="outside")
@@ -190,8 +175,7 @@ else:
 df_g4_counts = df_g4.groupby(["RESPONSÁVEL", "STATUS DO DOCUMENTO NORMATIVO"]).size().reset_index(name="Quantidade")
 
 fig4 = px.bar(
-    df_g4_counts, x="Quantidade", y="RESPONSÁVEL", color="STATUS DO DOCUMENTO NORMATIVO",
-    barmode="group", orientation="h", height=450, text="Quantidade",
+    df_g4_counts, x="Quantidade", y="RESPONSÁVEL", color="STATUS DO DOCUMENTO NORMATIVO", barmode="group", orientation="h", height=450, text="Quantidade",
     labels={"RESPONSÁVEL": "Profissional", "Quantidade": "Nº de Documentos"},
     category_orders={"STATUS DO DOCUMENTO NORMATIVO": ["APROVADO", "AG. DEV - SETOR", "EM VERIFICAÇÃO", "CANCELADO"]},
     color_discrete_map={"APROVADO": "#2ca02c", "AG. DEV - SETOR": "#d62728", "EM VERIFICAÇÃO": "#bcbd22", "CANCELADO": "#7f7f7f"}
@@ -208,11 +192,7 @@ st.markdown("---")
 st.subheader("5 Documentos Aprovados por Tipo")
 tipos_disponiveis = df["SIGLA DO DOCUMENTO"].dropna().unique().tolist()
 
-tipos_selecionados = st.multiselect(
-    "Filtrar por Tipo de Documento (Sigla):", 
-    options=tipos_disponiveis, 
-    default=tipos_disponiveis
-)
+tipos_selecionados = st.multiselect("Filtrar por Tipo de Documento (Sigla):", options=tipos_disponiveis, default=tipos_disponiveis)
 
 df_g5 = df[(df["STATUS DO DOCUMENTO NORMATIVO"] == "APROVADO") & (df["SIGLA DO DOCUMENTO"].isin(tipos_selecionados))]
 df_g5_counts = df_g5["SIGLA DO DOCUMENTO"].value_counts().reset_index()
