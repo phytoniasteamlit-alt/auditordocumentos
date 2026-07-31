@@ -87,7 +87,7 @@ if uploaded_file is not None:
         df = df.replace(["#VALOR!", "0", "0.0", "None", "nan", "NaN"], None)
         df = df.dropna(subset=["SIGLA DO DOCUMENTO", "NOME DO DOCUMENTO", "RESPONSÁVEL"], how="all")
 
-        # [REMOÇÃO DE ACENTOS NA PLANILHA] Remove acentos e joga tudo para maiúsculas para blindar os filtros
+        # Remove acentos e joga tudo para maiúsculas para blindar os filtros
         df["RESPONSÁVEL"] = df["RESPONSÁVEL"].apply(remover_acentos).str.upper()
         df["STATUS DO DOCUMENTO NORMATIVO"] = df["STATUS DO DOCUMENTO NORMATIVO"].apply(remover_acentos).str.upper()
 
@@ -174,7 +174,7 @@ st.markdown("---")
 # ==============================================================================
 st.subheader("4 Documentos por Profissional")
 profissionais_totais = df["RESPONSÁVEL"].dropna().unique().tolist()
-profissionais_ativos = [p for p in profissionais_totais if p not in ["SABRINA", "SONALHYA", "SONALIA"]]
+profissionais_ativos = [p for p in profissionais_totais if p.upper() not in ["SABRINA", "SONALHYA", "SONALIA"]]
 
 prof_selecionado = st.selectbox("Selecionar Profissional para Análise:", options=["TODOS"] + profissionais_ativos)
 
@@ -218,3 +218,4 @@ st.plotly_chart(fig5, use_container_width=True)
 
 st.markdown("---")
 
+# ==============================================================================
