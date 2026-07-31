@@ -57,32 +57,46 @@ if arquivo_excel:
         xl = pd.ExcelFile(arquivo_excel, engine="openpyxl")
         lista_abas_reais = xl.sheet_names
         
+        # CORREÇÃO CRÍTICA: Força a leitura da aba DADOS_GRÁFICOS se ela existir na planilha
         nome_aba_principal = None
         for n_real in lista_abas_reais:
-            n_up = str(n_real).upper().strip()
-            if "VERF" in n_up or "ACOMP" in n_up:
+            if "GRAF" in str(n_real).upper().strip():
                 nome_aba_principal = n_real
                 break
         
+        # Fallback caso mude o nome da aba
+        if not nome_aba_principal:
+            for n_real in lista_abas_reais:
+                n_up = str(n_real).upper().strip()
+                if "VERF" in n_up or "ACOMP" in n_up:
+                    nome_aba_principal = n_real
+                    break
+                    
         if not nome_aba_principal and lista_abas_reais:
             nome_aba_principal = lista_abas_reais[0]
         
         if nome_aba_principal:
-            # CORREÇÃO: Lendo a partir da linha correta para ignorar sujeiras de fórmulas do cabeçalho
+            # Lê a estrutura da aba correta
             df_raw = pd.read_excel(arquivo_excel, sheet_name=nome_aba_principal, header=0, engine="openpyxl")
             
-            # Garante a remoção de linhas totalmente vazias no início
-            df_raw = df_raw.dropna(how="all").reset_index(drop=True)
-            num_colunas = df_raw.shape[1]
+            # Limpa espaços invisíveis nos cabeçalhos das colunas
+            df_raw.columns = [str(c).strip() for c in df_raw.columns]
+            colunas_planilha = {str(col).upper().strip(): col for col in df_raw.columns}
+            
+            def buscar_coluna(nomes_possiveis, padrao="Não Informado"):
+                for nome in nomes_possiveis:
+                    if nome in colunas_planilha:
+                        return df_raw[colunas_planilha[nome]]
+                return pd.Series([padrao] * len(df_raw))
 
-            # 1. PROCESSAMENTO DAS MÉDIAS (Colunas G e H fixas por posição)
-            if num_colunas > 6:
+            # 1. PROCESSAMENTO DAS MÉDIAS (Calculadas dinamicamente se as colunas existirem)
+            if df_raw.shape[1] > 6:
                 s_g = df_raw.iloc[:, 6].astype(str).str.replace(" dias", "", regex=False).str.replace(",", ".", regex=False)
                 df_g_nums = pd.to_numeric(s_g, errors='coerce').dropna()
                 df_g_filtrado = df_g_nums[(df_g_nums >= 0) & (df_g_nums < 365)]
                 media_v1 = df_g_filtrado.mean() if not df_g_filtrado.empty else 0.0
             
-            if num_colunas > 7:
+            if df_raw.shape[1] > 7:
                 s_h = df_raw.iloc[:, 7].astype(str).str.replace(" dias", "", regex=False).str.replace(",", ".", regex=False)
                 df_h_nums = pd.to_numeric(s_h, errors='coerce').dropna()
                 df_h_filtrado = df_h_nums[(df_h_nums >= 0) & (df_h_nums < 365)]
@@ -91,20 +105,20 @@ if arquivo_excel:
             media_v1 = float(media_v1) if pd.notna(media_v1) else 0.0
             media_v2 = float(media_v2) if pd.notna(media_v2) else 0.0
 
-            # 2. CAPTURA DOS DADOS FORÇADA POR POSIÇÃO EXATA DA IMAGEM
+            # 2. CAPTURA DOS DADOS MAPEADOS PELOS CABEÇALHOS DA ABA CORRETA
             df_base = pd.DataFrame()
-            df_base["SIGLA"] = df_raw.iloc[:, 0] if num_colunas > 0 else "N/A"
-            df_base["SETOR"] = df_raw.iloc[:, 1] if num_colunas > 1 else "N/A"
-            df_base["RESPONSAVEL"] = df_raw.iloc[:, 3] if num_colunas > 3 else "Não Informado"
-            df_base["STATUS"] = df_raw.iloc[:, 4] if num_colunas > 4 else "Não Informado"
-            df_base["SIT_PRAZO"] = df_raw.iloc[:, 5] if num_colunas > 5 else "Não Informado"
+            df_base["SIGLA"] = buscar_coluna(["SIGLA DO DOCUMENTO", "SIGLA"], "N/A")
+            df_base["SETOR"] = buscar_coluna(["SETOR"], "N/A")
+            df_base["RESPONSAVEL"] = buscar_coluna(["RESPONSAVEL", "RESPONSÁVEL"], "Não Informado")
+            df_base["STATUS"] = buscar_coluna(["STATUS DO DOCUMENTO NORMATIVO", "STATUS"], "Não Informado")
+            df_base["SIT_PRAZO"] = buscar_coluna(["VENCIDO, NO PRAZO, PRESTES A VENCER", "(VENCIDO, NO PRAZO, PRESTES A VENCER)", "SIT_PRAZO"], "Não Informado")
             
             # Limpeza inicial de linhas em branco do Excel
             df_base = df_base.dropna(subset=["SIGLA", "STATUS"], how="all")
             for col in df_base.columns:
                 df_base[col] = df_base[col].fillna("").astype(str).str.strip()
             
-            # Filtro de lixo corrigido (sem excluir letras isoladas válidas)
+            # Filtro de dados inválidos
             valores_vazios = ["0", "0.0", "NAN", "NONE", "", "NAN NAN", "NÃO INFORMADO", "#VALOR!", "SIGLA DO DOCUMENTO", "STATUS DO DOCUMENTO NORMATIVO"]
             for col in df_base.columns:
                 df_base = df_base[~df_base[col].str.upper().isin(valores_vazios)]
@@ -180,20 +194,3 @@ if not df_base.empty:
         st.bar_chart(dados_g2, color=c_g2_color, horizontal=True)
     
     st.markdown("---")
-    
-    linha2_col1, linha2_col2 = st.columns(2)
-    
-    with linha2_col1:
-        st.markdown("### Situação de Prazos")
-        s_prazos_limpos = df_filtrado["SIT_PRAZO"].apply(remover_acentos)
-        contagem_prazos = s_prazos_limpos.value_counts()
-        
-        dados_prazo = pd.Series({
-            "No Prazo": contagem_prazos.get("VALIDO", 0) + contagem_prazos.get("NO PRAZO", 0),
-            "Prestes a Vencer": contagem_prazos.get("PRESTES A VENCER", 0),
-            "Vencido": contagem_prazos.get("VENCIDO", 0)
-        })
-        st.bar_chart(dados_prazo, color=c_g4_color, horizontal=True)
-        
-    with linha2_col2:
-        st.markdown("### Documentos Aprovados por Tipo")
