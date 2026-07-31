@@ -3,4 +3,5 @@ pandas
 pdfplumber
 python-docx
 openpyxl
+plotly
 
