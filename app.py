@@ -1,4 +1,4 @@
-import streamlit st
+import streamlit as st
 import pandas as pd
 import plotly.express as px
 
@@ -202,7 +202,6 @@ ori_5 = "h" if tipo_grafico_5 == "Horizontal" else "v"
 x_5 = "Quantidade Aprovada" if tipo_grafico_5 == "Horizontal" else "Tipo de Documento"
 y_5 = "Tipo de Documento" if tipo_grafico_5 == "Horizontal" else "Quantidade Aprovada"
 
-# [CORREÇÃO VISUAL] Váriavel corrigida para 'cor_sequencia' eliminando o travamento do rodapé
 fig5 = px.bar(df_g5_counts, x=x_5, y=y_5, text="Quantidade Aprovada", color="Tipo de Documento", orientation=ori_5, color_discrete_sequence=cor_sequencia)
 fig5.update_traces(textposition="outside")
 st.plotly_chart(fig5, use_container_width=True)
@@ -213,3 +212,5 @@ st.markdown("---")
 # 9. GRÁFICO 6: DETALHAMENTO CRUZADO POR PROFISSIONAL
 # ==============================================================================
 st.subheader("6 Detalhamento de Tipos de Documento por Status e Profissional")
+st.markdown("Esta seção analisa especificamente a quantidade de **POP, PROTOCOLO, ROTINA ou MANUAL** em status **APROVADO** e **EM VERIFICAÇÃO** de cada profissional ativo.")
+
