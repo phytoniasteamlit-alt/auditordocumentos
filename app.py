@@ -39,7 +39,7 @@ uploaded_file = st.sidebar.file_uploader(
     type=["xlsx"]
 )
 
-# --- PANEL DE CUSTOMIZAÇÃO VISUAL (SIDEBAR) ---
+# --- PAINEL DE CUSTOMIZAÇÃO VISUAL (SIDEBAR) ---
 st.sidebar.markdown("---")
 st.sidebar.subheader("🎨 Customização Visual")
 
@@ -92,7 +92,7 @@ if uploaded_file is not None:
         st.info("Certifique-se de que a aba carregada chama-se exatamente 'DADOS_GRÁFICOS'.")
         st.stop()
 else:
-    st.info("💡 Por favor, use o menu lateral para carregar a sua planilha Excel e ativar os gráficos interativos.")
+    st.info("💡 Por favor, use the menu lateral para carregar a sua planilha Excel e ativar os gráficos interativos.")
     st.stop()
 
 # ==============================================================================
