@@ -203,7 +203,7 @@ st.plotly_chart(fig4, use_container_width=True)
 st.markdown("---")
 
 # ==============================================================================
-# 7. GRÁFICO 5: DOCUMENTOS APROVADOS POR TIPO (ESTRUTURA HORIZONTAL COMPLETAMENTE FILTRADA)
+# 7. GRÁFICO 5: DOCUMENTOS APROVADOS POR TIPO
 # ==============================================================================
 st.subheader("5 Documentos Aprovados por Tipo")
 tipos_disponiveis = df["SIGLA DO DOCUMENTO"].dropna().unique().tolist()
@@ -230,3 +230,4 @@ st.plotly_chart(fig5, use_container_width=True)
 st.markdown("---")
 
 # ==============================================================================
+# 8. GRÁFICO 6: DETALHAMENTO CRUZADO DE TIPOS DE DOCUMENTO POR STATUS
