@@ -1,175 +1,190 @@
 import streamlit as st
 import pandas as pd
+import openpyxl
 import altair as alt
-import re
+import unicodedata
+from io import BytesIO
 
 #--- 1. CONFIGURAÇÃO DA PÁGINA ---
-st.set_page_config(page_title="Dashboard Executivo NAQH", page_icon="📊", layout="wide")
-st.markdown("# Dashboard Executivo de Indicadores — NAQH")
-st.markdown("Monitoramento técnico de conformidade regulatória e volumetria documental.")
-st.markdown("---")
+st.set_page_config(page_title="PAINEL DE INDICADORES-NORMA ZERO", page_icon="📝", layout="wide")
 
-#--- FUNÇÃO MODULAR AUXILIAR PARA CRIAR OS GRÁFICOS ---
-def plotar_grafico_naqh(dados, coluna_nome, tipo_visual, seletor_clique, cor_barra, titulo_grafico):
-    if tipo_visual == "Barra":
-        base_chart = alt.Chart(dados).encode(
-            x=alt.X(f"{coluna_nome}:N", sort='-y', title=coluna_nome, axis=alt.Axis(labelAngle=0)), # Texto reto na horizontal
-            y=alt.Y("Quantidade:Q", title="Quantidade"),
-            tooltip=[coluna_nome, 'Quantidade']
-        )
-        
-        bars = base_chart.mark_bar().encode(
-            color=alt.condition(seletor_clique, alt.value(cor_barra), alt.value("#4A5260")),
-            opacity=alt.condition(seletor_clique, alt.value(1.0), alt.value(0.3))
-        ).add_selection(seletor_clique)
-        
-        text = base_chart.mark_text(
-            align='center',
-            baseline='bottom',
-            dy=-5,
-            color='white',
-            fontWeight='bold'
-        ).encode(text='Quantidade:Q')
-        
-        chart = (bars + text).properties(height=280, title=titulo_grafico)
-        
-    else:
-        base_chart = alt.Chart(dados).encode(
-            theta=alt.Theta("Quantidade:Q", title="Quantidade"),
-            color=alt.Color(f"{coluna_nome}:N", title=coluna_nome),
-            tooltip=[coluna_nome, 'Quantidade']
-        )
-        
-        arcs = base_chart.mark_arc().encode(
-            opacity=alt.condition(seletor_clique, alt.value(1.0), alt.value(0.3))
-        ).add_selection(seletor_clique)
-        
-        text = base_chart.mark_text(radiusOffset=15, color='white', fontWeight='bold').encode(text='Quantidade:Q')
-        
-        chart = (arcs + text).properties(height=280, title=titulo_grafico)
-        
+# --- BLOCO DE CUSTOMIZAÇÃO VISUAL AVANÇADA (CSS INJECT NATIVO) ---
+st.markdown("""
+<style>
+[data-testid="stDataFrame"] td, [data-testid="stDataFrame"] th { font-size: 16px !important; font-weight: 600 !important; color: #FFFFFF !important; }
+[data-testid="stDataFrame"] td:last-child { color: #FBBF24 !important; font-size: 18px !important; font-weight: bold !important; }
+div[data-testid="stSelectbox"] label p, div[data-testid="stFileUploader"] label p { font-size: 15px !important; font-weight: bold !important; color: #38BDF8 !important; }
+section[data-testid="stFileUploaderDropzone"] { border: 2px dashed #38BDF8 !important; background-color: #1E293B !important; }
+/* Rolagem interna controlada para a tabela da barra lateral */
+[data-testid="stSidebar"] [data-testid="stDataFrame"] { max-height: 220px !important; overflow-y: auto !important; }
+</style>
+""", unsafe_allow_html=True)
+
+# --- FUNÇÃO MOTOR ALTAIR IMPORTADA DO CÓDIGO ANTIGO ---
+def plotar_grafico_naqh(dados, coluna_nome, cor_barra, titulo_grafico):
+    base_chart = alt.Chart(dados).encode(
+        x=alt.X(f"{coluna_nome}:N", sort='-y', title=coluna_nome, axis=alt.Axis(labelAngle=0)), 
+        y=alt.Y("Quantidade:Q", title="Quantidade"),
+        tooltip=[coluna_nome, 'Quantidade']
+    )
+    bars = base_chart.mark_bar().encode(color=alt.value(cor_barra))
+    text = base_chart.mark_text(align='center', baseline='bottom', dy=-5, color='white', fontWeight='bold').encode(text='Quantidade:Q')
+    chart = (bars + text).properties(height=280, title=titulo_grafico)
     return chart
 
-#--- 2. BARRA LATERAL (UPLOADS E FILTROS COMPACTOS) ---
-st.sidebar.header("⚙️ Painel de Controle")
-arquivo_excel = st.sidebar.file_uploader(" Carregar Planilha Excel (.xlsx):", type=["xlsx"])
+# --- CABEÇALHO DO HOSPITAL (MANTIDO EXATAMENTE COMO NO SEU ATUAL) ---
+col_titulo, col_hospital = st.columns([0.65, 0.35])
+with col_titulo:
+    st.markdown("# PAINEL DE INDICADORES NORMATIVOS NAQH")
+with col_hospital:
+    st.markdown("""
+    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px; margin-top: 10px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 34px; color: #EF4444; font-weight: bold; line-height: 1;">🏥</span>
+            <span style="font-size: 22px; color: #FFFFFF; font-weight: 800; letter-spacing: 0.5px;">HOSPITAL DA CIDADE</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; margin-right: 2px;">
+            <span style="font-size: 20px; line-height: 1;">👩‍💼</span>
+            <span style="font-size: 15px; color: #94A3B8; font-weight: 600; letter-spacing: 0.3px;">Coord.: Fabrícia Rocha</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+st.markdown("---")
+
+#--- 2. CARREGAMENTO DO ARQUIVO ---
+st.sidebar.header("⚙️ Entrada de Dados")
+arquivo_excel = st.sidebar.file_uploader(" Carregar Planilha Excel (.xlsx):", type=["xlsx"], key="uploader_xlsx")
+
+df_base = pd.DataFrame()
+media_v1, media_v2, media_aaa = 0.0, 0.0, 0.0
+
+def remover_acentos(texto):
+    if pd.isna(texto): return ""
+    return "".join(c for c in unicodedata.normalize('NFD', str(texto)) if unicodedata.category(c) != 'Mn').upper().strip()
 
 if arquivo_excel:
-    # 'header=2' pula as duas primeiras linhas de título mesclado do NAQH
-    df = pd.read_excel(arquivo_excel, engine="openpyxl", header=2)
-    df.columns = df.columns.astype(str).str.strip()
-    
-    if not df.empty:
-        # --- BLINDAGEM COMPLETA POR POSIÇÃO FÍSICA (ÍNDICES) ---
-        col_tipo = df.columns[0]   # Coluna A (SIGLA DO DOCUMENTO)
-        col_setor = df.columns[1]  # Coluna B (SETOR)
-        col_responsavel = df.columns[4] if len(df.columns) > 4 else df.columns[4]  # Coluna E (RESPONSÁVEL)
+    try:
+        xl = pd.ExcelFile(arquivo_excel, engine="openpyxl")
+        lista_abas_reais = xl.sheet_names
         
-        # Posições exatas mapeadas a partir dos prints reais da sua tabela
-        col_status = df.columns[16] if len(df.columns) > 16 else df.columns[16]    # Coluna Q (STATUS / OK)
-        col_situacao_nome = df.columns[17] if len(df.columns) > 17 else df.columns[17] # Coluna R (SITUAÇÃO)
+        # 1. PROCESSAMENTO DAS MÉDIAS CRONOLÓGICAS (MANTIDO DO SEU ATUAL)
+        nome_aba_original = None
+        for n_real in lista_abas_reais:
+            n_up = str(n_real).upper().strip()
+            if "VERF" in n_up or "ACOMP" in n_up:
+                nome_aba_original = n_real
+                break
         
-        col_t_v1 = df.columns[19] if len(df.columns) > 19 else df.columns[19]       # Coluna T (I.A.V.1º)
-        col_t_v2 = df.columns[20] if len(df.columns) > 20 else df.columns[20]       # Coluna U (I.A.V.2º)
-        col_t_total = df.columns[21] if len(df.columns) > 21 else df.columns[21]    # Coluna V (I.A.A.A)
-
-        # --- PROCESSAMENTO MATEMÁTICO DOS TEMPOS DE ANÁLISE ---
-        def extrair_dias_puros(valor):
-            if pd.isna(valor) or "#" in str(valor):
-                return 0.0
-            numeros = re.findall(r'\d+', str(valor))
-            if numeros:
-                return float(numeros[0]) # Pega estritamente apenas o primeiro número (dias corridos)
-            return 0.0
-
-        df['T_V1'] = df[col_t_v1].apply(extrair_dias_puros)
-        df['T_V2'] = df[col_t_v2].apply(extrair_dias_puros)
-        df['T_TOTAL'] = df[col_t_total].apply(extrair_dias_puros)
-
-        # --- SEÇÃO DE FILTROS GLOBAIS NA BARRA LATERAL ---
-        st.sidebar.markdown("---")
-        st.sidebar.subheader("🔍 Filtros Globais")
-        
-        opcoes_tipo = df[col_tipo].dropna().unique().tolist()
-        tipos_selecionados = st.sidebar.multiselect(f"Filtrar por Tipo:", options=opcoes_tipo, default=opcoes_tipo)
-        
-        opcoes_setor = df[col_setor].dropna().unique().tolist()
-        setores_selecionados = st.sidebar.multiselect(f"Filtrar por Setor:", options=opcoes_setor, default=opcoes_setor)
-        
-        # Filtro dinâmico para Adicionar / Remover funcionários responsáveis pela barra lateral
-        opcoes_resp = df[col_responsavel].dropna().unique().tolist()
-        responsaveis_selecionados = st.sidebar.multiselect("Acrescentar / Retirar Responsáveis:", options=opcoes_resp, default=opcoes_resp)
-        
-        # Aplicação combinada dos filtros estruturais
-        df_base = df[(df[col_setor].isin(setores_selecionados)) & (df[col_tipo].isin(tipos_selecionados))]
-        if responsaveis_selecionados:
-            df_base = df_base[df_base[col_responsavel].isin(responsaveis_selecionados)]
-        
-        #--- SELETORES DE INTERATIVIDADE DO ALTAIR ---
-        selecao_clique_tipo = alt.selection_single(fields=[col_tipo], name="clique_tipo")
-        selecao_clique_setor = alt.selection_single(fields=[col_setor], name="clique_setor")
-        selecao_clique_status = alt.selection_single(fields=[col_status], name="clique_status")
-        selecao_clique_resp = alt.selection_single(fields=[col_responsavel], name="clique_resp")
-
-        # Agrupamento estruturado para plotagem dos 6 gráficos requisitados
-        dados_tipo = df_base[col_tipo].value_counts().reset_index()
-        dados_tipo.columns = [col_tipo, 'Quantidade']
-        
-        dados_setor = df_base[col_setor].value_counts().reset_index()
-        dados_setor.columns = [col_setor, 'Quantidade']
-        
-        dados_status = df_base[col_status].value_counts().reset_index()
-        dados_status.columns = [col_status, 'Quantidade']
-        
-        dados_situacao = df_base[df_base[col_situacao_nome].astype(str).str.contains("#") == False][col_situacao_nome].value_counts().reset_index()
-        dados_situacao.columns = [col_situacao_nome, 'Quantidade']
-        
-        dados_resp = df_base[col_responsavel].value_counts().reset_index()
-        dados_resp.columns = [col_responsavel, 'Quantidade']
-
-        #--- 3. MONTAGEM DO LAYOUT DE GRÁFICOS INTERATIVOS LADO A LADO ---
-        st.markdown("### 📊 Painel de Análise Gráfica Cruzada")
-        st.markdown("*Dica: Use as caixas de seleção acima de cada gráfico para alternar entre Barra ou Pizza!*")
-        
-        # Bloco 1: POP e Setores
-        col_g1, col_g2 = st.columns(2)
-        with col_g1:
-            tipo_visual_g1 = st.selectbox("Formato (Tipo de Documento):", ["Barra", "Pizza"], key="g1_visual")
-            chart_tipo = plotar_grafico_naqh(dados_tipo, col_tipo, tipo_visual_g1, selecao_clique_tipo, "#1f77b4", "Volumetria por Sigla do Documento")
-            evento_tipo = st.altair_chart(chart_tipo, use_container_width=True, on_select="rerun")
+        if nome_aba_original:
+            df_orig_cols = pd.read_excel(arquivo_excel, sheet_name=nome_aba_original, header=2, engine="openpyxl")
+            df_orig_cols.columns = df_orig_cols.columns.astype(str).str.strip().str.upper()
             
-        with col_g2:
-            tipo_visual_g2 = st.selectbox("Formato (Setor Requisitante):", ["Barra", "Pizza"], key="g2_visual")
-            chart_setor = plotar_grafico_naqh(dados_setor, col_setor, tipo_visual_g2, selecao_clique_setor, "#2ca02c", "Demandas por Setor")
-            evento_setor = st.altair_chart(chart_setor, use_container_width=True, on_select="rerun")
-
-        # Bloco 2: Status Executivo e Situação de Prazos (Mapeamento Cirúrgico)
-        col_g3, col_g4 = st.columns(2)
-        with col_g3:
-            tipo_visual_g3 = st.selectbox("Formato (Status Executivo):", ["Barra", "Pizza"], key="g3_visual")
-            chart_status = plotar_grafico_naqh(dados_status, col_status, tipo_visual_g3, selecao_clique_status, "#9467bd", "Status Executivo (Aprovados / Cancelados / Em Verificação)")
-            evento_status = st.altair_chart(chart_status, use_container_width=True, on_select="rerun")
-
-        with col_g4:
-            tipo_visual_g4 = st.selectbox("Formato (Situação de Prazo):", ["Barra", "Pizza"], key="g4_visual")
-            if tipo_visual_g4 == "Barra":
-                base_situacao = alt.Chart(dados_situacao).encode(
-                    x=alt.X(f'{col_situacao_nome}:N', sort='-y', title="Situação", axis=alt.Axis(labelAngle=0)),
-                    y=alt.Y('Quantidade:Q', title="Quantidade"),
-                    tooltip=[col_situacao_nome, 'Quantidade']
+            col_g, col_h, col_i = None, None, None
+            for c in df_orig_cols.columns:
+                if any(term in c for term in ["1º", "1O", "V 1", "I.A.V.1", "V1"]): col_g = c
+                if any(term in c for term in ["2º", "2O", "V 2", "I.A.V.2", "V2"]): col_h = c
+                if any(term in c for term in ["I.A.A.A", "AAA", "3º", "3O"]): col_i = c
+            
+            if col_g:
+                media_v1 = pd.to_numeric(df_orig_cols[col_g].astype(str).str.replace(" dias", "", regex=False).str.replace(",", ".", regex=False), errors='coerce').dropna().mean()
+            if col_h:
+                media_v2 = pd.to_numeric(df_orig_cols[col_h].astype(str).str.replace(" dias", "", regex=False).str.replace(",", ".", regex=False), errors='coerce').dropna().mean()
+            if col_i:
+                media_aaa = pd.to_numeric(df_orig_cols[col_i].astype(str).str.replace(" dias", "", regex=False).str.replace(",", ".", regex=False), errors='coerce').dropna().mean()
+            
+            media_v1 = float(media_v1) if pd.notna(media_v1) else 0.0
+            media_v2 = float(media_v2) if pd.notna(media_v2) else 0.0
+            media_aaa = float(media_aaa) if pd.notna(media_aaa) else 0.0
+        
+        # 2. CARREGAMENTO DOS GRÁFICOS (Aba DADOS_GRÁFICOS)
+        nome_aba_graficos = None
+        for n_real in lista_abas_reais:
+            n_up = str(n_real).upper().strip()
+            if "GRAFIC" in n_up or "DADOS" in n_up:
+                nome_aba_graficos = n_real
+                break
+        
+        if not nome_aba_graficos:
+            nome_aba_graficos = lista_abas_reais if lista_abas_reais else None
+            
+        if nome_aba_graficos:
+            df_raw = pd.read_excel(arquivo_excel, sheet_name=nome_aba_graficos, header=0, engine="openpyxl")
+            df_raw.columns = df_raw.columns.astype(str).str.strip().str.upper()
+            
+            num_colunas = len(df_raw.columns)
+            df_base = pd.DataFrame()
+            df_base["SIGLA"] = df_raw.iloc[:, 0] if num_colunas > 0 else None
+            df_base["SETOR"] = df_raw.iloc[:, 1] if num_colunas > 1 else None
+            df_base["RESPONSAVEL"] = df_raw.iloc[:, 3] if num_colunas > 3 else "Não Informado"
+            df_base["STATUS"] = df_raw.iloc[:, 4] if num_colunas > 4 else "Não Informado"
+            df_base["SIT_PRAZO"] = df_raw.iloc[:, 5] if num_colunas > 5 else "Não Informado"
+            
+            for col in df_base.columns:
+                df_base[col] = df_base[col].fillna("").astype(str).str.strip()
+            
+            if "STATUS" in df_base.columns:
+                df_base["STATUS"] = df_base["STATUS"].apply(
+                    lambda x: "AG Aguardando" if "VERIFICADO AGU" in x.upper() or "AGUARDANDO" in x.upper() else x
                 )
-                chart_situacao = base_situacao.mark_bar().encode(color=alt.value("#e377c2")) + base_situacao.mark_text(align='center', baseline='bottom', dy=-5, color='white', fontWeight='bold').encode(text='Quantidade:Q')
-                chart_situacao = chart_situacao.properties(height=280, title="Prazos (Válido / Vencido / Prestes a Vencer)")
-            else:
-                chart_situacao = alt.Chart(dados_situacao).mark_arc().encode(theta=alt.Theta('Quantidade:Q', title="Quantidade"), color=alt.Color(f'{col_situacao_nome}:N', title="Situação"), tooltip=[col_situacao_nome, 'Quantidade']).properties(height=280, title="Prazos (Válido / Vencido / Prestes a Vencer)")
-            st.altair_chart(chart_situacao, use_container_width=True)
+            
+            valores_vazios = ["0", "0.0", "NAN", "NONE", "", "NAN NAN", "NÃO INFORMADO", "A"]
+            for col in df_base.columns:
+                df_base.loc[df_base[col].str.upper().isin(valores_vazios), col] = None
+            
+            df_base = df_base.dropna(subset=["STATUS", "SIGLA"], how="all")
+            df_base = df_base[~df_base["STATUS"].astype(str).str.contains("#", na=False)]
+            df_base = df_base[~df_base["SIT_PRAZO"].astype(str).str.contains("#", na=False)]
+            
+    except Exception as e:
+        st.error(f" Erro crítico no processamento dos dados: {e}")
 
-        # Bloco 3: Responsáveis (Lançamentos) e Gráfico Isolado de Médias das Colunas T, U e V
-        col_g5, col_g6 = st.columns(2)
-        with col_g5:
-            tipo_visual_g5 = st.selectbox("Formato (Funcionário Responsável):", ["Barra", "Pizza"], key="g5_visual")
-            chart_resp = plotar_grafico_naqh(dados_resp, col_responsavel, tipo_visual_g5, selecao_clique_resp, "#ff7f0e", "Documentos Lançados por Responsável")
-            evento_resp = st.altair_chart(chart_resp, use_container_width=True, on_select="rerun")
+#--- 3. MENUS LATERAIS DE FILTROS ---
+if not df_base.empty:
+    st.sidebar.markdown("---")
+    st.sidebar.subheader(" Filtros de Visualização")
+    
+    responsaveis_validos = df_base["RESPONSAVEL"].dropna().unique()
+    lista_responsaveis = sorted([str(r) for r in responsaveis_validos])
+    lista_responsaveis.insert(0, "Todos")
+    responsavel_selecionado = st.sidebar.selectbox("Selecione o Responsável:", lista_responsaveis)
+    
+    df_filtrado = df_base.copy()
+    if responsavel_selecionado != "Todos":
+        df_filtrado = df_base[df_base["RESPONSAVEL"] == responsavel_selecionado]
+    
+    st.sidebar.markdown("---")
+    st.sidebar.subheader(" Qtd por Documento (Sigla)")
+    df_lateral_contagem = df_filtrado["SIGLA"].dropna().value_counts().reset_index()
+    df_lateral_contagem.columns = ["Documento", "Qtd"]
+    st.sidebar.dataframe(df_lateral_contagem, use_container_width=True, hide_index=True)
+    
+    st.sidebar.markdown("---")
+    st.sidebar.subheader(" Configuração dos Gráficos")
+    c_g1_color = st.sidebar.color_picker("G1 - Cor Status / Tipo:", "#FBBF24", key="c1")
+    c_g4_color = st.sidebar.color_picker("G4 - Cor Prazo:", "#C084FC", key="c4")
+    c_prof_color = st.sidebar.color_picker("G5 - Cor Profissional:", "#38BDF8", key="c5")
 
-        with col_g6:
-            st.selectbox("Formato (Tempos Médios):", ["Barra"], disabled=True, key="g6_visual")
+    #--- 4. INDICADORES DO TOPO (CARDS KPIs) ---
+    total_docs = len(df_filtrado)
+    aprovados = len(df_filtrado[df_filtrado["STATUS"].astype(str).str.upper().str.contains("APROVADO|OK|SIM", na=False)])
+    
+    kpi_col1, kpi_col2, kpi_col3, kpi_col4, kpi_col5 = st.columns(5)
+    with kpi_col1: st.metric(label=" TOTAL DOCUMENTOS", value=f"{total_docs}")
+    with kpi_col2: st.metric(label=" APROVADOS", value=f"{aprovados}")
+    with kpi_col3: st.metric(label=" 1º VERF.", value=f"{media_v1:.1f} d")
+    with kpi_col4: st.metric(label=" 2º VERF.", value=f"{media_v2:.1f} d")
+    with kpi_col5: st.metric(label=" 3º VERF.", value=f"{media_aaa:.1f} d")
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.subheader(" Painel Executivo NAQH — Resultados Finais")
+    
+    #--- 5. RENDERIZAÇÃO REAL DOS GRÁFICOS INTEGRADOS COM MOTOR ALTAIR ---
+    
+    # LINHA 1: Status Geral e Prazos
+    linha1_col1, linha1_col2 = st.columns(2)
+    with linha1_col1:
+        st.markdown("### Documentos por Status")
+        dados_g1 = df_filtrado["STATUS"].dropna().value_counts().reset_index()
+        dados_g1.columns = ["STATUS", "Quantidade"]
+        dados_g1 = dados_g1[~dados_g1["STATUS"].astype(str).str.upper().str.contains("CANCELADO", na=False)]
