@@ -40,7 +40,7 @@ uploaded_file = st.file_uploader(
 
 st.markdown("---")
 
-# [CAMPO DE CUSTOMIZAÇÃO VISUAL VOLTOU] Fixo, aberto e visível no topo da página
+# Campo de customização visual fixo e visível no topo da página principal
 st.subheader("🎨 Passo 2: Customização Visual e Estilo")
 c1, c2, c3 = st.columns(3)
 with c1:
@@ -202,13 +202,14 @@ ori_5 = "h" if tipo_grafico_5 == "Horizontal" else "v"
 x_5 = "Quantidade Aprovada" if tipo_grafico_5 == "Horizontal" else "Tipo de Documento"
 y_5 = "Tipo de Documento" if tipo_grafico_5 == "Horizontal" else "Quantidade Aprovada"
 
-fig5 = px.bar(df_g5_counts, x=x_5, y=y_5, text="Quantidade Aprovada", color="Tipo de Documento", orientation=ori_5, color_discrete_sequence=cor_sequsequence if 'cor_sequsequence' in locals() else cor_sequencia)
+# [CORRIGIDO] Váriavel ajustada estritamente para 'cor_sequencia' para eliminar o erro silencioso de compilação
+fig5 = px.bar(df_g5_counts, x=x_5, y=y_5, text="Quantidade Aprovada", color="Tipo de Documento", orientation=ori_5, color_discrete_sequence=cor_sequencia)
 fig5.update_traces(textposition="outside")
 st.plotly_chart(fig5, use_container_width=True)
 
 st.markdown("---")
 
 # ==============================================================================
-# 9. GRÁFICO 6: DETALHAMENTO CRUZADO POR PROFISSIONAL (TOTALMENTE INDEPENDENTE)
+# 9. GRÁFICO 6: DETALHAMENTO CRUZADO POR PROFISSIONAL
 # ==============================================================================
 st.subheader("6 Detalhamento de Tipos de Documento por Status e Profissional")
