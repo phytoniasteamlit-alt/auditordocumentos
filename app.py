@@ -177,7 +177,7 @@ else:
 st.markdown("---")
 
 # ==============================================================================
-# 6. ANÁLISE POR PROFISSIONAL (EIXOS LIMPOS E EMPILHAMENTO ORGANIZADO)
+# 6. ANÁLISE POR PROFISSIONAL (REMOÇÃO DEFINITIVA DE SABRINA E SONALHYA DO GRÁFICO)
 # ==============================================================================
 row2_col1, row2_col2 = st.columns(2)
 
@@ -187,7 +187,7 @@ with row2_col1:
     
     profissionais_totais = df["RESPONSÁVEL"].dropna().unique().tolist()
     
-    # Filtra removendo Sabrina e Sonalhya do selectbox de filtros ativos
+    # Isola estritamente quem está ativo no quadro de funcionários
     profissionais_ativos = [p for p in profissionais_totais if p.upper() not in ["SABRINA", "SONALHYA"]]
     
     if profissionais_ativos:
@@ -196,15 +196,16 @@ with row2_col1:
             options=["Todos"] + profissionais_ativos
         )
         
+        # [AJUSTE] Se for "Todos", exibe o gráfico apenas com as pessoas ativas na lista de barras
         if prof_selecionado == "Todos":
-            df_g4 = df
+            df_g4 = df[df["RESPONSÁVEL"].isin(profissionais_ativos)]
         else:
             df_g4 = df[df["RESPONSÁVEL"] == prof_selecionado]
             
         if not df_g4.empty:
             df_g4_counts = df_g4.groupby(["RESPONSÁVEL", "STATUS DO DOCUMENTO NORMATIVO"]).size().reset_index(name="Quantidade")
             
-            # Barras horizontais agrupadas por Profissional no eixo Y
+            # [CORREÇÃO DE COR] Adicionado 'category_orders' para travar o alinhamento correto das cores das legendas com as barras
             fig4 = px.bar(
                 df_g4_counts, 
                 x="Quantidade", 
@@ -215,6 +216,7 @@ with row2_col1:
                 height=500,
                 text="Quantidade",
                 labels={"RESPONSÁVEL": "Profissional", "Quantidade": "Nº de Documentos"},
+                category_orders={"STATUS DO DOCUMENTO NORMATIVO": ["APROVADO", "AG. DEV - SETOR", "EM VERIFICAÇÃO", "CANCELADO"]},
                 color_discrete_map={
                     "APROVADO": "#2ca02c",
                     "AG. DEV - SETOR": "#d62728",
@@ -230,7 +232,7 @@ with row2_col1:
     else:
         st.warning("Coluna de profissionais indisponível.")
 
-# GRÁFICO 5: Documentos Aprovados por Tipo (Estrutura Linear Simplificada sem o IF problemático)
+# GRÁFICO 5: Documentos Aprovados por Tipo
 with row2_col2:
     st.subheader("5 Documentos Aprovados por Tipo")
     tipos_disponiveis = df["SIGLA DO DOCUMENTO"].dropna().unique().tolist()
@@ -239,9 +241,3 @@ with row2_col2:
         tipos_selecionados = st.multiselect(
             "Filtrar por Tipo de Documento (Sigla):",
             options=tipos_disponiveis, 
-            default=tipos_disponiveis
-        )
-        
-        df_g5 = df[(df["STATUS DO DOCUMENTO NORMATIVO"].str.upper() == "APROVADO") & (df["SIGLA DO DOCUMENTO"].isin(tipos_selecionados))]
-        
-        df_g5_counts = df_g5["SIGLA DO DOCUMENTO"].value_counts().reset_index()
