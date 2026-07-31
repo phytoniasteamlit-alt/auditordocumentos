@@ -230,7 +230,7 @@ with row2_col1:
     else:
         st.warning("Coluna de profissionais indisponível.")
 
-# GRÁFICO 5: Documentos Aprovados por Tipo (Estrutura totalmente higienizada)
+# GRÁFICO 5: Documentos Aprovados por Tipo (Estrutura Linear Simplificada sem o IF problemático)
 with row2_col2:
     st.subheader("5 Documentos Aprovados por Tipo")
     tipos_disponiveis = df["SIGLA DO DOCUMENTO"].dropna().unique().tolist()
@@ -244,4 +244,4 @@ with row2_col2:
         
         df_g5 = df[(df["STATUS DO DOCUMENTO NORMATIVO"].str.upper() == "APROVADO") & (df["SIGLA DO DOCUMENTO"].isin(tipos_selecionados))]
         
-        if not df_g5.empty:
+        df_g5_counts = df_g5["SIGLA DO DOCUMENTO"].value_counts().reset_index()
