@@ -181,18 +181,18 @@ if not df_base.empty:
     st.markdown("<br>", unsafe_allow_html=True)
     
     #--- 5. RENDERIZAÇÃO DOS GRÁFICOS ---
-    
-    # LINHA 1: Documentos por Status e Situação de Prazos
-    linha1_col1, linha1_col2 = st.columns(2)
-    with linha1_col1:
-        st.markdown("### Documentos por Status")
-        dados_g1 = df_filtrado["STATUS"].dropna().value_counts()
-        st.bar_chart(dados_g1, color=c_g1_color, horizontal=True)
+    # BLINDAGEM DE EXECUÇÃO: Garante que os gráficos inferiores só renderizam se houver registros válidos carregados
+    if not df_filtrado.empty:
         
-    with linha1_col2:
-        st.markdown("### Situação de Prazos")
-        s_prazos_limpos = df_filtrado["SIT_PRAZO"].apply(remover_acentos)
-        contagem_prazos = s_prazos_limpos.value_counts()
-        
-        # CORREÇÃO DEFINITIVA CONTRA SYNTAX ERROR: Criando a série sem usar chaves {} ou parênteses complexos
-        dados_prazo = pd.Series(0, index=["No Prazo", "Prestes a Vencer", "Vencido"])
+        # LINHA 1: Documentos por Status e Situação de Prazos
+        linha1_col1, linha1_col2 = st.columns(2)
+        with linha1_col1:
+            st.markdown("### Documentos por Status")
+            dados_g1 = df_filtrado["STATUS"].dropna().value_counts()
+            st.bar_chart(dados_g1, color=c_g1_color, horizontal=True)
+            
+        with linha1_col2:
+            st.markdown("### Situação de Prazos")
+            s_prazos_limpos = df_filtrado["SIT_PRAZO"].apply(remover_acentos)
+            contagem_prazos = s_prazos_limpos.value_counts()
+            
