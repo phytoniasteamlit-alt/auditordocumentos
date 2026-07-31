@@ -119,8 +119,8 @@ if arquivo_excel:
             for col in df_base.columns:
                 df_base.loc[df_base[col].str.upper().isin(valores_vazios), col] = None
             
-            # Limpeza cirúrgica contra linhas vazias fantasmas do Excel
-            df_base = df_base.dropna(subset=["STATUS", "SIGLA"], how="any")
+            # CORREÇÃO: how="all" impede que linhas com pequenos vazios sumam e quebrem os gráficos inferiores
+            df_base = df_base.dropna(subset=["STATUS", "SIGLA"], how="all")
             df_base = df_base[~df_base["STATUS"].astype(str).str.contains("#", na=False)]
             df_base = df_base[~df_base["SIT_PRAZO"].astype(str).str.contains("#", na=False)]
             
@@ -167,7 +167,7 @@ if not df_base.empty:
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader(" Painel Executivo NAQH — Resultados Finais")
     
-    #--- 5. RENDERIZAÇÃO REAL DOS GRÁFICOS (NATIVOS E SEGUROS) ---
+    #--- 5. RENDERIZAÇÃO REAL DOS GRÁFICOS ---
     
     # LINHA 1: Status Geral e Prazos
     linha1_col1, linha1_col2 = st.columns(2)
@@ -188,6 +188,6 @@ if not df_base.empty:
         dados_prazo["Vencido"] = int(contagem_prazos.get("VENCIDO", 0))
         st.bar_chart(dados_prazo, color=c_g4_color, horizontal=True)
     
-    # LINHA DIVISÓRIA INVISÍVEL TOTALMENTE NATIVA E SEGURA
+    # LINHA DIVISÓRIA INVISÍVEL NATIVA
     st.write("")
     st.write("")
