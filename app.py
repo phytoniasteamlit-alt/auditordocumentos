@@ -31,27 +31,28 @@ with header_left:
 st.markdown("---")
 
 # ==============================================================================
-# 2. PAINEL DE CONTROLE (SIDEBAR TOTALMENTE LIMPA PARA LIBERAR A ROLAGEM)
+# 2. PAINEL DE CONTROLE FIXO NO TOPO (NÃO TRAVA A ROLAGEM DA TELA)
 # ==============================================================================
-st.sidebar.header("⚙️ Painel de Controle")
-uploaded_file = st.sidebar.file_uploader(
-    "Carregar Planilha Excel (.xlsx):", 
+uploaded_file = st.file_uploader(
+    "📂 Passo 1: Carregue sua Planilha Excel aqui (.xlsx):", 
     type=["xlsx"]
 )
 
-# Painel de customização retrátil para liberar espaço na tela
-with st.expander("🎨 Customização Visual e Estilo dos Gráficos (Clique para abrir/fechar)"):
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        paleta_selecionada = st.selectbox(
-            "Tema de Cores Geral (Gráficos 1, 2 e 5):",
-            options=["Padrão Hospitalar", "Tons Pastéis", "Vibrante", "Esmeralda"],
-            index=0
-        )
-    with c2:
-        tipo_grafico_5 = st.radio("Estilo do Gráfico 5:", options=["Barras Verticais", "Barras Horizontais"], index=0, horizontal=True)
-    with c3:
-        tipo_grafico_6 = st.radio("Estilo do Gráfico 6:", options=["Barras Verticais", "Barras Horizontais"], index=0, horizontal=True)
+st.markdown("---")
+
+# [CAMPO DE CUSTOMIZAÇÃO VISUAL VOLTOU] Fixo, aberto e visível no topo da página
+st.subheader("🎨 Passo 2: Customização Visual e Estilo")
+c1, c2, c3 = st.columns(3)
+with c1:
+    paleta_selecionada = st.selectbox(
+        "Escolha o Tema de Cores Geral:",
+        options=["Padrão Hospitalar", "Tons Pastéis", "Vibrante", "Esmeralda"],
+        index=0
+    )
+with c2:
+    tipo_grafico_5 = st.radio("Orientação do Gráfico 5:", options=["Vertical", "Horizontal"], index=0, horizontal=True)
+with c3:
+    tipo_grafico_6 = st.radio("Orientação do Gráfico 6:", options=["Vertical", "Horizontal"], index=0, horizontal=True)
 
 if paleta_selecionada == "Tons Pastéis":
     cor_sequencia = px.colors.qualitative.Pastel
@@ -62,45 +63,48 @@ elif paleta_selecionada == "Esmeralda":
 else:
     cor_sequencia = px.colors.qualitative.Safe
 
+st.markdown("---")
+
+# ==============================================================================
+# 3. LEITURA E PADRONIZAÇÃO COMPLETA DA PLANILHA
+# ==============================================================================
 if uploaded_file is not None:
     try:
         df = pd.read_excel(uploaded_file, sheet_name="DADOS_GRÁFICOS")
         
-        # Limpeza de espaços invisíveis e conversão forçada para maiúsculas em todas as colunas
+        # Limpa espaços invisíveis e garante que textos fiquem legíveis
         for col in df.columns:
             if df[col].dtype == "object":
-                df[col] = df[col].astype(str).str.strip().str.upper()
+                df[col] = df[col].astype(str).str.strip()
                 
-        # Substituir strings de erro do Excel por valores nulos limpos
-        df = df.replace(["#VALOR!", "0", "0.0", "NONE", "NAN", "NAN"], None)
+        df = df.replace(["#VALOR!", "0", "0.0", "None", "nan", "NaN"], None)
         df = df.dropna(subset=["SIGLA DO DOCUMENTO", "NOME DO DOCUMENTO", "RESPONSÁVEL"], how="all")
 
-        # Altera a legenda "A" para "AGD DEV SETOR" em memória na coluna temporal
+        # Tratamento das legendas solicitadas
         col_vencido = "(Vencido, No Prazo, Prestes a Vencer)"
         if col_vencido in df.columns:
-            df[col_vencido] = df[col_vencido].replace({"A": "AGD DEV SETOR"})
+            df[col_vencido] = df[col_vencido].replace({"A": "Agd Dev Setor"})
             
-        # Altera o status longo para "AG. DEV - SETOR" diretamente na memória
         if "STATUS DO DOCUMENTO NORMATIVO" in df.columns:
             df["STATUS DO DOCUMENTO NORMATIVO"] = df["STATUS DO DOCUMENTO NORMATIVO"].replace({
                 "VERIFICADO AGUARDA DEVOLUÇÃO SETOR": "AG. DEV - SETOR"
             })
             
     except Exception as e:
-        st.error(f"Erro ao processar o arquivo: {e}")
+        st.error(f"Erro crítico ao processar o arquivo: {e}")
         st.stop()
 else:
-    st.info("💡 Por favor, use o menu lateral para carregar a sua planilha Excel e ativar os gráficos interativos.")
+    st.info("💡 Aguardando o carregamento da planilha Excel para ativar todos os 7 gráficos do painel.")
     st.stop()
 
 # ==============================================================================
-# 3. PROCESSAMENTO DOS INDICADORES CRÍTICOS (METRICS)
+# 4. EXIBIÇÃO DAS MÉTRICAS DO TOPO
 # ==============================================================================
-status_documento = df["STATUS DO DOCUMENTO NORMATIVO"].fillna("NÃO INFORMADO")
+status_documento = df["STATUS DO DOCUMENTO NORMATIVO"].fillna("Não Informado")
 total_docs = len(df)
-aprovados = len(df[status_documento == "APROVADO"])
-verf_1 = len(df[status_documento == "AG. DEV - SETOR"])
-verf_2 = len(df[status_documento == "EM VERIFICAÇÃO"])
+aprovados = len(df[status_documento.str.upper() == "APROVADO"])
+verf_1 = len(df[status_documento.str.upper() == "AG. DEV - SETOR"])
+verf_2 = len(df[status_documento.str.upper() == "EM VERIFICAÇÃO"])
 
 m1, m2, m3, m4 = st.columns(4)
 m1.metric(label="📄 Total de Documentos", value=total_docs)
@@ -111,7 +115,7 @@ m4.metric(label="⏰ T - 2º Verf", value=verf_2)
 st.markdown("---")
 
 # ==============================================================================
-# 4. FILAS DE GRÁFICOS (ROWS 1 & 2) - EXIBIÇÃO DE QUANTIDADES ABSOLUTAS
+# 5. FILA DE PIZZAS (GRÁFICOS 1 & 2)
 # ==============================================================================
 row1_col1, row1_col2 = st.columns(2)
 
@@ -119,26 +123,24 @@ with row1_col1:
     st.subheader("1 Válidos, Vencidos, no Prazo")
     df_g1 = df[col_vencido].value_counts().reset_index()
     df_g1.columns = [col_vencido, "Quantidade"]
-    if not df_g1.empty:
-        fig1 = px.pie(df_g1, names=col_vencido, values="Quantidade", hole=0.4, color_discrete_sequence=cor_sequencia)
-        fig1.update_traces(textinfo='value+label', textposition='inside')
-        fig1.update_layout(margin=dict(l=20, r=20, t=30, b=20), showlegend=False)
-        st.plotly_chart(fig1, use_container_width=True)
+    fig1 = px.pie(df_g1, names=col_vencido, values="Quantidade", hole=0.4, color_discrete_sequence=cor_sequencia)
+    fig1.update_traces(textinfo='value+label', textposition='inside')
+    fig1.update_layout(margin=dict(l=20, r=20, t=30, b=20), showlegend=False)
+    st.plotly_chart(fig1, use_container_width=True)
 
 with row1_col2:
     st.subheader("2 Status por Documentos")
     df_g2 = df["STATUS DO DOCUMENTO NORMATIVO"].value_counts().reset_index()
     df_g2.columns = ["Status", "Quantidade"]
-    if not df_g2.empty:
-        fig2 = px.pie(df_g2, names="Status", values="Quantidade", hole=0.4, color_discrete_sequence=cor_sequencia)
-        fig2.update_traces(textinfo='value+label', textposition='inside')
-        fig2.update_layout(margin=dict(l=20, r=20, t=30, b=20), showlegend=False)
-        st.plotly_chart(fig2, use_container_width=True)
+    fig2 = px.pie(df_g2, names="Status", values="Quantidade", hole=0.4, color_discrete_sequence=cor_sequencia)
+    fig2.update_traces(textinfo='value+label', textposition='inside')
+    fig2.update_layout(margin=dict(l=20, r=20, t=30, b=20), showlegend=False)
+    st.plotly_chart(fig2, use_container_width=True)
 
 st.markdown("---")
 
 # ==============================================================================
-# 5. GRÁFICOS INTERATIVOS COM MAPA DE CORES CUSTOMIZADO
+# 6. GRÁFICO 3: N° DOCUMENTOS POR STATUS
 # ==============================================================================
 st.subheader("3 Nº Documentos por Status")
 status_disponiveis = df["STATUS DO DOCUMENTO NORMATIVO"].dropna().unique().tolist()
@@ -158,11 +160,11 @@ st.plotly_chart(fig3, use_container_width=True)
 st.markdown("---")
 
 # ==============================================================================
-# 6. GRÁFICO 4: DOCUMENTOS POR PROFISSIONAL
+# 7. GRÁFICO 4: DOCUMENTOS POR PROFISSIONAL
 # ==============================================================================
 st.subheader("4 Documentos por Profissional")
 profissionais_totais = df["RESPONSÁVEL"].dropna().unique().tolist()
-profissionais_ativos = [p for p in profissionais_totais if p not in ["SABRINA", "SONALHYA", "SONALIA"]]
+profissionais_ativos = [p for p in profissionais_totais if p.upper() not in ["SABRINA", "SONALHYA", "SONALIA"]]
 
 prof_selecionado = st.selectbox("Selecionar Profissional para Análise:", options=["Todos"] + profissionais_ativos)
 
@@ -186,27 +188,27 @@ st.plotly_chart(fig4, use_container_width=True)
 st.markdown("---")
 
 # ==============================================================================
-# 7. GRÁFICO 5: DOCUMENTOS APROVADOS POR TIPO
+# 8. GRÁFICO 5: DOCUMENTOS APROVADOS POR TIPO
 # ==============================================================================
 st.subheader("5 Documentos Aprovados por Tipo")
 tipos_disponiveis = df["SIGLA DO DOCUMENTO"].dropna().unique().tolist()
 tipos_selecionados = st.multiselect("Filtrar por Tipo de Documento (Sigla):", options=tipos_disponiveis, default=tipos_disponiveis)
 
-df_g5 = df[(df["STATUS DO DOCUMENTO NORMATIVO"] == "APROVADO") & (df["SIGLA DO DOCUMENTO"].isin(tipos_selecionados))]
+df_g5 = df[(df["STATUS DO DOCUMENTO NORMATIVO"].str.upper() == "APROVADO") & (df["SIGLA DO DOCUMENTO"].isin(tipos_selecionados))]
 df_g5_counts = df_g5["SIGLA DO DOCUMENTO"].value_counts().reset_index()
 df_g5_counts.columns = ["Tipo de Documento", "Quantidade Aprovada"]
 
-g5_horizontal = (tipo_grafico_5 == "Barras Horizontais")
-eixo_x_5 = "Quantidade Aprovada" if g5_horizontal else "Tipo de Documento"
-eixo_y_5 = "Tipo de Documento" if g5_horizontal else "Quantidade Aprovada"
-ori_5 = "h" if g5_horizontal else "v"
+ori_5 = "h" if tipo_grafico_5 == "Horizontal" else "v"
+x_5 = "Quantidade Aprovada" if tipo_grafico_5 == "Horizontal" else "Tipo de Documento"
+y_5 = "Tipo de Documento" if tipo_grafico_5 == "Horizontal" else "Quantidade Aprovada"
 
-fig5 = px.bar(df_g5_counts, x=eixo_x_5, y=eixo_y_5, text="Quantidade Aprovada", color="Tipo de Documento", orientation=ori_5, color_discrete_sequence=cor_sequencia)
+fig5 = px.bar(df_g5_counts, x=x_5, y=y_5, text="Quantidade Aprovada", color="Tipo de Documento", orientation=ori_5, color_discrete_sequence=cor_sequsequence if 'cor_sequsequence' in locals() else cor_sequencia)
 fig5.update_traces(textposition="outside")
 st.plotly_chart(fig5, use_container_width=True)
 
 st.markdown("---")
 
 # ==============================================================================
-# 8. GRÁFICO 6: DETALHAMENTO CRUZADO DE TIPOS DE DOCUMENTO POR STATUS (SINTAXE CORRIGIDA)
+# 9. GRÁFICO 6: DETALHAMENTO CRUZADO POR PROFISSIONAL (TOTALMENTE INDEPENDENTE)
 # ==============================================================================
+st.subheader("6 Detalhamento de Tipos de Documento por Status e Profissional")
