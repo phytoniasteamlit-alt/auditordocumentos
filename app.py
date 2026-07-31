@@ -57,7 +57,7 @@ if arquivo_excel:
         xl = pd.ExcelFile(arquivo_excel, engine="openpyxl")
         lista_abas_reais = xl.sheet_names
         
-        # Identifica a aba DADOS_GRÁFICOS de maneira inteligente
+        # Identifica a aba DADOS_GRÁFICOS
         nome_aba_principal = None
         for n_real in lista_abas_reais:
             if "GRAF" in str(n_real).upper().strip():
@@ -70,7 +70,7 @@ if arquivo_excel:
         if nome_aba_principal:
             df_raw = pd.read_excel(arquivo_excel, sheet_name=nome_aba_principal, header=0, engine="openpyxl")
             
-            # Limpa espaços em branco dos nomes das colunas
+            # Limpa cabeçalhos
             df_raw.columns = [str(c).strip() for c in df_raw.columns]
             colunas_planilha = {str(col).upper().strip(): col for col in df_raw.columns}
             
@@ -80,7 +80,7 @@ if arquivo_excel:
                         return df_raw[colunas_planilha[nome]]
                 return pd.Series([padrao] * len(df_raw))
 
-            # CORREÇÃO DA SINTAXE: Usando df_raw.shape[1] para obter a quantidade de colunas
+            # 1. PROCESSAMENTO DAS MÉDIAS
             if df_raw.shape[1] > 6:
                 s_g = df_raw.iloc[:, 6].astype(str).str.replace(" dias", "", regex=False).str.replace(",", ".", regex=False)
                 df_g_nums = pd.to_numeric(s_g, errors='coerce').dropna()
@@ -96,7 +96,7 @@ if arquivo_excel:
             media_v1 = float(media_v1) if pd.notna(media_v1) else 0.0
             media_v2 = float(media_v2) if pd.notna(media_v2) else 0.0
 
-            # Captura amarrada estritamente pelos cabeçalhos da aba DADOS_GRÁFICOS
+            # 2. CAPTURA DOS DADOS
             df_base = pd.DataFrame()
             df_base["SIGLA"] = buscar_coluna(["SIGLA DO DOCUMENTO", "SIGLA"], "N/A")
             df_base["SETOR"] = buscar_coluna(["SETOR"], "N/A")
@@ -104,7 +104,7 @@ if arquivo_excel:
             df_base["STATUS"] = buscar_coluna(["STATUS DO DOCUMENTO NORMATIVO", "STATUS"], "Não Informado")
             df_base["SIT_PRAZO"] = buscar_coluna(["VENCIDO, NO PRAZO, PRESTES A VENCER", "(VENCIDO, NO PRAZO, PRESTES A VENCER)", "SIT_PRAZO"], "Não Informado")
             
-            # Limpeza de linhas nulas
+            # Limpeza
             df_base = df_base.dropna(subset=["SIGLA", "STATUS"], how="all")
             for col in df_base.columns:
                 df_base[col] = df_base[col].fillna("").astype(str).str.strip()
@@ -190,7 +190,11 @@ if not df_base.empty:
         s_prazos_limpos = df_filtrado["SIT_PRAZO"].apply(remover_acentos)
         contagem_prazos = s_prazos_limpos.value_counts()
         
+        # CORREÇÃO: Parêntese fechado corretamente na linha abaixo
         dados_prazo = pd.Series({
             "No Prazo": contagem_prazos.get("VALIDO", 0) + contagem_prazos.get("NO PRAZO", 0),
             "Prestes a Vencer": contagem_prazos.get("PRESTES A VENCER", 0),
             "Vencido": contagem_prazos.get("VENCIDO", 0)
+        })
+        st.bar_chart(dados_prazo, color=c_g4_color, horizontal=True)
+        
