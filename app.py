@@ -84,7 +84,7 @@ if arquivo_excel:
                         return df_raw[colunas_planilha[nome]]
                 return pd.Series([padrao] * len(df_raw))
 
-            # 1. PROCESSAMENTO DE MÉDIAS MANTIDO APENAS PARA OS CARDS DO TOPO
+            # PROCESSAMENTO DE MÉDIAS MANTIDO APENAS PARA OS CARDS DO TOPO
             total_colunas = len(df_raw.columns)
             
             try:
@@ -108,7 +108,7 @@ if arquivo_excel:
             media_v1 = float(media_v1) if pd.notna(media_v1) else 0.0
             media_v2 = float(media_v2) if pd.notna(media_v2) else 0.0
 
-            # 2. CAPTURA DOS DADOS
+            # CAPTURA DOS DADOS
             df_base = pd.DataFrame()
             df_base["SIGLA"] = buscar_coluna(["SIGLA DO DOCUMENTO", "SIGLA"], "N/A")
             df_base["SETOR"] = buscar_coluna(["SETOR"], "N/A")
@@ -144,11 +144,11 @@ if not df_base.empty:
     
     lista_responsaveis = sorted([str(r) for r in df_base["RESPONSAVEL"].dropna().unique() if str(r).strip() != ""])
     lista_responsaveis.insert(0, "Todos")
-    responsavel_selecionado = st.sidebar.selectbox("Selecione o Responsável:", lista_responsaveis)
+    responsavel_selecionado = st.sidebar.selectbox("Selecione o Responsável (Filtro Geral):", lista_responsaveis)
     
     lista_documentos = sorted([str(d) for d in df_base["SIGLA"].dropna().unique() if str(d).strip() != ""])
     lista_documentos.insert(0, "Todos")
-    documento_selecionado = st.sidebar.selectbox("Filtrar por Documento Aprovado:", lista_documentos)
+    documento_selecionado = st.sidebar.selectbox("Filtrar por Tipo de Documento:", lista_documentos)
     
     df_filtrado = df_base.copy()
     if responsavel_selecionado != "Todos":
@@ -164,8 +164,9 @@ if not df_base.empty:
     
     st.sidebar.markdown("---")
     st.sidebar.subheader("🎨 Configuração dos Gráficos")
-    c_g1_color = st.sidebar.color_picker("G1 - Cor Status:", "#FBBF24", key="c1")
+    c_g1_color = st.sidebar.color_picker("G1 - Cor Geral / Tipo:", "#FBBF24", key="c1")
     c_g4_color = st.sidebar.color_picker("G4 - Cor Prazo:", "#C084FC", key="c4")
+    c_prof_color = st.sidebar.color_picker("G5 - Cor Profissional:", "#38BDF8", key="c5")
     
     #--- 4. INDICADORES DO TOPO (CARDS) ---
     total_docs = len(df_filtrado)
@@ -180,23 +181,20 @@ if not df_base.empty:
     st.markdown("<br>", unsafe_allow_html=True)
     
     #--- 5. RENDERIZAÇÃO DOS GRÁFICOS ---
-    # MODIFICAÇÃO: O gráfico de Status agora ocupa a largura total da linha, e o Tempo foi removido
-    st.markdown("### Documentos por Status")
-    dados_g1 = df_filtrado["STATUS"].dropna().value_counts()
-    st.bar_chart(dados_g1, color=c_g1_color, horizontal=True)
     
-    st.markdown("---")
-    linha2_col1, linha2_col2 = st.columns(2)
-    
-    with linha2_col1:
+    # LINHA 1: Visão Geral de Status e Prazos
+    linha1_col1, linha1_col2 = st.columns(2)
+    with linha1_col1:
+        st.markdown("### Documentos por Status")
+        dados_g1 = df_filtrado["STATUS"].dropna().value_counts()
+        st.bar_chart(dados_g1, color=c_g1_color, horizontal=True)
+        
+    with linha1_col2:
         st.markdown("### Situação de Prazos")
         s_prazos_limpos = df_filtrado["SIT_PRAZO"].apply(remover_acentos)
         contagem_prazos = s_prazos_limpos.value_counts()
-        
         dados_prazo = pd.Series({
             "No Prazo": contagem_prazos.get("VALIDO", 0) + contagem_prazos.get("NO PRAZO", 0),
             "Prestes a Vencer": contagem_prazos.get("PRESTES A VENCER", 0),
             "Vencido": contagem_prazos.get("VENCIDO", 0)
         })
-        st.bar_chart(dados_prazo, color=c_g4_color, horizontal=True)
-        
