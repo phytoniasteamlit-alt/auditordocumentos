@@ -39,8 +39,7 @@ uploaded_file = st.sidebar.file_uploader(
     type=["xlsx"]
 )
 
-# [MUDANÇA CRÍTICA] Customização Visual movida para um Expander no topo da página principal 
-# Isso encurta a Sidebar e força o navegador a liberar a rolagem vertical até o fim!
+# Customização Visual em menu retrátil para encurtar a Sidebar e destravar a rolagem vertical
 with st.expander("🎨 Customização Visual e Estilo dos Gráficos (Clique para abrir/fechar)"):
     c1, c2, c3 = st.columns(3)
     with c1:
@@ -67,7 +66,7 @@ if uploaded_file is not None:
     try:
         df = pd.read_excel(uploaded_file, sheet_name="DADOS_GRÁFICOS")
         
-        # Limpeza de espaços invisíveis e conversão forçada para maiúsculas
+        # Limpeza de espaços invisíveis e conversão forçada para maiúsculas em todas as colunas
         for col in df.columns:
             if df[col].dtype == "object":
                 df[col] = df[col].astype(str).str.strip().str.upper()
@@ -191,7 +190,6 @@ st.markdown("---")
 # ==============================================================================
 st.subheader("5 Documentos Aprovados por Tipo")
 tipos_disponiveis = df["SIGLA DO DOCUMENTO"].dropna().unique().tolist()
-
 tipos_selecionados = st.multiselect("Filtrar por Tipo de Documento (Sigla):", options=tipos_disponiveis, default=tipos_disponiveis)
 
 df_g5 = df[(df["STATUS DO DOCUMENTO NORMATIVO"] == "APROVADO") & (df["SIGLA DO DOCUMENTO"].isin(tipos_selecionados))]
@@ -210,4 +208,5 @@ st.plotly_chart(fig5, use_container_width=True)
 st.markdown("---")
 
 # ==============================================================================
-# 8. GRÁFICO 6: DETALHAMENTO CRUZADO DE TIPOS DE DOCUMENTO POR STATUS
+# 8. GRÁFICO 6: DETALHAMENTO CRUZADO DE TIPOS DE DOCUMENTO POR STATUS (FORÇADO E BLINDADO)
+# ==============================================================================
