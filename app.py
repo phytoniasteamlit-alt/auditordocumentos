@@ -39,18 +39,16 @@ uploaded_file = st.sidebar.file_uploader(
     type=["xlsx"]
 )
 
-# [NOVO] PALETAS DE CORES DINÂMICAS PARA A SIDEBAR (APROVEITANDO O ESPAÇO VAZIO)
+# --- PANEL DE CUSTOMIZAÇÃO VISUAL (SIDEBAR) ---
 st.sidebar.markdown("---")
 st.sidebar.subheader("🎨 Customização Visual")
 
-# Opções de paletas nativas do Plotly para os gráficos gerais (1, 2 e 5)
 paleta_selecionada = st.sidebar.selectbox(
     "Tema de Cores Geral (Gráficos 1, 2 e 5):",
     options=["Padrão Hospitalar", "Tons Pastéis", "Vibrante", "Esmeralda"],
     index=0
 )
 
-# Mapeamento do tema escolhido para sequências do Plotly Express
 if paleta_selecionada == "Tons Pastéis":
     cor_sequencia = px.colors.qualitative.Pastel
 elif paleta_selecionada == "Vibrante":
@@ -60,7 +58,6 @@ elif paleta_selecionada == "Esmeralda":
 else:
     cor_sequencia = px.colors.qualitative.Safe
 
-# Opções de Estilo/Tipo de Gráfico para o Gráfico 5 e 6
 tipo_grafico_5 = st.sidebar.radio("Estilo do Gráfico 5:", options=["Barras Verticais", "Barras Horizontais"], index=0)
 tipo_grafico_6 = st.sidebar.radio("Estilo do Gráfico 6:", options=["Barras Verticais", "Barras Horizontais"], index=0)
 
@@ -123,7 +120,7 @@ st.markdown("---")
 # ==============================================================================
 row1_col1, row1_col2 = st.columns(2)
 
-# GRÁFICO 1: Status Temporal (Customização de cor ativa)
+# GRÁFICO 1: Status Temporal
 with row1_col1:
     st.subheader("1 Válidos, Vencidos, no Prazo")
     df_g1 = df[col_vencido].value_counts().reset_index()
@@ -140,7 +137,7 @@ with row1_col1:
     else:
         st.warning("Sem dados suficientes para gerar o gráfico 1.")
 
-# GRÁFICO 2: Status por Documentos (Customização de cor ativa)
+# GRÁFICO 2: Status por Documentos
 with row1_col2:
     st.subheader("2 Status por Documentos")
     df_g2 = df["STATUS DO DOCUMENTO NORMATIVO"].value_counts().reset_index()
@@ -239,3 +236,10 @@ with row2_col1:
                     "APROVADO": "#2ca02c",
                     "AG. DEV - SETOR": "#d62728",
                     "EM VERIFICAÇÃO": "#bcbd22",
+                    "CANCELADO": "#7f7f7f"
+                }
+            )
+            fig4.update_traces(textposition="outside")
+            fig4.update_yaxes(categoryorder="total ascending")
+            st.plotly_chart(fig4, use_container_width=True)
+        else:
