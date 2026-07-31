@@ -65,13 +65,13 @@ if uploaded_file is not None:
     try:
         df = pd.read_excel(uploaded_file, sheet_name="DADOS_GRÁFICOS")
         
-        # 1. Limpeza padrão de espaços extras nas células de texto
+        # 1. Limpeza de espaços em branco invisíveis do início e fim das strings
         for col in df.columns:
             if df[col].dtype == "object":
                 df[col] = df[col].astype(str).str.strip()
                 
         # 2. Substituir strings de erro do Excel por valores nulos limpos
-        df = df.replace(["#VALOR!", "0", "0.0", "None", "nan", "NaN", "#VALOR!", "NONE", "NAN"], None)
+        df = df.replace(["#VALOR!", "0", "0.0", "None", "nan", "NaN"], None)
         
         # 3. Remover linhas completamente vazias para não inflar a contagem de documentos
         df = df.dropna(subset=["SIGLA DO DOCUMENTO", "NOME DO DOCUMENTO", "RESPONSÁVEL"], how="all")
@@ -240,7 +240,7 @@ else:
     st.warning("Coluna de profissionais indisponível.")
 
 # ==============================================================================
-# 7. GRÁFICO 5: DOCUMENTOS APROVADOS POR TIPO (CORRIGIDO CRITÉRIO DE FILTRAGEM)
+# 7. GRÁFICO 5: DOCUMENTOS APROVADOS POR TIPO (REFORMULADO SEM REINDEX EM MEMÓRIA)
 # ==============================================================================
 st.markdown("---")
 st.subheader("5 Documentos Aprovados por Tipo")
