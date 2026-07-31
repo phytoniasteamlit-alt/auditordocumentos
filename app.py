@@ -39,7 +39,7 @@ uploaded_file = st.sidebar.file_uploader(
     type=["xlsx"]
 )
 
-# Customização Visual em menu retrátil para encurtar a Sidebar e destravar a rolagem vertical
+# Painel de customização retrátil para liberar espaço na tela
 with st.expander("🎨 Customização Visual e Estilo dos Gráficos (Clique para abrir/fechar)"):
     c1, c2, c3 = st.columns(3)
     with c1:
@@ -208,5 +208,5 @@ st.plotly_chart(fig5, use_container_width=True)
 st.markdown("---")
 
 # ==============================================================================
-# 8. GRÁFICO 6: DETALHAMENTO CRUZADO DE TIPOS DE DOCUMENTO POR STATUS (FORÇADO E BLINDADO)
+# 8. GRÁFICO 6: DETALHAMENTO CRUZADO DE TIPOS DE DOCUMENTO POR STATUS (SINTAXE CORRIGIDA)
 # ==============================================================================
