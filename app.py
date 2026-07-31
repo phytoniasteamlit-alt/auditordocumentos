@@ -177,11 +177,11 @@ else:
 st.markdown("---")
 
 # ==============================================================================
-# 6. ANÁLISE POR PROFISSIONAL (EIXOS LIMPOS E EMPILHAMENTO ORGANIZADO)
+# 6. ANÁLISE POR PROFISSIONAL (REMOÇÃO DE EX-FUNCIONÁRIAS E CORREÇÃO VISUAL)
 # ==============================================================================
 row2_col1, row2_col2 = st.columns(2)
 
-# GRÁFICO 4: Documentos por Profissional (Ocultação de ex-funcionárias e ajuste de cores)
+# GRÁFICO 4: Documentos por Profissional
 with row2_col1:
     st.subheader("4 Documentos por Profissional")
     
@@ -225,14 +225,15 @@ with row2_col1:
     else:
         st.warning("Coluna de profissionais indisponível.")
 
-# GRÁFICO 5: Documentos Aprovados por Tipo (Parênteses e linhas simplificadas para evitar erros)
+# GRÁFICO 5: Documentos Aprovados por Tipo (ESTRUTURA HORIZONTAL PURA SEM CONDICIONAIS INTERNAS)
 with row2_col2:
     st.subheader("5 Documentos Aprovados por Tipo")
     tipos_disponiveis = df["SIGLA DO DOCUMENTO"].dropna().unique().tolist()
     
-    if tipos_disponiveis:
-        tipos_selecionados = st.multiselect("Filtrar por Tipo de Documento (Sigla):", options=tipos_disponiveis, default=tipos_disponiveis)
-        
-        df_g5 = df[(df["STATUS DO DOCUMENTO NORMATIVO"].str.upper() == "APROVADO") & (df["SIGLA DO DOCUMENTO"].isin(tipos_selecionados))]
-        
-        if not df_g5.empty:
+    tipos_selecionados = st.multiselect("Filtrar por Tipo de Documento (Sigla):", options=tipos_disponiveis, default=tipos_disponiveis)
+    
+    df_g5 = df[(df["STATUS DO DOCUMENTO NORMATIVO"].str.upper() == "APROVADO") & (df["SIGLA DO DOCUMENTO"].isin(tipos_selecionados))]
+    df_g5_counts = df_g5["SIGLA DO DOCUMENTO"].value_counts().reset_index()
+    df_g5_counts.columns = ["Tipo de Documento", "Quantidade Aprovada"]
+    
+    fig5 = px.bar(
