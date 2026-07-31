@@ -194,6 +194,6 @@ if not df_base.empty:
         s_prazos_limpos = df_filtrado["SIT_PRAZO"].apply(remover_acentos)
         contagem_prazos = s_prazos_limpos.value_counts()
         
-        # CORREÇÃO: Parêntese fechado corretamente abaixo e duplicidade removida
+        # CORREÇÃO DEFINITIVA: Fechamento de chaves e parênteses devidamente estruturados
         dados_prazo = pd.Series({
             "No Prazo": contagem_prazos.get("VALIDO", 0) + contagem_prazos.get("NO PRAZO", 0),
