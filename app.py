@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import unicodedata
 
 # ==============================================================================
 # 1. CONFIGURAÇÃO DA PÁGINA (Modo Amplo)
@@ -10,6 +11,12 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# Função auxiliar para remover acentos de qualquer texto (Evita erros com FABRÍCIA / RAISSA)
+def remover_acentos(texto):
+    if not isinstance(texto, str):
+        return texto
+    return "".join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
 
 # --- CABEÇALHO SUPERIOR ---
 header_left, header_right = st.columns(2)
@@ -72,15 +79,18 @@ if uploaded_file is not None:
     try:
         df = pd.read_excel(uploaded_file, sheet_name="DADOS_GRÁFICOS")
         
-        # Limpa espaços invisíveis e garante que textos fiquem legíveis
+        # Limpa espaços invisíveis e padroniza textos
         for col in df.columns:
             if df[col].dtype == "object":
                 df[col] = df[col].astype(str).str.strip()
-                
+        
         df = df.replace(["#VALOR!", "0", "0.0", "None", "nan", "NaN"], None)
         df = df.dropna(subset=["SIGLA DO DOCUMENTO", "NOME DO DOCUMENTO", "RESPONSÁVEL"], how="all")
 
-        # Tratamento das legendas solicitadas
+        # [REMOÇÃO DE ACENTOS NA PLANILHA] Remove acentos e joga tudo para maiúsculas para blindar os filtros
+        df["RESPONSÁVEL"] = df["RESPONSÁVEL"].apply(remover_acentos).str.upper()
+        df["STATUS DO DOCUMENTO NORMATIVO"] = df["STATUS DO DOCUMENTO NORMATIVO"].apply(remover_acentos).str.upper()
+
         col_vencido = "(Vencido, No Prazo, Prestes a Vencer)"
         if col_vencido in df.columns:
             df[col_vencido] = df[col_vencido].replace({"A": "Agd Dev Setor"})
@@ -100,11 +110,11 @@ else:
 # ==============================================================================
 # 4. EXIBIÇÃO DAS MÉTRICAS DO TOPO
 # ==============================================================================
-status_documento = df["STATUS DO DOCUMENTO NORMATIVO"].fillna("Não Informado")
+status_documento = df["STATUS DO DOCUMENTO NORMATIVO"].fillna("NÃO INFORMADO")
 total_docs = len(df)
-aprovados = len(df[status_documento.str.upper() == "APROVADO"])
-verf_1 = len(df[status_documento.str.upper() == "AG. DEV - SETOR"])
-verf_2 = len(df[status_documento.str.upper() == "EM VERIFICAÇÃO"])
+aprovados = len(df[status_documento == "APROVADO"])
+verf_1 = len(df[status_documento == "AG. DEV - SETOR"])
+verf_2 = len(df[status_documento == "EM VERIFICAÇÃO"])
 
 m1, m2, m3, m4 = st.columns(4)
 m1.metric(label="📄 Total de Documentos", value=total_docs)
@@ -164,14 +174,14 @@ st.markdown("---")
 # ==============================================================================
 st.subheader("4 Documentos por Profissional")
 profissionais_totais = df["RESPONSÁVEL"].dropna().unique().tolist()
-profissionais_ativos = [p for p in profissionais_totais if p.upper() not in ["SABRINA", "SONALHYA", "SONALIA"]]
+profissionais_ativos = [p for p in profissionais_totais if p not in ["SABRINA", "SONALHYA", "SONALIA"]]
 
-prof_selecionado = st.selectbox("Selecionar Profissional para Análise:", options=["Todos"] + profissionais_ativos)
+prof_selecionado = st.selectbox("Selecionar Profissional para Análise:", options=["TODOS"] + profissionais_ativos)
 
-if str(prof_selecionado).upper() == "TODOS":
-    df_g4 = df[df["RESPONSÁVEL"].str.upper().isin([p.upper() for p in profissionais_ativos])]
+if str(prof_selecionado) == "TODOS":
+    df_g4 = df[df["RESPONSÁVEL"].isin(profissionais_ativos)]
 else:
-    df_g4 = df[df["RESPONSÁVEL"].str.upper() == str(prof_selecionado).upper()]
+    df_g4 = df[df["RESPONSÁVEL"] == prof_selecionado]
     
 df_g4_counts = df_g4.groupby(["RESPONSÁVEL", "STATUS DO DOCUMENTO NORMATIVO"]).size().reset_index(name="Quantidade")
 
@@ -194,7 +204,7 @@ st.subheader("5 Documentos Aprovados por Tipo")
 tipos_disponiveis = df["SIGLA DO DOCUMENTO"].dropna().unique().tolist()
 tipos_selecionados = st.multiselect("Filtrar por Tipo de Documento (Sigla):", options=tipos_disponiveis, default=tipos_disponiveis)
 
-df_g5 = df[(df["STATUS DO DOCUMENTO NORMATIVO"].str.upper() == "APROVADO") & (df["SIGLA DO DOCUMENTO"].isin(tipos_selecionados))]
+df_g5 = df[(df["STATUS DO DOCUMENTO NORMATIVO"] == "APROVADO") & (df["SIGLA DO DOCUMENTO"].isin(tipos_selecionados))]
 df_g5_counts = df_g5["SIGLA DO DOCUMENTO"].value_counts().reset_index()
 df_g5_counts.columns = ["Tipo de Documento", "Quantidade Aprovada"]
 
@@ -207,10 +217,4 @@ fig5.update_traces(textposition="outside")
 st.plotly_chart(fig5, use_container_width=True)
 
 st.markdown("---")
-
-# ==============================================================================
-# 9. GRÁFICO 6: DETALHAMENTO CRUZADO POR PROFISSIONAL
-# ==============================================================================
-st.subheader("6 Detalhamento de Tipos de Documento por Status e Profissional")
-st.markdown("Esta seção analisa especificamente a quantidade de **POP, PROTOCOLO, ROTINA ou MANUAL** em status **APROVADO** e **EM VERIFICAÇÃO** de cada profissional ativo.")
 
