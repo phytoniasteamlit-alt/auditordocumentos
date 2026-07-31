@@ -10,8 +10,7 @@ st.set_page_config(
 )
 
 # --- CABEÇALHO SUPERIOR (LADO DIREITO) ---
-# Criação do layout do topo com duas colunas para posicionar as informações da coordenação à direita
-header_left, header_right = st.columns([2, 1])
+header_left, header_right = st.columns([3, 1])
 
 with header_right:
     st.markdown(
@@ -21,7 +20,7 @@ with header_right:
             <span style="font-size: 14px; color: #888;">👩‍⚕️ Coord: Fabrícia Rocha 🏆</span>
         </div>
         """, 
-        unsafe_allow_name_allowed=True
+        unsafe_allow_html=True
     )
 
 with header_left:
@@ -36,7 +35,6 @@ uploaded_file = st.sidebar.file_uploader("Carregar Planilha Excel (.xlsx):", typ
 if uploaded_file is not None:
     try:
         # Tratamento Profilático contra erros de dados
-        # Carrega a aba correta ignorando eventuais problemas de formatação nas colunas adjacentes
         df = pd.read_excel(uploaded_file, sheet_name="DADOS_GRÁFICOS")
         
         # 1. Remover espaços em branco invisíveis do início e fim dos textos das colunas
@@ -51,15 +49,12 @@ if uploaded_file is not None:
         df = df.dropna(subset=["SIGLA DO DOCUMENTO", "NOME DO DOCUMENTO", "RESPONSÁVEL"], how="all")
 
         # --- PROCESSAMENTO DOS INDICADORES (METRICS) ---
-        # Garantindo mapeamento seguro das colunas textuais
-        status_normativo = df["(Vencido, No Prazo, Prestes a Vencer)"].fillna("Não Informado")
         status_documento = df["STATUS DO DOCUMENTO NORMATIVO"].fillna("Não Informado")
         
         total_docs = len(df)
         aprovados = len(df[status_documento.str.upper() == "APROVADO"])
         
         # Contagem para o 1º Verf e 2º Verf baseado na coluna de Status do Documento Normativo
-        # Caso seus dados usem termos exatos diferentes, substitua nos filtros abaixo
         verf_1 = len(df[status_documento.str.contains("VERIFICADO AGUARDA", case=False, na=False)])
         verf_2 = len(df[status_documento.str.contains("EM VERIFICAÇÃO", case=False, na=False)])
 
@@ -170,7 +165,6 @@ if uploaded_file is not None:
                     default=tipos_disponiveis
                 )
                 
-                # Filtrar apenas os registros que estão 'Aprovado' e pertencem às siglas escolhidas
                 df_g5 = df[(df["STATUS DO DOCUMENTO NORMATIVO"].str.upper() == "APROVADO") & 
                            (df["SIGLA DO DOCUMENTO"].isin(tipos_selecionados))]
                 
@@ -188,7 +182,6 @@ if uploaded_file is not None:
 
     except Exception as e:
         st.error(f"Erro ao processar o arquivo: {e}")
-        st.info("Certifique-se de que a aba carregada chama-se exatamente 'DADOS_GRÁFICOS' e possui as colunas estruturadas padrão.")
+        st.info("Certifique-se de que a aba carregada chama-se exatamente 'DADOS_GRÁFICOS'.")
 else:
-    # Estado inicial amigável orientando o usuário a subir o arquivo
     st.info("💡 Por favor, use o menu lateral para carregar a sua planilha Excel e ativar os gráficos interativos.")
