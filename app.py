@@ -57,7 +57,7 @@ if arquivo_excel:
         xl = pd.ExcelFile(arquivo_excel, engine="openpyxl")
         lista_abas_reais = xl.sheet_names
         
-        # Identifica a aba DADOS_GRÁFICOS
+        # Identifica a aba DADOS_GRÁFICOS de maneira inteligente
         nome_aba_principal = None
         for n_real in lista_abas_reais:
             if "GRAF" in str(n_real).upper().strip():
@@ -80,14 +80,16 @@ if arquivo_excel:
                         return df_raw[colunas_planilha[nome]]
                 return pd.Series([padrao] * len(df_raw))
 
-            # 1. PROCESSAMENTO DAS MÉDIAS
-            if df_raw.shape[1] > 6:
+            # 1. PROCESSAMENTO DAS MÉDIAS (Sintaxe corrigida usando .shape[1] para colunas)
+            num_colunas_reais = df_raw.shape[1]
+            
+            if num_colunas_reais > 6:
                 s_g = df_raw.iloc[:, 6].astype(str).str.replace(" dias", "", regex=False).str.replace(",", ".", regex=False)
                 df_g_nums = pd.to_numeric(s_g, errors='coerce').dropna()
                 df_g_filtrado = df_g_nums[(df_g_nums >= 0) & (df_g_nums < 365)]
                 media_v1 = df_g_filtrado.mean() if not df_g_filtrado.empty else 0.0
             
-            if df_raw.shape[1] > 7:
+            if num_colunas_reais > 7:
                 s_h = df_raw.iloc[:, 7].astype(str).str.replace(" dias", "", regex=False).str.replace(",", ".", regex=False)
                 df_h_nums = pd.to_numeric(s_h, errors='coerce').dropna()
                 df_h_filtrado = df_h_nums[(df_h_nums >= 0) & (df_h_nums < 365)]
@@ -190,11 +192,8 @@ if not df_base.empty:
         s_prazos_limpos = df_filtrado["SIT_PRAZO"].apply(remover_acentos)
         contagem_prazos = s_prazos_limpos.value_counts()
         
-        # CORREÇÃO: Parêntese fechado corretamente na linha abaixo
         dados_prazo = pd.Series({
             "No Prazo": contagem_prazos.get("VALIDO", 0) + contagem_prazos.get("NO PRAZO", 0),
             "Prestes a Vencer": contagem_prazos.get("PRESTES A VENCER", 0),
             "Vencido": contagem_prazos.get("VENCIDO", 0)
         })
-        st.bar_chart(dados_prazo, color=c_g4_color, horizontal=True)
-        
