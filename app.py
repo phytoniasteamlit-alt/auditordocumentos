@@ -119,7 +119,6 @@ if arquivo_excel:
             for col in df_base.columns:
                 df_base.loc[df_base[col].str.upper().isin(valores_vazios), col] = None
             
-            # Limpeza segura baseada no código original estável
             df_base = df_base.dropna(subset=["STATUS", "SIGLA"], how="all")
             df_base = df_base[~df_base["STATUS"].astype(str).str.contains("#", na=False)]
             df_base = df_base[~df_base["SIT_PRAZO"].astype(str).str.contains("#", na=False)]
@@ -183,10 +182,11 @@ if not df_base.empty:
         contagem_prazos = s_prazos_limpos.value_counts()
         
         dados_prazo = pd.Series(0, index=["No Prazo", "Prestes a Vencer", "Vencido"])
-        dados_prazo["No Prazo"] = int(contagem_prazos.get("VALIDO", 0) + contagem_prazos.get("NO PRAZO", 0) + contagem_prazos.get("VALIDO", 0))
+        dados_prazo["No Prazo"] = int(contagem_prazos.get("VALIDO", 0) + contagem_prazos.get("NO PRAZO", 0))
         dados_prazo["Prestes a Vencer"] = int(contagem_prazos.get("PRESTES A VENCER", 0))
         dados_prazo["Vencido"] = int(contagem_prazos.get("VENCIDO", 0))
         st.bar_chart(dados_prazo, color=c_g4_color, horizontal=True)
     
-    # LINHA DIVISÓRIA INVISÍVEL SOLICITADA
-    st.html("<div style='margin-bottom: 50px;'></div>")
+    # CORREÇÃO DA LINHA INVISÍVEL DIVISÓRIA (Garante a renderização forçada)
+    st.markdown("<div style='margin-bottom: 50px;'></div>", unsafe_allow_html=True)
+    
