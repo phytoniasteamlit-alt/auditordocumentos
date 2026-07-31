@@ -108,7 +108,7 @@ if arquivo_excel:
             media_v1 = float(media_v1) if pd.notna(media_v1) else 0.0
             media_v2 = float(media_v2) if pd.notna(media_v2) else 0.0
 
-            # CAPTURA DOS DADOS (Adicionado mapeamentos para capturar o cabeçalho com espaço invisível)
+            # CAPTURA DOS DADOS
             df_base = pd.DataFrame()
             df_base["SIGLA"] = buscar_coluna(["SIGLA DO DOCUMENTO", "SIGLA"], "N/A")
             df_base["SETOR"] = buscar_coluna(["SETOR"], "N/A")
@@ -193,5 +193,7 @@ if not df_base.empty:
         st.markdown("### Situação de Prazos")
         s_prazos_limpos = df_filtrado["SIT_PRAZO"].apply(remover_acentos)
         contagem_prazos = s_prazos_limpos.value_counts()
+        
+        # CORREÇÃO: Parêntese fechado corretamente abaixo e duplicidade removida
         dados_prazo = pd.Series({
-            "No Prazo": contagem_prazos.get("VALIDO", 0) + contagem_prazos.get("NO PRAZO", 0) + contagem_prazos.get("VALIDO", 0),
+            "No Prazo": contagem_prazos.get("VALIDO", 0) + contagem_prazos.get("NO PRAZO", 0),
