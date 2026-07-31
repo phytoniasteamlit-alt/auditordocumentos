@@ -104,7 +104,7 @@ aprovados = len(df[status_documento.str.upper() == "APROVADO"])
 
 # Contagem baseada nos textos limpos e abreviados da coluna
 verf_1 = len(df[status_documento.str.contains("AG. DEV - SETOR", case=False, na=False)])
-verf_2 = len(df[status_documento.str.contains("EM VERIFICAÇÃO", case=False, na=False)])
+verf_2 = len(df[status_documento.str.contains("EM VERIFICAÇÃO", case=False, na-False)])
 
 # --- EXIBIÇÃO DAS CAIXAS DE MÉTRICAS INDEPENDENTES ---
 m1, m2, m3, m4 = st.columns(4)
