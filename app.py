@@ -145,7 +145,7 @@ status_disponiveis = df["STATUS DO DOCUMENTO NORMATIVO"].dropna().unique().tolis
 
 if status_disponiveis:
     status_selecionados = st.multiselect(
-        "Filtrar por Status do Documento:",
+        "Filter por Status do Documento:",
         options=status_disponiveis,
         default=status_disponiveis
     )
@@ -225,15 +225,18 @@ with row2_col1:
     else:
         st.warning("Coluna de profissionais indisponível.")
 
-# GRÁFICO 5: Documentos Aprovados por Tipo (ESTRUTURA HORIZONTAL PURA SEM CONDICIONAIS INTERNAS)
+# GRÁFICO 5: Documentos Aprovados por Tipo (Estrutura totalmente corrigida)
 with row2_col2:
     st.subheader("5 Documentos Aprovados por Tipo")
     tipos_disponiveis = df["SIGLA DO DOCUMENTO"].dropna().unique().tolist()
     
-    tipos_selecionados = st.multiselect("Filtrar por Tipo de Documento (Sigla):", options=tipos_disponiveis, default=tipos_disponiveis)
+    tipos_selecionados = st.multiselect(
+        "Filtrar por Tipo de Documento (Sigla):", 
+        options=tipos_disponiveis, 
+        default=tipos_disponiveis
+    )
     
     df_g5 = df[(df["STATUS DO DOCUMENTO NORMATIVO"].str.upper() == "APROVADO") & (df["SIGLA DO DOCUMENTO"].isin(tipos_selecionados))]
     df_g5_counts = df_g5["SIGLA DO DOCUMENTO"].value_counts().reset_index()
     df_g5_counts.columns = ["Tipo de Documento", "Quantidade Aprovada"]
     
-    fig5 = px.bar(
