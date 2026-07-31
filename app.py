@@ -12,7 +12,7 @@ st.set_page_config(
 )
 
 # --- CABEÇALHO SUPERIOR (LADO DIREITO / ESQUERDA) ---
-header_left, header_right = st.columns([3, 1])
+header_left, header_right = st.columns()
 
 with header_right:
     st.markdown(
@@ -109,7 +109,6 @@ with row1_col1:
             df_g1, names=col_vencido, values="Quantidade", hole=0.4,
             color_discrete_sequence=px.colors.qualitative.Pastel
         )
-        # Mostra o valor numérico bruto (value) e o rótulo (label) dentro do gráfico
         fig1.update_traces(textinfo='value+label', textposition='inside')
         fig1.update_layout(margin=dict(l=20, r=20, t=30, b=20), showlegend=False)
         st.plotly_chart(fig1, use_container_width=True)
@@ -127,7 +126,6 @@ with row1_col2:
             df_g2, names="Status", values="Quantidade", hole=0.4,
             color_discrete_sequence=px.colors.qualitative.Safe
         )
-        # Mostra o valor numérico bruto (value) e o rótulo (label) dentro do gráfico
         fig2.update_traces(textinfo='value+label', textposition='inside')
         fig2.update_layout(margin=dict(l=20, r=20, t=30, b=20), showlegend=False)
         st.plotly_chart(fig2, use_container_width=True)
@@ -158,7 +156,6 @@ if status_disponiveis:
         df_g3_counts = df_g3["STATUS DO DOCUMENTO NORMATIVO"].value_counts().reset_index()
         df_g3_counts.columns = ["Status", "Total"]
         
-        # Mapeamento com a nova chave de cor encurtada "AG. DEV - SETOR"
         fig3 = px.bar(
             df_g3_counts, x="Status", y="Total", text="Total",
             color="Status",
@@ -180,11 +177,11 @@ else:
 st.markdown("---")
 
 # ==============================================================================
-# 6. ANÁLISE POR PROFISSIONAL (DESIGN HORIZONTAL E AJUSTE DE BUG)
+# 6. ANÁLISE POR PROFISSIONAL (EIXOS LIMPOS E EMPILHAMENTO ORGANIZADO)
 # ==============================================================================
 row2_col1, row2_col2 = st.columns(2)
 
-# GRÁFICO 4: Documentos por Profissional
+# GRÁFICO 4: Documentos por Profissional (Otimizado sem facetas para evitar embolar)
 with row2_col1:
     st.subheader("4 Documentos por Profissional")
     
@@ -207,16 +204,18 @@ with row2_col1:
         if not df_g4.empty:
             df_g4_counts = df_g4.groupby(["RESPONSÁVEL", "STATUS DO DOCUMENTO NORMATIVO"]).size().reset_index(name="Quantidade")
             
-            # Barras horizontais e altura estendida para arrumar a compressão visual
+            # [MELHORIA VISUAL DEFINITIVA] Barras horizontais agrupadas por Profissional no eixo Y.
+            # Remove o facet_col para acabar de vez com o embolado de mini-títulos na tela.
             fig4 = px.bar(
                 df_g4_counts, 
                 x="Quantidade", 
-                y="STATUS DO DOCUMENTO NORMATIVO", 
+                y="RESPONSÁVEL", 
                 color="STATUS DO DOCUMENTO NORMATIVO",
-                facet_col="RESPONSÁVEL", 
-                facet_col_wrap=2, 
                 barmode="group",
-                height=650,
+                orientation="h",
+                height=500,
+                text="Quantidade",
+                labels={"RESPONSÁVEL": "Profissional", "Quantidade": "Nº de Documentos"},
                 color_discrete_map={
                     "APROVADO": "#2ca02c",
                     "AG. DEV - SETOR": "#d62728",
@@ -224,15 +223,15 @@ with row2_col1:
                     "CANCELADO": "#7f7f7f"
                 }
             )
-            fig4.update_yaxes(title_text="")
-            fig4.update_xaxes(title_text="Nº de Documentos")
+            fig4.update_traces(textposition="outside")
+            fig4.update_yaxes(categoryorder="total ascending") # Ordena do profissional com mais documentos para o menor
             st.plotly_chart(fig4, use_container_width=True)
         else:
             st.info("Nenhum dado encontrado para o profissional selecionado.")
     else:
         st.warning("Coluna de profissionais indisponível.")
 
-# GRÁFICO 5: Documentos Aprovados por Tipo (PARÊNTESE CORRIGIDO AQUI)
+# GRÁFICO 5: Documentos Aprovados por Tipo
 with row2_col2:
     st.subheader("5 Documentos Aprovados por Tipo")
     tipos_disponiveis = df["SIGLA DO DOCUMENTO"].dropna().unique().tolist()
