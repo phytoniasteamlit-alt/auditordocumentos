@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import openpyxl
-import altair as alt
 import unicodedata
 from io import BytesIO
 
@@ -20,19 +19,7 @@ section[data-testid="stFileUploaderDropzone"] { border: 2px dashed #38BDF8 !impo
 </style>
 """, unsafe_allow_html=True)
 
-# --- FUNÇÃO MOTOR ALTAIR IMPORTADA DO CÓDIGO ANTIGO ---
-def plotar_grafico_naqh(dados, coluna_nome, cor_barra, titulo_grafico):
-    base_chart = alt.Chart(dados).encode(
-        x=alt.X(f"{coluna_nome}:N", sort='-y', title=coluna_nome, axis=alt.Axis(labelAngle=0)), 
-        y=alt.Y("Quantidade:Q", title="Quantidade"),
-        tooltip=[coluna_nome, 'Quantidade']
-    )
-    bars = base_chart.mark_bar().encode(color=alt.value(cor_barra))
-    text = base_chart.mark_text(align='center', baseline='bottom', dy=-5, color='white', fontWeight='bold').encode(text='Quantidade:Q')
-    chart = (bars + text).properties(height=280, title=titulo_grafico)
-    return chart
-
-# --- CABEÇALHO DO HOSPITAL (MANTIDO EXATAMENTE COMO NO SEU ATUAL) ---
+# --- CABEÇALHO DO HOSPITAL ---
 col_titulo, col_hospital = st.columns([0.65, 0.35])
 with col_titulo:
     st.markdown("# PAINEL DE INDICADORES NORMATIVOS NAQH")
@@ -44,7 +31,7 @@ with col_hospital:
             <span style="font-size: 22px; color: #FFFFFF; font-weight: 800; letter-spacing: 0.5px;">HOSPITAL DA CIDADE</span>
         </div>
         <div style="display: flex; align-items: center; gap: 6px; margin-right: 2px;">
-            <span style="font-size: 20px; line-height: 1;">👩‍💼</span>
+            <span style="font-size: 20px; line-height: 1;">🏆👩‍💼</span>
             <span style="font-size: 15px; color: #94A3B8; font-weight: 600; letter-spacing: 0.3px;">Coord.: Fabrícia Rocha</span>
         </div>
     </div>
@@ -68,7 +55,7 @@ if arquivo_excel:
         xl = pd.ExcelFile(arquivo_excel, engine="openpyxl")
         lista_abas_reais = xl.sheet_names
         
-        # 1. PROCESSAMENTO DAS MÉDIAS CRONOLÓGICAS (MANTIDO DO SEU ATUAL)
+        # 1. PROCESSAMENTO DAS MÉDIAS CRONOLÓGICAS
         nome_aba_original = None
         for n_real in lista_abas_reais:
             n_up = str(n_real).upper().strip()
@@ -132,7 +119,8 @@ if arquivo_excel:
             for col in df_base.columns:
                 df_base.loc[df_base[col].str.upper().isin(valores_vazios), col] = None
             
-            df_base = df_base.dropna(subset=["STATUS", "SIGLA"], how="all")
+            # Limpeza cirúrgica contra linhas vazias fantasmas do Excel
+            df_base = df_base.dropna(subset=["STATUS", "SIGLA"], how="any")
             df_base = df_base[~df_base["STATUS"].astype(str).str.contains("#", na=False)]
             df_base = df_base[~df_base["SIT_PRAZO"].astype(str).str.contains("#", na=False)]
             
@@ -145,7 +133,7 @@ if not df_base.empty:
     st.sidebar.subheader(" Filtros de Visualização")
     
     responsaveis_validos = df_base["RESPONSAVEL"].dropna().unique()
-    lista_responsaveis = sorted([str(r) for r in responsaveis_validos])
+    lista_responsaveis = sorted([str(r) for r in responsaveis_validos if str(r).strip() != ""])
     lista_responsaveis.insert(0, "Todos")
     responsavel_selecionado = st.sidebar.selectbox("Selecione o Responsável:", lista_responsaveis)
     
@@ -179,12 +167,27 @@ if not df_base.empty:
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader(" Painel Executivo NAQH — Resultados Finais")
     
-    #--- 5. RENDERIZAÇÃO REAL DOS GRÁFICOS INTEGRADOS COM MOTOR ALTAIR ---
+    #--- 5. RENDERIZAÇÃO REAL DOS GRÁFICOS (NATIVOS E SEGUROS) ---
     
     # LINHA 1: Status Geral e Prazos
     linha1_col1, linha1_col2 = st.columns(2)
     with linha1_col1:
         st.markdown("### Documentos por Status")
-        dados_g1 = df_filtrado["STATUS"].dropna().value_counts().reset_index()
-        dados_g1.columns = ["STATUS", "Quantidade"]
-        dados_g1 = dados_g1[~dados_g1["STATUS"].astype(str).str.upper().str.contains("CANCELADO", na=False)]
+        dados_g1 = df_filtrado["STATUS"].dropna().value_counts()
+        dados_g1 = dados_g1[~dados_g1.index.astype(str).str.upper().str.contains("CANCELADO", na=False)]
+        st.bar_chart(dados_g1, color=c_g1_color, horizontal=True)
+    
+    with linha1_col2:
+        st.markdown("### Situação de Prazos")
+        s_prazos_limpos = df_filtrado["SIT_PRAZO"].apply(remover_acentos)
+        contagem_prazos = s_prazos_limpos.value_counts()
+        
+        dados_prazo = pd.Series(0, index=["No Prazo", "Prestes a Vencer", "Vencido"])
+        dados_prazo["No Prazo"] = int(contagem_prazos.get("VALIDO", 0) + contagem_prazos.get("NO PRAZO", 0))
+        dados_prazo["Prestes a Vencer"] = int(contagem_prazos.get("PRESTES A VENCER", 0))
+        dados_prazo["Vencido"] = int(contagem_prazos.get("VENCIDO", 0))
+        st.bar_chart(dados_prazo, color=c_g4_color, horizontal=True)
+    
+    # LINHA DIVISÓRIA INVISÍVEL TOTALMENTE NATIVA E SEGURA
+    st.write("")
+    st.write("")
