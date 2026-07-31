@@ -230,7 +230,7 @@ with row2_col1:
     else:
         st.warning("Coluna de profissionais indisponível.")
 
-# GRÁFICO 5: Documentos Aprovados por Tipo (BLOCO REINDENTADO E CORRIGIDO)
+# GRÁFICO 5: Documentos Aprovados por Tipo (Estrutura totalmente higienizada)
 with row2_col2:
     st.subheader("5 Documentos Aprovados por Tipo")
     tipos_disponiveis = df["SIGLA DO DOCUMENTO"].dropna().unique().tolist()
