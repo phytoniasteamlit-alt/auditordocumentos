@@ -84,7 +84,7 @@ if arquivo_excel:
                         return df_raw[colunas_planilha[nome]]
                 return pd.Series([padrao] * len(df_raw))
 
-            # 1. TRATAMENTO PROTEGIDO CONTRA ERROS DE FÓRMULA (#VALOR!) NAS MÉDIAS
+            # 1. PROCESSAMENTO DE MÉDIAS MANTIDO APENAS PARA OS CARDS DO TOPO
             total_colunas = len(df_raw.columns)
             
             try:
@@ -108,7 +108,7 @@ if arquivo_excel:
             media_v1 = float(media_v1) if pd.notna(media_v1) else 0.0
             media_v2 = float(media_v2) if pd.notna(media_v2) else 0.0
 
-            # 2. CAPTURA DOS DADOS MAIS SEGUROS
+            # 2. CAPTURA DOS DADOS
             df_base = pd.DataFrame()
             df_base["SIGLA"] = buscar_coluna(["SIGLA DO DOCUMENTO", "SIGLA"], "N/A")
             df_base["SETOR"] = buscar_coluna(["SETOR"], "N/A")
@@ -165,7 +165,6 @@ if not df_base.empty:
     st.sidebar.markdown("---")
     st.sidebar.subheader("🎨 Configuração dos Gráficos")
     c_g1_color = st.sidebar.color_picker("G1 - Cor Status:", "#FBBF24", key="c1")
-    c_g2_color = st.sidebar.color_picker("G2 - Cor Tempo:", "#38BDF8", key="c2")
     c_g4_color = st.sidebar.color_picker("G4 - Cor Prazo:", "#C084FC", key="c4")
     
     #--- 4. INDICADORES DO TOPO (CARDS) ---
@@ -181,21 +180,23 @@ if not df_base.empty:
     st.markdown("<br>", unsafe_allow_html=True)
     
     #--- 5. RENDERIZAÇÃO DOS GRÁFICOS ---
-    linha1_col1, linha1_col2 = st.columns(2)
-    
-    with linha1_col1:
-        st.markdown("### Documentos por Status")
-        dados_g1 = df_filtrado["STATUS"].dropna().value_counts()
-        st.bar_chart(dados_g1, color=c_g1_color, horizontal=True)
-    
-    with linha1_col2:
-        st.markdown("### Tempo de Análise")
-        dados_g2 = pd.Series({"1º Verf.": media_v1, "2º Verf.": media_v2, "Total Estimado": (media_v1 + media_v2)})
-        st.bar_chart(dados_g2, color=c_g2_color, horizontal=True)
+    # MODIFICAÇÃO: O gráfico de Status agora ocupa a largura total da linha, e o Tempo foi removido
+    st.markdown("### Documentos por Status")
+    dados_g1 = df_filtrado["STATUS"].dropna().value_counts()
+    st.bar_chart(dados_g1, color=c_g1_color, horizontal=True)
     
     st.markdown("---")
     linha2_col1, linha2_col2 = st.columns(2)
     
     with linha2_col1:
         st.markdown("### Situação de Prazos")
-        # CORREÇÃO: Aplica a normalização de texto na coluna para evitar quebras por acento
+        s_prazos_limpos = df_filtrado["SIT_PRAZO"].apply(remover_acentos)
+        contagem_prazos = s_prazos_limpos.value_counts()
+        
+        dados_prazo = pd.Series({
+            "No Prazo": contagem_prazos.get("VALIDO", 0) + contagem_prazos.get("NO PRAZO", 0),
+            "Prestes a Vencer": contagem_prazos.get("PRESTES A VENCER", 0),
+            "Vencido": contagem_prazos.get("VENCIDO", 0)
+        })
+        st.bar_chart(dados_prazo, color=c_g4_color, horizontal=True)
+        
