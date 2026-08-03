@@ -169,23 +169,21 @@ st.markdown("---")
 
 df_prof = df.copy()
 if "RESPONSÁVEL" in df_prof.columns:
-    df_prof["RESPONSÁVEL"] = df_prof["RESPONSÁVEL"].replace({
-        "SONALIA": "OUTROS", "SABRINA": "OUTROS", "SONALHYA": "OUTROS",
-        "Sonalia": "OUTROS", "Sabrina": "OUTROS", "sonalia": "OUTROS", "sabrina": "OUTROS"
-    })
+    df_prof["RESPONSÁVEL"] = df_prof["RESPONSÁVEL"].fillna("NÃO INFORMADO")
+    # Padroniza temporariamente para maiúsculas apenas na substituição das antigas profissionais
+    df_prof["RESPONSÁVEL_UPPER"] = df_prof["RESPONSÁVEL"].astype(str).str.upper()
+    df_prof["RESPONSÁVEL"] = df_prof.apply(
+        lambda row: "OUTROS" if row["RESPONSÁVEL_UPPER"] in ["SONALIA", "SABRINA", "SONALHYA"] else row["RESPONSÁVEL"],
+        axis=1
+    )
 
 st.subheader("4 Documentos por profissional")
 if "RESPONSÁVEL" in df_prof.columns:
-    profissionais_lista = sorted(list(set([p for p in df_prof["RESPONSÁVEL"].dropna().unique().tolist() if p.upper() != "OUTROS"])))
+    # Garante uma lista limpa de nomes contendo strings válidas, ignorando vazios
+    profissionais_lista = sorted(list(set([str(p) for p in df_prof["RESPONSÁVEL"].unique() if p and str(p).upper() != "OUTROS" and str(p).upper() != "NÃO INFORMADO"])))
     prof_selecionado_g4 = st.selectbox("Filtrar por profissional para o Gráfico 4:", options=["Todos"] + profissionais_lista)
     df_g4 = df_prof.copy() if prof_selecionado_g4 == "Todos" else df_prof[df_prof["RESPONSÁVEL"] == prof_selecionado_g4]
     df_g4_counts = df_g4.groupby(["RESPONSÁVEL", "STATUS DO DOCUMENTO NORMATIVO"]).size().reset_index(name="Quantidade")
     
     fig4 = px.bar(df_g4_counts, x="Quantidade", y="RESPONSÁVEL", color="STATUS DO DOCUMENTO NORMATIVO", barmode="group", orientation="h", height=500, text="Quantidade", labels={"RESPONSÁVEL": "Profissional", "Quantidade": "N° de Documentos"}, color_discrete_map=mapa_cores_status)
     fig4.update_traces(textposition="outside", textfont=dict(size=15))
-    fig4.update_layout(legend=dict(font=dict(size=13), title_font=dict(size=14)), xaxis=dict(title_font=dict(size=14), tickfont=dict(size=13)), yaxis=dict(title_font=dict(size=14), tickfont=dict(size=13)))
-    st.plotly_chart(fig4, use_container_width=True)
-
-st.markdown("---")
-
-st.subheader("5 Documentos por Tipo / Profissional")
