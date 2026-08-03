@@ -102,7 +102,7 @@ if uploaded_file is not None:
         st.error(f"Erro ao processar o arquivo: {e}")
         st.stop()
 else:
-    st.info("💡 Por favor, use the menu lateral para carregar a sua planilha Excel e ativar os gráficos interativos.")
+    st.info("💡 Por favor, use o menu lateral para carregar a sua planilha Excel e ativar os gráficos interativos.")
     st.stop()
 
 # ==============================================================================
@@ -159,7 +159,7 @@ with row1_col2:
     df_g2 = df_g2_filtrado["SIGLA DO DOCUMENTO"].value_counts().reset_index()
     df_g2.columns = ["Tipo de Documento", "Quantidade Aprovada"]
     
-    if not df_g2.empty:
+    if not df_g2_filtrado.empty:
         fig2 = px.bar(df_g2, x="Quantidade Aprovada", y="Tipo de Documento", text="Quantidade Aprovada",
                       orientation="h", color="Tipo de Documento", color_discrete_sequence=cor_sequencia)
         fig2.update_traces(textposition="outside")
@@ -234,4 +234,3 @@ if "RESPONSÁVEL" in df_prof.columns:
     df_g5_counts = df_g5_filtrado.groupby(["SIGLA DO DOCUMENTO", "STATUS DO DOCUMENTO NORMATIVO"]).size().reset_index(name="Quantidade")
 
     if not df_g5_counts.empty:
-        ori_5 = "h" if tipo_grafico_5 == "Barras Horizontais" else "v"
