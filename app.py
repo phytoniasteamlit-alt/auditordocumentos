@@ -77,12 +77,23 @@ aprovados = len(df[status_documento == "APROVADO"])
 verf_1 = len(df[status_documento == "AGUARD_DEV_DO_SETOR"])
 verf_2 = len(df[status_documento == "EM VERF INTERNA"])
 
-col_media_dias = "MÉDIA I.A.A.A" if "MÉDIA I.A.A.A" in df.columns else df.columns[-1]
-try:
-    media_valores = pd.to_numeric(df[col_media_dias], errors='coerce').dropna()
-    media_dias_total = round(media_valores.mean(), 1) if len(media_valores) > 0 else 0.0
-except:
-    media_dias_total = 0.0
+# Varredura inteligente de colunas para encontrar os dados de tempo/média
+col_media_dias = None
+for col in df.columns:
+    if "MÉDIA" in col or "MEDIA" in col or "TEMPO" in col or "DIAS" in col or "I.A.A.A" in col:
+        col_media_dias = col
+        break
+
+media_dias_total = 0.0
+if col_media_dias:
+    try:
+        # Filtra apenas pelas linhas onde o documento está aprovado para calcular a média descrita
+        df_aprovados_apenas = df[df["STATUS DO DOCUMENTO NORMATIVO"] == "APROVADO"]
+        media_valores = pd.to_numeric(df_aprovados_apenas[col_media_dias], errors='coerce').dropna()
+        if len(media_valores) > 0:
+            media_dias_total = round(media_valores.mean(), 1)
+    except:
+        pass
 
 m1, m2, m3, m4, m5 = st.columns(5)
 m1.metric(label="📋 Total de Documentos", value=total_docs)
