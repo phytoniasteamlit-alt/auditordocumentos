@@ -11,7 +11,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- CABEÇALHO SUPERIOR (Título na mesma linha e alinhamento) ---
+# --- CABEÇALHO SUPERIOR ---
 header_left, header_right = st.columns(2)
 
 with header_left:
@@ -78,10 +78,10 @@ if uploaded_file is not None:
     try:
         df = pd.read_excel(uploaded_file, sheet_name="DADOS_GRÁFICOS")
         
-        # Limpeza de espaços invisíveis e conversão forçada para maiúsculas nas colunas de texto
+        # Limpeza de espaços invisíveis nas colunas de texto (sem forçar maiúsculo global)
         for col in df.columns:
             if df[col].dtype == "object":
-                df[col] = df[col].astype(str).str.strip().str.upper()
+                df[col] = df[col].astype(str).str.strip()
                 
         # Substituir strings de erro do Excel por valores nulos limpos
         df = df.replace(["#VALOR!", "0", "0.0", "NONE", "NAN"], None)
@@ -115,7 +115,7 @@ verf_1 = len(df[status_documento == "AGUARD_DEV_DO_SETOR"])
 verf_2 = len(df[status_documento == "EM VERF INTERNA"])
 
 # Cálculo dinâmico da nova caixa de Média ("Temp Total até Aprov")
-col_media_dias = "MÉDIA I.A.A.A" if "MÉDIA I.A.A.A" in df.columns else df.columns[-1]
+col_media_dias = "média I.A.A.A" if "média I.A.A.A" in df.columns else df.columns[-1]
 try:
     media_valores = pd.to_numeric(df[col_media_dias], errors='coerce').dropna()
     media_dias_total = round(media_valores.mean(), 1) if len(media_valores) > 0 else 0.0
@@ -168,17 +168,19 @@ with row1_col2:
 
 st.markdown("---")
 
-# --- GRÁFICO 3: Doc. Validade por Tipo de Doc. Aprov ---
-st.subheader("3 Doc. Validade por Tipo de Doc. Aprov")
+# --- GRÁFICO 3: Validade por tipo de Doc. Aprov ---
+st.subheader("3 Validade por tipo de Doc. Aprov")
 col_vencido = "(Vencido, No Prazo, Prestes a Vencer)"
 
 if col_vencido in df.columns:
     df_g3_base = df[df["STATUS DO DOCUMENTO NORMATIVO"] == "APROVADO"].copy()
+    
+    # Tratamento específico para converter a string "A" vinda do Excel para "Prestes a Vencer"
     df_g3_base[col_vencido] = df_g3_base[col_vencido].replace({
-        "VENCIDO": "Vencidos",
-        "VÁLIDO": "Válidos",
-        "NO PRAZO": "No Prazo",
-        "PRESTES A VENCER": "No Prazo"
+        "Vencido": "Vencidos",
+        "Válido": "Válidos",
+        "No Prazo": "No Prazo",
+        "A": "Prestes a Vencer"
     })
     
     df_g3_counts = df_g3_base.groupby(["SIGLA DO DOCUMENTO", col_vencido]).size().reset_index(name="Quantidade")
@@ -190,13 +192,15 @@ if col_vencido in df.columns:
 
 st.markdown("---")
 
-# Tratamento estratégico para profissionais desativadas
+# Tratamento para profissionais desativadas
 df_prof = df.copy()
 if "RESPONSÁVEL" in df_prof.columns:
     df_prof["RESPONSÁVEL"] = df_prof["RESPONSÁVEL"].replace({
         "SONALIA": "OUTROS",
         "SABRINA": "OUTROS",
-        "SONALHYA": "OUTROS"
+        "SONALHYA": "OUTROS",
+        "Sonalia": "OUTROS",
+        "Sabrina": "OUTROS"
     })
 
 # --- GRÁFICO 4: Documentos por profissional ---
@@ -228,7 +232,3 @@ if "RESPONSÁVEL" in df_prof.columns:
     prof_selecionado_g5 = st.selectbox("Selecione o Responsável para Filtrar a Análise Cruzada:", options=profissionais_lista)
 
     df_g5_filtrado = df_prof[df_prof["RESPONSÁVEL"] == prof_selecionado_g5]
-    df_g5_counts = df_g5_filtrado.groupby(["SIGLA DO DOCUMENTO", "STATUS DO DOCUMENTO NORMATIVO"]).size().reset_index(name="Quantidade")
-
-    if not df_g5_counts.empty:
-        ori_5 = "h" if tipo_grafico_5 == "Barras Horizontais" else "v"
