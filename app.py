@@ -173,9 +173,6 @@ st.markdown("---")
 
 # --- GRÁFICO 3: Validade por Tipo de Documentos ---
 st.subheader("3 Validade por Tipo de Documentos")
-col_vencido = "(VENCIDO, NO PRAZO, PRESTES A VENCER)"
-
-# Tenta encontrar a coluna de validade mesmo se o nome variar um pouco no Excel
 col_real_g3 = None
 for col in df.columns:
     if "VENCIDO" in col or "VALIDADE" in col:
@@ -215,7 +212,7 @@ else:
 
 st.markdown("---")
 
-# Tratamento para profissionais desativadas (todas em maiúsculo agora)
+# Tratamento para profissionais desativadas
 df_prof = df.copy()
 if "RESPONSÁVEL" in df_prof.columns:
     df_prof["RESPONSÁVEL"] = df_prof["RESPONSÁVEL"].replace({
@@ -238,4 +235,3 @@ if "RESPONSÁVEL" in df_prof.columns:
     df_g4_counts = df_g4.groupby(["RESPONSÁVEL", "STATUS DO DOCUMENTO NORMATIVO"]).size().reset_index(name="Quantidade")
     
     if not df_g4_counts.empty:
-        fig4 = px.bar(
