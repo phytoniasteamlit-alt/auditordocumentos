@@ -11,7 +11,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- CABEÇALHO SUPERIOR ---
+# --- CABEÇALHO SUPERIOR (Alinhado na mesma linha) ---
 header_left, header_right = st.columns(2)
 
 with header_left:
@@ -102,7 +102,7 @@ if uploaded_file is not None:
         st.error(f"Erro ao processar o arquivo: {e}")
         st.stop()
 else:
-    st.info("💡 Por favor, use o menu lateral para carregar a sua planilha Excel e ativar os gráficos interativos.")
+    st.info("💡 Por favor, use the menu lateral para carregar a sua planilha Excel e ativar os gráficos interativos.")
     st.stop()
 
 # ==============================================================================
