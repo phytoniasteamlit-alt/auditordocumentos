@@ -78,7 +78,7 @@ if uploaded_file is not None:
     try:
         df = pd.read_excel(uploaded_file, sheet_name="DADOS_GRÁFICOS")
         
-        # Limpeza de espaços invisíveis nas colunas de texto (sem forçar maiúsculo global)
+        # Limpeza de espaços invisíveis nas colunas de texto
         for col in df.columns:
             if df[col].dtype == "object":
                 df[col] = df[col].astype(str).str.strip()
@@ -175,7 +175,6 @@ col_vencido = "(Vencido, No Prazo, Prestes a Vencer)"
 if col_vencido in df.columns:
     df_g3_base = df[df["STATUS DO DOCUMENTO NORMATIVO"] == "APROVADO"].copy()
     
-    # Tratamento específico para converter a string "A" vinda do Excel para "Prestes a Vencer"
     df_g3_base[col_vencido] = df_g3_base[col_vencido].replace({
         "Vencido": "Vencidos",
         "Válido": "Válidos",
@@ -232,3 +231,7 @@ if "RESPONSÁVEL" in df_prof.columns:
     prof_selecionado_g5 = st.selectbox("Selecione o Responsável para Filtrar a Análise Cruzada:", options=profissionais_lista)
 
     df_g5_filtrado = df_prof[df_prof["RESPONSÁVEL"] == prof_selecionado_g5]
+    df_g5_counts = df_g5_filtrado.groupby(["SIGLA DO DOCUMENTO", "STATUS DO DOCUMENTO NORMATIVO"]).size().reset_index(name="Quantidade")
+
+    if not df_g5_counts.empty:
+        ori_5 = "h" if tipo_grafico_5 == "Barras Horizontais" else "v"
