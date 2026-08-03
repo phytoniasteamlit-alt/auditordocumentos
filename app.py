@@ -181,12 +181,26 @@ if col_vencido in df.columns:
         "A": "Prestes a Vencer"
     })
     
-    df_g3_counts = df_g3_base.groupby(["SIGLA DO DOCUMENTO", col_vencido]).size().reset_index(name="Quantidade")
-    fig3 = px.bar(df_g3_counts, x="SIGLA DO DOCUMENTO", y="Quantidade", color=col_vencido,
-                  text="Quantidade", barmode="group",
-                  labels={"SIGLA DO DOCUMENTO": "Tipo de Documento", col_vencido: "Status de Validade"})
-    fig3.update_traces(textposition="outside")
-    st.plotly_chart(fig3, use_container_width=True)
+    # Criando o filtro interativo de seleção múltipla na tela
+    status_validade_disponiveis = ["Válidos", "Vencidos", "No Prazo", "Prestes a Vencer"]
+    validade_selecionada = st.multiselect(
+        "Filtrar Status de Validade:",
+        options=status_validade_disponiveis,
+        default=status_validade_disponiveis
+    )
+    
+    # Filtrando a tabela com base na escolha do usuário
+    df_g3_filtrado_val = df_g3_base[df_g3_base[col_vencido].isin(validade_selecionada)]
+    
+    if not df_g3_filtrado_val.empty:
+        df_g3_counts = df_g3_filtrado_val.groupby(["SIGLA DO DOCUMENTO", col_vencido]).size().reset_index(name="Quantidade")
+        fig3 = px.bar(df_g3_counts, x="SIGLA DO DOCUMENTO", y="Quantidade", color=col_vencido,
+                      text="Quantidade", barmode="group",
+                      labels={"SIGLA DO DOCUMENTO": "Tipo de Documento", col_vencido: "Status de Validade"})
+        fig3.update_traces(textposition="outside")
+        st.plotly_chart(fig3, use_container_width=True)
+    else:
+        st.info("Nenhum dado encontrado para os status de validade selecionados.")
 
 st.markdown("---")
 
@@ -220,17 +234,3 @@ if "RESPONSÁVEL" in df_prof.columns:
         color_discrete_map=mapa_cores_status
     )
     fig4.update_traces(textposition="outside")
-    st.plotly_chart(fig4, use_container_width=True)
-
-st.markdown("---")
-
-# --- GRÁFICO 5: Documentos por Tipo / Profissional ---
-st.subheader("5 Documentos por Tipo / Profissional")
-if "RESPONSÁVEL" in df_prof.columns:
-    prof_selecionado_g5 = st.selectbox("Selecione o Responsável para Filtrar a Análise Cruzada:", options=profissionais_lista)
-
-    df_g5_filtrado = df_prof[df_prof["RESPONSÁVEL"] == prof_selecionado_g5]
-    df_g5_counts = df_g5_filtrado.groupby(["SIGLA DO DOCUMENTO", "STATUS DO DOCUMENTO NORMATIVO"]).size().reset_index(name="Quantidade")
-
-    if not df_g5_counts.empty:
-        ori_5 = "h" if tipo_grafico_5 == "Barras Horizontais" else "v"
