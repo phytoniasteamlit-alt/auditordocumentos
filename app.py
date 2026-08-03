@@ -61,7 +61,7 @@ if uploaded_file is not None:
         for col in df.columns:
             df = df.rename(columns={col: col.strip().upper()})
         
-        # --- Mapeamento Inteligente de Colunas por Aproximação ---
+        # Mapeamento Inteligente de Colunas por Aproximação
         col_status = None
         col_sigla = None
         col_responsavel = None
@@ -74,10 +74,14 @@ if uploaded_file is not None:
             elif "RESPONS" in col or "COORD" in col:
                 col_responsavel = col
                 
-        # Define nomes padrão caso não encontre nas buscas acima
+        # Define nomes de contingência caso falhe
         col_status = col_status if col_status else df.columns[0]
-        col_sigla = col_sigla if col_sigla else df.columns[1]
-        col_responsavel = col_responsavel if col_responsavel else df.columns[2]
+        col_sigla = col_sigla if col_sigla else df.columns[0]
+        col_responsavel = col_responsavel if col_responsavel else df.columns[0]
+        
+        df[col_status] = df[col_status].fillna("NÃO INFORMADO")
+        df[col_sigla] = df[col_sigla].fillna("NÃO INFORMADO")
+        df[col_responsavel] = df[col_responsavel].fillna("NÃO INFORMADO")
         
         df["STATUS_NORM"] = df[col_status].apply(normalizar_texto)
         df["RESP_NORM"] = df[col_responsavel].apply(normalizar_texto)
@@ -183,6 +187,8 @@ if col_real_g3:
         fig3.update_traces(textposition="outside", textfont=dict(size=15))
         fig3.update_layout(legend=dict(font=dict(size=13), title_font=dict(size=14)), xaxis=dict(title_font=dict(size=14), tickfont=dict(size=13)), yaxis=dict(title_font=dict(size=14), tickfont=dict(size=13)))
         st.plotly_chart(fig3, use_container_width=True)
+    else:
+        st.info("Nenhum dado encontrado para os status de validade selecionados.")
 
 st.markdown("---")
 
@@ -191,19 +197,14 @@ df["RESPONSAVEL_FINAL"] = df.apply(
     axis=1
 )
 df["RESP_FINAL_NORM"] = df["RESPONSAVEL_FINAL"].apply(normalizar_texto)
+profissionais_lista = sorted(list(set([str(p) for p in df["RESPONSAVEL_FINAL"].unique() if p and str(p).upper() != "OUTROS" and str(p).upper() != "NÃO INFORMADO"])))
 
 st.subheader("4 Documentos por profissional")
-profissionais_lista = sorted(list(set([str(p) for p in df["RESPONSAVEL_FINAL"].unique() if p and str(p).upper() != "OUTROS" and str(p).upper() != "NÃO INFORMADO"])))
-prof_selecionado_g4 = st.selectbox("Filtrar por profissional para o Gráfico 4:", options=["Todos"] + profissionais_lista)
-
-df_g4 = df.copy() if prof_selecionado_g4 == "Todos" else df[df["RESP_FINAL_NORM"] == normalizar_texto(prof_selecionado_g4)]
-df_g4_counts = df_g4.groupby(["RESPONSAVEL_FINAL", "STATUS_LIMPO_GRAFICO"]).size().reset_index(name="Quantidade")
-
-fig4 = px.bar(df_g4_counts, x="Quantidade", y="RESPONSAVEL_FINAL", color="STATUS_LIMPO_GRAFICO", barmode="group", orientation="h", height=500, text="Quantidade", labels={"RESPONSAVEL_FINAL": "Profissional", "STATUS_LIMPO_GRAFICO": "Status"}, color_discrete_map=mapa_cores_status)
-fig4.update_traces(textposition="outside", textfont=dict(size=15))
-fig4.update_layout(legend=dict(font=dict(size=13), title_font=dict(size=14)), xaxis=dict(title_font=dict(size=14), tickfont=dict(size=13)), yaxis=dict(title_font=dict(size=14), tickfont=dict(size=13)))
-st.plotly_chart(fig4, use_container_width=True)
-
-st.markdown("---")
-
-st.subheader("5 Documentos por Tipo / Profissional")
+try:
+    prof_selecionado_g4 = st.selectbox("Filtrar por profissional para o Gráfico 4:", options=["Todos"] + profissionais_lista)
+    df_g4 = df.copy() if prof_selecionado_g4 == "Todos" else df[df["RESP_FINAL_NORM"] == normalizar_texto(prof_selecionado_g4)]
+    df_g4_counts = df_g4.groupby(["RESPONSAVEL_FINAL", "STATUS_LIMPO_GRAFICO"]).size().reset_index(name="Quantidade")
+    
+    if not df_g4_counts.empty:
+        fig4 = px.bar(df_g4_counts, x="Quantidade", y="RESPONSAVEL_FINAL", color="STATUS_LIMPO_GRAFICO", barmode="group", orientation="h", height=500, text="Quantidade", labels={"RESPONSAVEL_FINAL": "Profissional", "STATUS_LIMPO_GRAFICO": "Status"}, color_discrete_map=mapa_cores_status)
+        fig4.update_traces(textposition="outside", textfont=dict(size=15))
