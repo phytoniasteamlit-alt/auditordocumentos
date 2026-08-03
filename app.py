@@ -77,7 +77,6 @@ aprovados = len(df[status_documento == "APROVADO"])
 verf_1 = len(df[status_documento == "AGUARD_DEV_DO_SETOR"])
 verf_2 = len(df[status_documento == "EM VERF INTERNA"])
 
-# Varredura inteligente de colunas para encontrar os dados de tempo/média
 col_media_dias = None
 for col in df.columns:
     if "MÉDIA" in col or "MEDIA" in col or "TEMPO" in col or "DIAS" in col or "I.A.A.A" in col:
@@ -87,7 +86,6 @@ for col in df.columns:
 media_dias_total = 0.0
 if col_media_dias:
     try:
-        # Filtra apenas pelas linhas onde o documento está aprovado para calcular a média descrita
         df_aprovados_apenas = df[df["STATUS DO DOCUMENTO NORMATIVO"] == "APROVADO"]
         media_valores = pd.to_numeric(df_aprovados_apenas[col_media_dias], errors='coerce').dropna()
         if len(media_valores) > 0:
@@ -114,7 +112,7 @@ with row1_col1:
     df_g1.columns = ["STATUS DO DOCUMENTO NORMATIVO", "Quantidade"]
     if not df_g1.empty:
         fig1 = px.pie(df_g1, names="STATUS DO DOCUMENTO NORMATIVO", values="Quantidade", hole=0.4, color="STATUS DO DOCUMENTO NORMATIVO", color_discrete_map=mapa_cores_status)
-        fig1.update_traces(textinfo='value+label', textposition='inside')
+        fig1.update_traces(textinfo='value+label', textposition='inside', insidetextfont=dict(size=14))
         fig1.update_layout(margin=dict(l=20, r=20, t=30, b=20), showlegend=False)
         st.plotly_chart(fig1, use_container_width=True)
 
@@ -125,8 +123,13 @@ with row1_col2:
     df_g2.columns = ["Tipo de Documento", "Quantidade Aprovada"]
     if not df_g2.empty:
         fig2 = px.bar(df_g2, x="Quantidade Aprovada", y="Tipo de Documento", text="Quantidade Aprovada", orientation="h", color="Tipo de Documento", color_discrete_sequence=cor_sequencia)
-        fig2.update_traces(textposition="outside")
-        fig2.update_layout(margin=dict(l=20, r=20, t=30, b=20), showlegend=False)
+        fig2.update_traces(textposition="outside", textfont=dict(size=15))
+        fig2.update_layout(
+            margin=dict(l=20, r=20, t=30, b=20), 
+            showlegend=False,
+            xaxis=dict(title_font=dict(size=14), tickfont=dict(size=13)),
+            yaxis=dict(title_font=dict(size=14), tickfont=dict(size=13))
+        )
         st.plotly_chart(fig2, use_container_width=True)
 
 st.markdown("---")
@@ -153,7 +156,12 @@ if col_real_g3:
     if not df_g3_filtrado_val.empty:
         df_g3_counts = df_g3_filtrado_val.groupby(["SIGLA DO DOCUMENTO", col_real_g3]).size().reset_index(name="Quantidade")
         fig3 = px.bar(df_g3_counts, x="SIGLA DO DOCUMENTO", y="Quantidade", color=col_real_g3, text="Quantidade", barmode="group", labels={"SIGLA DO DOCUMENTO": "Tipo de Documento", col_real_g3: "Status de Validade"})
-        fig3.update_traces(textposition="outside")
+        fig3.update_traces(textposition="outside", textfont=dict(size=15))
+        fig3.update_layout(
+            legend=dict(font=dict(size=13), title_font=dict(size=14)),
+            xaxis=dict(title_font=dict(size=14), tickfont=dict(size=13)),
+            yaxis=dict(title_font=dict(size=14), tickfont=dict(size=13))
+        )
         st.plotly_chart(fig3, use_container_width=True)
     else:
         st.info("Nenhum dado encontrado para os status de validade selecionados.")
@@ -174,7 +182,12 @@ if "RESPONSÁVEL" in df_prof.columns:
     df_g4_counts = df_g4.groupby(["RESPONSÁVEL", "STATUS DO DOCUMENTO NORMATIVO"]).size().reset_index(name="Quantidade")
     if not df_g4_counts.empty:
         fig4 = px.bar(df_g4_counts, x="Quantidade", y="RESPONSÁVEL", color="STATUS DO DOCUMENTO NORMATIVO", barmode="group", orientation="h", height=450, text="Quantidade", labels={"RESPONSÁVEL": "Profissional", "Quantidade": "N° de Documentos"}, color_discrete_map=mapa_cores_status)
-        fig4.update_traces(textposition="outside")
+        fig4.update_traces(textposition="outside", textfont=dict(size=15))
+        fig4.update_layout(
+            legend=dict(font=dict(size=13), title_font=dict(size=14)),
+            xaxis=dict(title_font=dict(size=14), tickfont=dict(size=13)),
+            yaxis=dict(title_font=dict(size=14), tickfont=dict(size=13))
+        )
         st.plotly_chart(fig4, use_container_width=True)
     else:
         st.info("Nenhum dado de profissional encontrado para gerar o Gráfico 4.")
@@ -190,8 +203,3 @@ if "RESPONSÁVEL" in df_prof.columns:
         ori_5 = "h" if tipo_grafico_5 == "Barras Horizontais" else "v"
         x_val = "Quantidade" if ori_5 == "h" else "SIGLA DO DOCUMENTO"
         y_val = "SIGLA DO DOCUMENTO" if ori_5 == "h" else "Quantidade"
-        fig5 = px.bar(df_g5_counts, x=x_val, y=y_val, color="STATUS DO DOCUMENTO NORMATIVO", text="Quantidade", orientation=ori_5, barmode="group", labels={"SIGLA DO DOCUMENTO": "Tipo de Documento", "Quantidade": "Quantidade de Documentos"}, color_discrete_map=mapa_cores_status)
-        fig5.update_traces(textposition="outside")
-        st.plotly_chart(fig5, use_container_width=True)
-    else:
-        st.warning(f"Não foram encontrados dados para a profissional {prof_selecionado_g5}.")
