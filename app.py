@@ -78,10 +78,13 @@ if uploaded_file is not None:
     try:
         df = pd.read_excel(uploaded_file, sheet_name="DADOS_GRÁFICOS")
         
-        # Limpeza de espaços invisíveis nas colunas de texto
+        # Limpeza e padronização forçada para evitar que os gráficos sumam
+        for col in df.columns:
+            df = df.rename(columns={col: col.strip().upper()})
+            
         for col in df.columns:
             if df[col].dtype == "object":
-                df[col] = df[col].astype(str).str.strip()
+                df[col] = df[col].astype(str).str.strip().str.upper()
                 
         # Substituir strings de erro do Excel por valores nulos limpos
         df = df.replace(["#VALOR!", "0", "0.0", "NONE", "NAN"], None)
@@ -115,7 +118,7 @@ verf_1 = len(df[status_documento == "AGUARD_DEV_DO_SETOR"])
 verf_2 = len(df[status_documento == "EM VERF INTERNA"])
 
 # Cálculo dinâmico da nova caixa de Média ("Temp Total até Aprov")
-col_media_dias = "média I.A.A.A" if "média I.A.A.A" in df.columns else df.columns[-1]
+col_media_dias = "MÉDIA I.A.A.A" if "MÉDIA I.A.A.A" in df.columns else df.columns[-1]
 try:
     media_valores = pd.to_numeric(df[col_media_dias], errors='coerce').dropna()
     media_dias_total = round(media_valores.mean(), 1) if len(media_valores) > 0 else 0.0
@@ -170,18 +173,25 @@ st.markdown("---")
 
 # --- GRÁFICO 3: Validade por Tipo de Documentos ---
 st.subheader("3 Validade por Tipo de Documentos")
-col_vencido = "(Vencido, No Prazo, Prestes a Vencer)"
+col_vencido = "(VENCIDO, NO PRAZO, PRESTES A VENCER)"
 
-if col_vencido in df.columns:
+# Tenta encontrar a coluna de validade mesmo se o nome variar um pouco no Excel
+col_real_g3 = None
+for col in df.columns:
+    if "VENCIDO" in col or "VALIDADE" in col:
+        col_real_g3 = col
+        break
+
+if col_real_g3:
     df_g3_base = df[df["STATUS DO DOCUMENTO NORMATIVO"] == "APROVADO"].copy()
-    df_g3_base[col_vencido] = df_g3_base[col_vencido].replace({
-        "Vencido": "Vencidos",
-        "Válido": "Válidos",
-        "No Prazo": "No Prazo",
-        "A": "Prestes a Vencer"
+    df_g3_base[col_real_g3] = df_g3_base[col_real_g3].replace({
+        "VENCIDO": "Vencidos",
+        "VÁLIDO": "Válidos",
+        "NO PRAZO": "No Prazo",
+        "A": "Prestes a Vencer",
+        "PRESTES A VENCER": "Prestes a Vencer"
     })
     
-    # Criando o filtro interativo de seleção múltipla na tela
     status_validade_disponiveis = ["Válidos", "Vencidos", "No Prazo", "Prestes a Vencer"]
     validade_selecionada = st.multiselect(
         "Filtrar Status de Validade:",
@@ -189,30 +199,29 @@ if col_vencido in df.columns:
         default=status_validade_disponiveis
     )
     
-    # Filtrando a tabela com base na escolha do usuário
-    df_g3_filtrado_val = df_g3_base[df_g3_base[col_vencido].isin(validade_selecionada)]
+    df_g3_filtrado_val = df_g3_base[df_g3_base[col_real_g3].isin(validade_selecionada)]
     
     if not df_g3_filtrado_val.empty:
-        df_g3_counts = df_g3_filtrado_val.groupby(["SIGLA DO DOCUMENTO", col_vencido]).size().reset_index(name="Quantidade")
-        fig3 = px.bar(df_g3_counts, x="SIGLA DO DOCUMENTO", y="Quantidade", color=col_vencido,
+        df_g3_counts = df_g3_filtrado_val.groupby(["SIGLA DO DOCUMENTO", col_real_g3]).size().reset_index(name="Quantidade")
+        fig3 = px.bar(df_g3_counts, x="SIGLA DO DOCUMENTO", y="Quantidade", color=col_real_g3,
                       text="Quantidade", barmode="group",
-                      labels={"SIGLA DO DOCUMENTO": "Tipo de Documento", col_vencido: "Status de Validade"})
+                      labels={"SIGLA DO DOCUMENTO": "Tipo de Documento", col_real_g3: "Status de Validade"})
         fig3.update_traces(textposition="outside")
         st.plotly_chart(fig3, use_container_width=True)
     else:
         st.info("Nenhum dado encontrado para os status de validade selecionados.")
+else:
+    st.warning("Coluna de Validade não encontrada no arquivo carregado.")
 
 st.markdown("---")
 
-# Tratamento para profissionais desativadas
+# Tratamento para profissionais desativadas (todas em maiúsculo agora)
 df_prof = df.copy()
 if "RESPONSÁVEL" in df_prof.columns:
     df_prof["RESPONSÁVEL"] = df_prof["RESPONSÁVEL"].replace({
         "SONALIA": "OUTROS",
         "SABRINA": "OUTROS",
-        "SONALHYA": "OUTROS",
-        "Sonalia": "OUTROS",
-        "Sabrina": "OUTROS"
+        "SONALHYA": "OUTROS"
     })
 
 # --- GRÁFICO 4: Documentos por profissional ---
@@ -227,10 +236,6 @@ if "RESPONSÁVEL" in df_prof.columns:
         df_g4 = df_prof[df_prof["RESPONSÁVEL"] == prof_selecionado_g4]
 
     df_g4_counts = df_g4.groupby(["RESPONSÁVEL", "STATUS DO DOCUMENTO NORMATIVO"]).size().reset_index(name="Quantidade")
-    fig4 = px.bar(
-        df_g4_counts, x="Quantidade", y="RESPONSÁVEL", color="STATUS DO DOCUMENTO NORMATIVO",
-        barmode="group", orientation="h", height=450, text="Quantidade",
-        labels={"RESPONSÁVEL": "Profissional", "Quantidade": "N° de Documentos"},
-        color_discrete_map=mapa_cores_status
-    )
-    fig4.update_traces(textposition="outside")
+    
+    if not df_g4_counts.empty:
+        fig4 = px.bar(
