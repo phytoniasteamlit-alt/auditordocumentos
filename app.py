@@ -12,7 +12,7 @@ st.set_page_config(
 )
 
 # --- CABEÇALHO SUPERIOR (Título na mesma linha e alinhamento) ---
-header_left, header_right = st.columns([3, 1])
+header_left, header_right = st.columns(2)
 
 with header_left:
     st.markdown(
@@ -115,7 +115,6 @@ verf_1 = len(df[status_documento == "AGUARD_DEV_DO_SETOR"])
 verf_2 = len(df[status_documento == "EM VERF INTERNA"])
 
 # Cálculo dinâmico da nova caixa de Média ("Temp Total até Aprov")
-# Tenta mapear as colunas de média do arquivo carregado se existirem valores numéricos
 col_media_dias = "MÉDIA I.A.A.A" if "MÉDIA I.A.A.A" in df.columns else df.columns[-1]
 try:
     media_valores = pd.to_numeric(df[col_media_dias], errors='coerce').dropna()
@@ -172,61 +171,64 @@ st.markdown("---")
 # --- GRÁFICO 3: Doc. Validade por Tipo de Doc. Aprov ---
 st.subheader("3 Doc. Validade por Tipo de Doc. Aprov")
 col_vencido = "(Vencido, No Prazo, Prestes a Vencer)"
-col_temporal = col_vencido if col_vencido in df.columns else df.columns[5]
 
-df_g3_base = df[df["STATUS DO DOCUMENTO NORMATIVO"] == "APROVADO"].copy()
-if col_temporal in df_g3_base.columns:
-    df_g3_base[col_temporal] = df_g3_base[col_temporal].replace({
+if col_vencido in df.columns:
+    df_g3_base = df[df["STATUS DO DOCUMENTO NORMATIVO"] == "APROVADO"].copy()
+    df_g3_base[col_vencido] = df_g3_base[col_vencido].replace({
         "VENCIDO": "Vencidos",
         "VÁLIDO": "Válidos",
         "NO PRAZO": "No Prazo",
         "PRESTES A VENCER": "No Prazo"
     })
     
-    df_g3_counts = df_g3_base.groupby(["SIGLA DO DOCUMENTO", col_temporal]).size().reset_index(name="Quantidade")
-    fig3 = px.bar(df_g3_counts, x="SIGLA DO DOCUMENTO", y="Quantidade", color=col_temporal,
+    df_g3_counts = df_g3_base.groupby(["SIGLA DO DOCUMENTO", col_vencido]).size().reset_index(name="Quantidade")
+    fig3 = px.bar(df_g3_counts, x="SIGLA DO DOCUMENTO", y="Quantidade", color=col_vencido,
                   text="Quantidade", barmode="group",
-                  labels={"SIGLA DO DOCUMENTO": "Tipo de Documento", col_temporal: "Status de Validade"})
+                  labels={"SIGLA DO DOCUMENTO": "Tipo de Documento", col_vencido: "Status de Validade"})
     fig3.update_traces(textposition="outside")
     st.plotly_chart(fig3, use_container_width=True)
 
 st.markdown("---")
 
-# Tratamento estratégico para profissionais desativadas (Sonalia e Sabrina como Outros)
+# Tratamento estratégico para profissionais desativadas
 df_prof = df.copy()
-df_prof["RESPONSÁVEL"] = df_prof["RESPONSÁVEL"].replace({
-    "SONALIA": "OUTROS",
-    "SABRINA": "OUTROS",
-    "SONALHYA": "OUTROS"
-})
+if "RESPONSÁVEL" in df_prof.columns:
+    df_prof["RESPONSÁVEL"] = df_prof["RESPONSÁVEL"].replace({
+        "SONALIA": "OUTROS",
+        "SABRINA": "OUTROS",
+        "SONALHYA": "OUTROS"
+    })
 
 # --- GRÁFICO 4: Documentos por profissional ---
 st.subheader("4 Documentos por profissional")
-profissionais_lista = sorted([p for p in df_prof["RESPONSÁVEL"].dropna().unique().tolist() if p != "OUTROS"])
-prof_selecionado_g4 = st.selectbox("Filtrar por profissional para o Gráfico 4:", options=["Todos"] + profissionais_lista)
+if "RESPONSÁVEL" in df_prof.columns:
+    profissionais_lista = sorted([p for p in df_prof["RESPONSÁVEL"].dropna().unique().tolist() if p != "OUTROS"])
+    prof_selecionado_g4 = st.selectbox("Filtrar por profissional para o Gráfico 4:", options=["Todos"] + profissionais_lista)
 
-if prof_selecionado_g4 == "Todos":
-    df_g4 = df_prof.copy()
-else:
-    df_g4 = df_prof[df_prof["RESPONSÁVEL"] == prof_selecionado_g4]
+    if prof_selecionado_g4 == "Todos":
+        df_g4 = df_prof.copy()
+    else:
+        df_g4 = df_prof[df_prof["RESPONSÁVEL"] == prof_selecionado_g4]
 
-df_g4_counts = df_g4.groupby(["RESPONSÁVEL", "STATUS DO DOCUMENTO NORMATIVO"]).size().reset_index(name="Quantidade")
-fig4 = px.bar(
-    df_g4_counts, x="Quantidade", y="RESPONSÁVEL", color="STATUS DO DOCUMENTO NORMATIVO",
-    barmode="group", orientation="h", height=450, text="Quantidade",
-    labels={"RESPONSÁVEL": "Profissional", "Quantidade": "N° de Documentos"},
-    color_discrete_map=mapa_cores_status
-)
-fig4.update_traces(textposition="outside")
-st.plotly_chart(fig4, use_container_width=True)
+    df_g4_counts = df_g4.groupby(["RESPONSÁVEL", "STATUS DO DOCUMENTO NORMATIVO"]).size().reset_index(name="Quantidade")
+    fig4 = px.bar(
+        df_g4_counts, x="Quantidade", y="RESPONSÁVEL", color="STATUS DO DOCUMENTO NORMATIVO",
+        barmode="group", orientation="h", height=450, text="Quantidade",
+        labels={"RESPONSÁVEL": "Profissional", "Quantidade": "N° de Documentos"},
+        color_discrete_map=mapa_cores_status
+    )
+    fig4.update_traces(textposition="outside")
+    st.plotly_chart(fig4, use_container_width=True)
 
 st.markdown("---")
 
 # --- GRÁFICO 5: Documentos por Tipo / Profissional ---
 st.subheader("5 Documentos por Tipo / Profissional")
-prof_selecionado_g5 = st.selectbox("Selecione o Responsável para Filtrar a Análise Cruzada:", options=profissionais_lista)
+if "RESPONSÁVEL" in df_prof.columns:
+    prof_selecionado_g5 = st.selectbox("Selecione o Responsável para Filtrar a Análise Cruzada:", options=profissionais_lista)
 
-df_g5_filtrado = df_prof[df_prof["RESPONSÁVEL"] == prof_selecionado_g5]
-df_g5_counts = df_g5_filtrado.groupby(["SIGLA DO DOCUMENTO", "STATUS DO DOCUMENTO NORMATIVO"]).size().reset_index(name="Quantidade")
+    df_g5_filtrado = df_prof[df_prof["RESPONSÁVEL"] == prof_selecionado_g5]
+    df_g5_counts = df_g5_filtrado.groupby(["SIGLA DO DOCUMENTO", "STATUS DO DOCUMENTO NORMATIVO"]).size().reset_index(name="Quantidade")
 
-if not df_g5_counts.empty:
+    if not df_g5_counts.empty:
+        ori_5 = "h" if tipo_grafico_5 == "Barras Horizontais" else "v"
