@@ -74,7 +74,6 @@ if uploaded_file is not None:
             elif "RESPONS" in col or "COORD" in col:
                 col_responsavel = col
                 
-        # Define nomes de contingência caso falhe
         col_status = col_status if col_status else df.columns[0]
         col_sigla = col_sigla if col_sigla else df.columns[0]
         col_responsavel = col_responsavel if col_responsavel else df.columns[0]
@@ -175,8 +174,10 @@ if col_real_g3:
     df_g3_base = df[df["STATUS_LIMPO_GRAFICO"] == "APROVADO"].copy()
     df_g3_base["VAL_NORM"] = df_g3_base[col_real_g3].apply(normalizar_texto)
     df_g3_base["STATUS_VAL"] = df_g3_base["VAL_NORM"].replace({
-        "VENCIDO": "Vencidos", "VALIDO": "Válidos", "NOPRAZO": "No Prazo", "NO PRAZO": "No Prazo",
-        "A": "Prestes a Vencer", "PRESTES A VENCER": "Prestes a Vencer"
+        "VENCIDO": "Vencidos", "Vencido": "Vencidos", "vencido": "Vencidos",
+        "VALIDO": "Válidos", "Válido": "Válidos", "valido": "Válidos", "VÁLIDOS": "Válidos",
+        "NO PRAZO": "No Prazo", "No Prazo": "No Prazo", "no prazo": "No Prazo",
+        "A": "Prestes a Vencer", "PRESTES A VENCER": "Prestes a Vencer", "Prestes a Vencer": "Prestes a Vencer"
     })
     status_validade_disponiveis = ["Válidos", "Vencidos", "No Prazo", "Prestes a Vencer"]
     validade_selecionada = st.multiselect("Filtrar Status de Validade:", options=status_validade_disponiveis, default=status_validade_disponiveis)
@@ -200,11 +201,8 @@ df["RESP_FINAL_NORM"] = df["RESPONSAVEL_FINAL"].apply(normalizar_texto)
 profissionais_lista = sorted(list(set([str(p) for p in df["RESPONSAVEL_FINAL"].unique() if p and str(p).upper() != "OUTROS" and str(p).upper() != "NÃO INFORMADO"])))
 
 st.subheader("4 Documentos por profissional")
-try:
-    prof_selecionado_g4 = st.selectbox("Filtrar por profissional para o Gráfico 4:", options=["Todos"] + profissionais_lista)
-    df_g4 = df.copy() if prof_selecionado_g4 == "Todos" else df[df["RESP_FINAL_NORM"] == normalizar_texto(prof_selecionado_g4)]
-    df_g4_counts = df_g4.groupby(["RESPONSAVEL_FINAL", "STATUS_LIMPO_GRAFICO"]).size().reset_index(name="Quantidade")
-    
-    if not df_g4_counts.empty:
-        fig4 = px.bar(df_g4_counts, x="Quantidade", y="RESPONSAVEL_FINAL", color="STATUS_LIMPO_GRAFICO", barmode="group", orientation="h", height=500, text="Quantidade", labels={"RESPONSAVEL_FINAL": "Profissional", "STATUS_LIMPO_GRAFICO": "Status"}, color_discrete_map=mapa_cores_status)
-        fig4.update_traces(textposition="outside", textfont=dict(size=15))
+prof_selecionado_g4 = st.selectbox("Filtrar por profissional para o Gráfico 4:", options=["Todos"] + profissionais_lista)
+df_g4 = df.copy() if prof_selecionado_g4 == "Todos" else df[df["RESP_FINAL_NORM"] == normalizar_texto(prof_selecionado_g4)]
+df_g4_counts = df_g4.groupby(["RESPONSAVEL_FINAL", "STATUS_LIMPO_GRAFICO"]).size().reset_index(name="Quantidade")
+
+fig4 = px.bar(df_g4_counts, x="Quantidade", y="RESPONSAVEL_FINAL", color="STATUS_LIMPO_GRAFICO", barmode="group", orientation="h", height=500, text="Quantidade", labels={"RESPONSAVEL_FINAL": "Profissional", "STATUS_LIMPO_GRAFICO": "Status"}, color_discrete_map=mapa_cores_status)
