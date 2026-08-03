@@ -1,12 +1,22 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import unicodedata
 
 st.set_page_config(
     page_title="Painel de Indicadores Norma Zero",
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# --- Função Auxiliar para remover acentos e espaços, deixando a busca à prova de falhas ---
+def normalizar_texto(texto):
+    if pd.isna(texto) or not isinstance(texto, str):
+        return ""
+    texto = texto.strip().upper()
+    # Remove acentos (ex: FABRÍCIA vira FABRICIA)
+    texto = "".join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
+    return texto
 
 header_left, header_right = st.columns(2)
 
@@ -41,36 +51,37 @@ else:
 tipo_grafico_5 = st.sidebar.radio("Estilo do Gráfico 5:", options=["Barras Verticais", "Barras Horizontais"], index=1)
 
 mapa_cores_status = {
-    "APROVADO": "#2ca02c", "Aprovado": "#2ca02c", "aprovado": "#2ca02c",
-    "AGUARD_DEV_DO_SETOR": "#d62728", "Aguard_Dev_do_Setor": "#d62728", "aguard_dev_do_setor": "#d62728",
-    "EM VERF INTERNA": "#bcbd22", "Em Verf Interna": "#bcbd22", "em verf interna": "#bcbd22",
-    "CANCELADO": "#7f7f7f", "Cancelado": "#7f7f7f", "cancelado": "#7f7f7f"
+    "APROVADO": "#2ca02c",
+    "AGUARD_DEV_DO_SETOR": "#d62728",
+    "EM VERF INTERNA": "#bcbd22",
+    "CANCELADO": "#7f7f7f"
 }
 
 if uploaded_file is not None:
     try:
         df = pd.read_excel(uploaded_file, sheet_name="DADOS_GRÁFICOS")
+        # Força o nome das colunas a ficarem limpos e padronizados em maiúsculo
         for col in df.columns:
             df = df.rename(columns={col: col.strip().upper()})
-        for col in df.columns:
-            if df[col].dtype == "object":
-                df[col] = df[col].astype(str).str.strip()
-        df = df.replace(["#VALOR!", "0", "0.0", "NONE", "NAN", "nan", "None"], None)
-        df = df.dropna(subset=["SIGLA DO DOCUMENTO", "NOME DO DOCUMENTO", "RESPONSÁVEL"], how="all")
-        if "STATUS DO DOCUMENTO NORMATIVO" in df.columns:
-            df["STATUS DO DOCUMENTO NORMATIVO"] = df["STATUS DO DOCUMENTO NORMATIVO"].replace({
-                "VERIFICADO AGUARDA DEVOLUÇÃO SETOR": "AGUARD_DEV_DO_SETOR",
-                "VERIFICADO AGUARDA DEVOLUÇÃO DO SETOR": "AGUARD_DEV_DO_SETOR",
-                "VERF AG DEV - SETOR": "AGUARD_DEV_DO_SETOR",
-                "EM VERIFICAÇÃO": "EM VERF INTERNA",
-                "Verificado Aguarda Devolução Setor": "AGUARD_DEV_DO_SETOR",
-                "Verificado Aguarda Devolução do Setor": "AGUARD_DEV_DO_SETOR",
-                "Verf Ag Dev - Setor": "AGUARD_DEV_DO_SETOR",
-                "Em Verificação": "EM VERF INTERNA",
-                "em verificação": "EM VERF INTERNA",
-                "aprovado": "APROVADO", "Aprovado": "APROVADO",
-                "cancelado": "CANCELADO", "Cancelado": "CANCELADO"
-            })
+        
+        # Cria colunas normalizadas invisíveis apenas para filtros e buscas seguras
+        df["STATUS_NORM"] = df["STATUS DO DOCUMENTO NORMATIVO"].apply(normalizar_texto)
+        df["RESP_NORM"] = df["RESPONSÁVEL"].apply(normalizar_texto)
+        
+        # Mapeamento e correção flexível de status
+        df["STATUS_FINAL"] = df["STATUS_NORM"].replace({
+            "VERIFICADO AGUARDA DEVOLUCAO SETOR": "AGUARD_DEV_DO_SETOR",
+            "VERIFICADO AGUARDA DEVOLUCAO DO SETOR": "AGUARD_DEV_DO_SETOR",
+            "VERF AG DEV - SETOR": "AGUARD_DEV_DO_SETOR",
+            "EM VERIFICACAO": "EM VERF INTERNA",
+            "EM VERIFICAÇÃO": "EM VERF INTERNA",
+            "APROVADO": "APROVADO",
+            "CANCELADO": "CANCELADO"
+        })
+        
+        # Garante que status não mapeados não quebrem o código
+        df["STATUS DO DOCUMENTO NORMATIVO"] = df["STATUS_FINAL"].apply(lambda x: x if x in mapa_cores_status else "OUTROS")
+        
     except Exception as e:
         st.error(f"Erro ao processar o arquivo: {e}")
         st.stop()
@@ -78,11 +89,10 @@ else:
     st.info("💡 Por favor, use o menu lateral para carregar a sua planilha Excel e ativar os gráficos interativos.")
     st.stop()
 
-status_documento = df["STATUS DO DOCUMENTO NORMATIVO"].fillna("NÃO INFORMADO")
 total_docs = len(df)
-aprovados = len(df[status_documento == "APROVADO"])
-verf_1 = len(df[status_documento == "AGUARD_DEV_DO_SETOR"])
-verf_2 = len(df[status_documento == "EM VERF INTERNA"])
+aprovados = len(df[df["STATUS DO DOCUMENTO NORMATIVO"] == "APROVADO"])
+verf_1 = len(df[df["STATUS DO DOCUMENTO NORMATIVO"] == "AGUARD_DEV_DO_SETOR"])
+verf_2 = len(df[df["STATUS DO DOCUMENTO NORMATIVO"] == "EM VERF INTERNA"])
 
 col_media_dias = None
 for col in df.columns:
@@ -113,12 +123,11 @@ row1_col1, row1_col2 = st.columns(2)
 
 with row1_col1:
     st.subheader("1 Doc. por Status")
-    status_alvo = ["APROVADO", "EM VERF INTERNA", "AGUARD_DEV_DO_SETOR", "CANCELADO"]
-    df_g1_filtrado = df[df["STATUS DO DOCUMENTO NORMATIVO"].isin(status_alvo)]
-    df_g1 = df_g1_filtrado["STATUS DO DOCUMENTO NORMATIVO"].value_counts().reset_index()
-    df_g1.columns = ["STATUS DO DOCUMENTO NORMATIVO", "Quantidade"]
-    if not df_g1.empty:
-        fig1 = px.pie(df_g1, names="STATUS DO DOCUMENTO NORMATIVO", values="Quantidade", hole=0.4, color="STATUS DO DOCUMENTO NORMATIVO", color_discrete_map=mapa_cores_status)
+    df_g1 = df[df["STATUS DO DOCUMENTO NORMATIVO"].isin(mapa_cores_status.keys())]
+    df_g1_counts = df_g1["STATUS DO DOCUMENTO NORMATIVO"].value_counts().reset_index()
+    df_g1_counts.columns = ["STATUS DO DOCUMENTO NORMATIVO", "Quantidade"]
+    if not df_g1_counts.empty:
+        fig1 = px.pie(df_g1_counts, names="STATUS DO DOCUMENTO NORMATIVO", values="Quantidade", hole=0.4, color="STATUS DO DOCUMENTO NORMATIVO", color_discrete_map=mapa_cores_status)
         fig1.update_traces(textinfo='value+label', textposition='inside', insidetextfont=dict(size=14))
         fig1.update_layout(margin=dict(l=20, r=20, t=30, b=20), showlegend=False)
         st.plotly_chart(fig1, use_container_width=True)
@@ -126,13 +135,14 @@ with row1_col1:
 with row1_col2:
     st.subheader("2 Doc. Aprovados por Tipo")
     df_g2_filtrado = df[df["STATUS DO DOCUMENTO NORMATIVO"] == "APROVADO"]
-    df_g2 = df_g2_filtrado["SIGLA DO DOCUMENTO"].value_counts().reset_index()
-    df_g2.columns = ["Tipo de Documento", "Quantidade Aprovada"]
-    if not df_g2.empty:
-        fig2 = px.bar(df_g2, x="Quantidade Aprovada", y="Tipo de Documento", text="Quantidade Aprovada", orientation="h", color="Tipo de Documento", color_discrete_sequence=cor_sequencia)
-        fig2.update_traces(textposition="outside", textfont=dict(size=15))
-        fig2.update_layout(margin=dict(l=20, r=20, t=30, b=20), showlegend=False, xaxis=dict(title_font=dict(size=14), tickfont=dict(size=13)), yaxis=dict(title_font=dict(size=14), tickfont=dict(size=13)))
-        st.plotly_chart(fig2, use_container_width=True)
+    if "SIGLA DO DOCUMENTO" in df_g2_filtrado.columns:
+        df_g2 = df_g2_filtrado["SIGLA DO DOCUMENTO"].value_counts().reset_index()
+        df_g2.columns = ["Tipo de Documento", "Quantidade Aprovada"]
+        if not df_g2.empty:
+            fig2 = px.bar(df_g2, x="Quantidade Aprovada", y="Tipo de Documento", text="Quantidade Aprovada", orientation="h", color="Tipo de Documento", color_discrete_sequence=cor_sequencia)
+            fig2.update_traces(textposition="outside", textfont=dict(size=15))
+            fig2.update_layout(margin=dict(l=20, r=20, t=30, b=20), showlegend=False, xaxis=dict(title_font=dict(size=14), tickfont=dict(size=13)), yaxis=dict(title_font=dict(size=14), tickfont=dict(size=13)))
+            st.plotly_chart(fig2, use_container_width=True)
 
 st.markdown("---")
 
@@ -145,45 +155,47 @@ for col in df.columns:
 
 if col_real_g3:
     df_g3_base = df[df["STATUS DO DOCUMENTO NORMATIVO"] == "APROVADO"].copy()
-    df_g3_base[col_real_g3] = df_g3_base[col_real_g3].replace({
-        "VENCIDO": "Vencidos", "Vencido": "Vencidos", "vencido": "Vencidos",
-        "VÁLIDO": "Válidos", "Válido": "Válidos", "valido": "Válidos", "VÁLIDOS": "Válidos",
-        "NO PRAZO": "No Prazo", "No Prazo": "No Prazo", "no prazo": "No Prazo",
-        "A": "Prestes a Vencer", "PRESTES A VENCER": "Prestes a Vencer", "Prestes a Vencer": "Prestes a Vencer"
+    # Normaliza temporariamente a coluna de validade para a troca de termos
+    df_g3_base["VAL_NORM"] = df_g3_base[col_real_g3].apply(normalizar_texto)
+    df_g3_base["STATUS_VAL"] = df_g3_base["VAL_NORM"].replace({
+        "VENCIDO": "Vencidos", "VALIDO": "Válidos", "NOPRAZO": "No Prazo", "NO PRAZO": "No Prazo",
+        "A": "Prestes a Vencer", "PRESTES A VENCER": "Prestes a Vencer"
     })
     status_validade_disponiveis = ["Válidos", "Vencidos", "No Prazo", "Prestes a Vencer"]
     validade_selecionada = st.multiselect("Filtrar Status de Validade:", options=status_validade_disponiveis, default=status_validade_disponiveis)
-    df_g3_filtrado_val = df_g3_base[df_g3_base[col_real_g3].isin(validade_selecionada)]
+    df_g3_filtrado_val = df_g3_base[df_g3_base["STATUS_VAL"].isin(validade_selecionada)]
     if not df_g3_filtrado_val.empty:
-        df_g3_counts = df_g3_filtrado_val.groupby(["SIGLA DO DOCUMENTO", col_real_g3]).size().reset_index(name="Quantidade")
-        fig3 = px.bar(df_g3_counts, x="SIGLA DO DOCUMENTO", y="Quantidade", color=col_real_g3, text="Quantidade", barmode="group", labels={"SIGLA DO DOCUMENTO": "Tipo de Documento", col_real_g3: "Status de Validade"})
+        df_g3_counts = df_g3_filtrado_val.groupby(["SIGLA DO DOCUMENTO", "STATUS_VAL"]).size().reset_index(name="Quantidade")
+        fig3 = px.bar(df_g3_counts, x="SIGLA DO DOCUMENTO", y="Quantidade", color="STATUS_VAL", text="Quantidade", barmode="group", labels={"SIGLA DO DOCUMENTO": "Tipo de Documento", "STATUS_VAL": "Status de Validade"})
         fig3.update_traces(textposition="outside", textfont=dict(size=15))
         fig3.update_layout(legend=dict(font=dict(size=13), title_font=dict(size=14)), xaxis=dict(title_font=dict(size=14), tickfont=dict(size=13)), yaxis=dict(title_font=dict(size=14), tickfont=dict(size=13)))
         st.plotly_chart(fig3, use_container_width=True)
     else:
         st.info("Nenhum dado encontrado para os status de validade selecionados.")
-else:
-    st.warning("Coluna de Validade não encontrada no arquivo carregado.")
 
 st.markdown("---")
 
-df_prof = df.copy()
-if "RESPONSÁVEL" in df_prof.columns:
-    df_prof["RESPONSÁVEL"] = df_prof["RESPONSÁVEL"].fillna("NÃO INFORMADO")
-    # Padroniza temporariamente para maiúsculas apenas na substituição das antigas profissionais
-    df_prof["RESPONSÁVEL_UPPER"] = df_prof["RESPONSÁVEL"].astype(str).str.upper()
-    df_prof["RESPONSÁVEL"] = df_prof.apply(
-        lambda row: "OUTROS" if row["RESPONSÁVEL_UPPER"] in ["SONALIA", "SABRINA", "SONALHYA"] else row["RESPONSÁVEL"],
-        axis=1
-    )
+# Tratamento para profissionais desativadas usando a coluna normalizada sem acentos
+df["RESPONSAVEL_FINAL"] = df.apply(
+    lambda row: "OUTROS" if row["RESP_NORM"] in ["SONALIA", "SABRINA", "SONALHYA"] else (row["RESPONSÁVEL"] if pd.notna(row["RESPONSÁVEL"]) else "NÃO INFORMADO"),
+    axis=1
+)
+
+# Recria a busca normalizada final para ligar os filtros com precisão de acentos
+df["RESP_FINAL_NORM"] = df["RESPONSAVEL_FINAL"].apply(normalizar_texto)
 
 st.subheader("4 Documentos por profissional")
-if "RESPONSÁVEL" in df_prof.columns:
-    # Garante uma lista limpa de nomes contendo strings válidas, ignorando vazios
-    profissionais_lista = sorted(list(set([str(p) for p in df_prof["RESPONSÁVEL"].unique() if p and str(p).upper() != "OUTROS" and str(p).upper() != "NÃO INFORMADO"])))
+if "RESPONSÁVEL" in df.columns:
+    # Monta a lista visível usando o texto original para ficar bonito na tela
+    profissionais_lista = sorted(list(set([str(p) for p in df["RESPONSAVEL_FINAL"].unique() if p and str(p).upper() != "OUTROS" and str(p).upper() != "NÃO INFORMADO"])))
     prof_selecionado_g4 = st.selectbox("Filtrar por profissional para o Gráfico 4:", options=["Todos"] + profissionais_lista)
-    df_g4 = df_prof.copy() if prof_selecionado_g4 == "Todos" else df_prof[df_prof["RESPONSÁVEL"] == prof_selecionado_g4]
-    df_g4_counts = df_g4.groupby(["RESPONSÁVEL", "STATUS DO DOCUMENTO NORMATIVO"]).size().reset_index(name="Quantidade")
     
-    fig4 = px.bar(df_g4_counts, x="Quantidade", y="RESPONSÁVEL", color="STATUS DO DOCUMENTO NORMATIVO", barmode="group", orientation="h", height=500, text="Quantidade", labels={"RESPONSÁVEL": "Profissional", "Quantidade": "N° de Documentos"}, color_discrete_map=mapa_cores_status)
-    fig4.update_traces(textposition="outside", textfont=dict(size=15))
+    if prof_selecionado_g4 == "Todos":
+        df_g4 = df.copy()
+    else:
+        # Filtra comparando os textos normalizados sem acento (Garante o cruzamento correto)
+        df_g4 = df[df["RESP_FINAL_NORM"] == normalizar_texto(prof_selecionado_g4)]
+        
+    df_g4_counts = df_g4.groupby(["RESPONSAVEL_FINAL", "STATUS DO DOCUMENTO NORMATIVO"]).size().reset_index(name="Quantidade")
+    if not df_g4_counts.empty:
+        fig4 = px.bar(df_g4_counts, x="Quantidade", y="RESPONSAVEL_FINAL", color="STATUS DO DOCUMENTO NORMATIVO", barmode="group", orientation="h", height=500, text="Quantidade", labels={"RESPONSAVEL_FINAL": "Profissional", "STATUS DO DOCUMENTO NORMATIVO": "Status"}, color_discrete_map=mapa_cores_status)
