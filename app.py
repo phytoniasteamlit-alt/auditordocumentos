@@ -235,3 +235,10 @@ if "RESPONSÁVEL" in df_prof.columns:
     df_g4_counts = df_g4.groupby(["RESPONSÁVEL", "STATUS DO DOCUMENTO NORMATIVO"]).size().reset_index(name="Quantidade")
     
     if not df_g4_counts.empty:
+        fig4 = px.bar(
+            df_g4_counts, 
+            x="Quantidade", 
+            y="RESPONSÁVEL", 
+            color="STATUS DO DOCUMENTO NORMATIVO", 
+            barmode="group", 
+            orientation="h", 
