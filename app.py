@@ -40,7 +40,6 @@ else:
 
 tipo_grafico_5 = st.sidebar.radio("Estilo do Gráfico 5:", options=["Barras Verticais", "Barras Horizontais"], index=1)
 
-# Mapa de cores flexível aceitando variações de caixa alta e baixa para evitar gráficos invisíveis
 mapa_cores_status = {
     "APROVADO": "#2ca02c", "Aprovado": "#2ca02c", "aprovado": "#2ca02c",
     "AGUARD_DEV_DO_SETOR": "#d62728", "Aguard_Dev_do_Setor": "#d62728", "aguard_dev_do_setor": "#d62728",
@@ -51,20 +50,14 @@ mapa_cores_status = {
 if uploaded_file is not None:
     try:
         df = pd.read_excel(uploaded_file, sheet_name="DADOS_GRÁFICOS")
-        # Padroniza apenas o nome das colunas estruturais para letras maiúsculas
         for col in df.columns:
             df = df.rename(columns={col: col.strip().upper()})
-        
-        # Limpa espaços em branco invisíveis das células, mantendo a escrita original do usuário
         for col in df.columns:
             if df[col].dtype == "object":
                 df[col] = df[col].astype(str).str.strip()
-                
         df = df.replace(["#VALOR!", "0", "0.0", "NONE", "NAN", "nan", "None"], None)
         df = df.dropna(subset=["SIGLA DO DOCUMENTO", "NOME DO DOCUMENTO", "RESPONSÁVEL"], how="all")
-        
         if "STATUS DO DOCUMENTO NORMATIVO" in df.columns:
-            # Substituição inteligente aceitando variações de maiúsculas/minúsculas vindas do Excel
             df["STATUS DO DOCUMENTO NORMATIVO"] = df["STATUS DO DOCUMENTO NORMATIVO"].replace({
                 "VERIFICADO AGUARDA DEVOLUÇÃO SETOR": "AGUARD_DEV_DO_SETOR",
                 "VERIFICADO AGUARDA DEVOLUÇÃO DO SETOR": "AGUARD_DEV_DO_SETOR",
@@ -138,12 +131,7 @@ with row1_col2:
     if not df_g2.empty:
         fig2 = px.bar(df_g2, x="Quantidade Aprovada", y="Tipo de Documento", text="Quantidade Aprovada", orientation="h", color="Tipo de Documento", color_discrete_sequence=cor_sequencia)
         fig2.update_traces(textposition="outside", textfont=dict(size=15))
-        fig2.update_layout(
-            margin=dict(l=20, r=20, t=30, b=20), 
-            showlegend=False,
-            xaxis=dict(title_font=dict(size=14), tickfont=dict(size=13)),
-            yaxis=dict(title_font=dict(size=14), tickfont=dict(size=13))
-        )
+        fig2.update_layout(margin=dict(l=20, r=20, t=30, b=20), showlegend=False, xaxis=dict(title_font=dict(size=14), tickfont=dict(size=13)), yaxis=dict(title_font=dict(size=14), tickfont=dict(size=13)))
         st.plotly_chart(fig2, use_container_width=True)
 
 st.markdown("---")
@@ -170,11 +158,7 @@ if col_real_g3:
         df_g3_counts = df_g3_filtrado_val.groupby(["SIGLA DO DOCUMENTO", col_real_g3]).size().reset_index(name="Quantidade")
         fig3 = px.bar(df_g3_counts, x="SIGLA DO DOCUMENTO", y="Quantidade", color=col_real_g3, text="Quantidade", barmode="group", labels={"SIGLA DO DOCUMENTO": "Tipo de Documento", col_real_g3: "Status de Validade"})
         fig3.update_traces(textposition="outside", textfont=dict(size=15))
-        fig3.update_layout(
-            legend=dict(font=dict(size=13), title_font=dict(size=14)),
-            xaxis=dict(title_font=dict(size=14), tickfont=dict(size=13)),
-            yaxis=dict(title_font=dict(size=14), tickfont=dict(size=13))
-        )
+        fig3.update_layout(legend=dict(font=dict(size=13), title_font=dict(size=14)), xaxis=dict(title_font=dict(size=14), tickfont=dict(size=13)), yaxis=dict(title_font=dict(size=14), tickfont=dict(size=13)))
         st.plotly_chart(fig3, use_container_width=True)
     else:
         st.info("Nenhum dado encontrado para os status de validade selecionados.")
@@ -183,7 +167,6 @@ else:
 
 st.markdown("---")
 
-# Mapeia nomes antigos independentemente de estarem em maiúsculo ou minúsculo
 df_prof = df.copy()
 if "RESPONSÁVEL" in df_prof.columns:
     df_prof["RESPONSÁVEL"] = df_prof["RESPONSÁVEL"].replace({
@@ -197,4 +180,12 @@ if "RESPONSÁVEL" in df_prof.columns:
     prof_selecionado_g4 = st.selectbox("Filtrar por profissional para o Gráfico 4:", options=["Todos"] + profissionais_lista)
     df_g4 = df_prof.copy() if prof_selecionado_g4 == "Todos" else df_prof[df_prof["RESPONSÁVEL"] == prof_selecionado_g4]
     df_g4_counts = df_g4.groupby(["RESPONSÁVEL", "STATUS DO DOCUMENTO NORMATIVO"]).size().reset_index(name="Quantidade")
-    if not df_g4_counts.empty:
+    
+    fig4 = px.bar(df_g4_counts, x="Quantidade", y="RESPONSÁVEL", color="STATUS DO DOCUMENTO NORMATIVO", barmode="group", orientation="h", height=500, text="Quantidade", labels={"RESPONSÁVEL": "Profissional", "Quantidade": "N° de Documentos"}, color_discrete_map=mapa_cores_status)
+    fig4.update_traces(textposition="outside", textfont=dict(size=15))
+    fig4.update_layout(legend=dict(font=dict(size=13), title_font=dict(size=14)), xaxis=dict(title_font=dict(size=14), tickfont=dict(size=13)), yaxis=dict(title_font=dict(size=14), tickfont=dict(size=13)))
+    st.plotly_chart(fig4, use_container_width=True)
+
+st.markdown("---")
+
+st.subheader("5 Documentos por Tipo / Profissional")
