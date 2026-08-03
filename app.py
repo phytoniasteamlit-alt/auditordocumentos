@@ -233,3 +233,4 @@ if "RESPONSÁVEL" in df_prof.columns:
     df_g5_counts = df_g5_filtrado.groupby(["SIGLA DO DOCUMENTO", "STATUS DO DOCUMENTO NORMATIVO"]).size().reset_index(name="Quantidade")
 
     if not df_g5_counts.empty:
+        ori_5 = "h" if tipo_grafico_5 == "Barras Horizontais" else "v"
