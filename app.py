@@ -168,8 +168,8 @@ with row1_col2:
 
 st.markdown("---")
 
-# --- GRÁFICO 3: Validade por tipo de Doc. Aprov ---
-st.subheader("3 Validade por tipo de Doc. Aprov")
+# --- GRÁFICO 3: Validade por Tipo de Documentos ---
+st.subheader("3 Validade por Tipo de Documentos")
 col_vencido = "(Vencido, No Prazo, Prestes a Vencer)"
 
 if col_vencido in df.columns:
@@ -233,4 +233,3 @@ if "RESPONSÁVEL" in df_prof.columns:
     df_g5_counts = df_g5_filtrado.groupby(["SIGLA DO DOCUMENTO", "STATUS DO DOCUMENTO NORMATIVO"]).size().reset_index(name="Quantidade")
 
     if not df_g5_counts.empty:
-        ori_5 = "h" if tipo_grafico_5 == "Barras Horizontais" else "v"
