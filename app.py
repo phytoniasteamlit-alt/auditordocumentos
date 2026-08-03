@@ -40,29 +40,43 @@ else:
 
 tipo_grafico_5 = st.sidebar.radio("Estilo do Gráfico 5:", options=["Barras Verticais", "Barras Horizontais"], index=1)
 
+# Mapa de cores flexível aceitando variações de caixa alta e baixa para evitar gráficos invisíveis
 mapa_cores_status = {
-    "APROVADO": "#2ca02c",
-    "AGUARD_DEV_DO_SETOR": "#d62728",
-    "EM VERF INTERNA": "#bcbd22",
-    "CANCELADO": "#7f7f7f"
+    "APROVADO": "#2ca02c", "Aprovado": "#2ca02c", "aprovado": "#2ca02c",
+    "AGUARD_DEV_DO_SETOR": "#d62728", "Aguard_Dev_do_Setor": "#d62728", "aguard_dev_do_setor": "#d62728",
+    "EM VERF INTERNA": "#bcbd22", "Em Verf Interna": "#bcbd22", "em verf interna": "#bcbd22",
+    "CANCELADO": "#7f7f7f", "Cancelado": "#7f7f7f", "cancelado": "#7f7f7f"
 }
 
 if uploaded_file is not None:
     try:
         df = pd.read_excel(uploaded_file, sheet_name="DADOS_GRÁFICOS")
+        # Padroniza apenas o nome das colunas estruturais para letras maiúsculas
         for col in df.columns:
             df = df.rename(columns={col: col.strip().upper()})
+        
+        # Limpa espaços em branco invisíveis das células, mantendo a escrita original do usuário
         for col in df.columns:
             if df[col].dtype == "object":
-                df[col] = df[col].astype(str).str.strip().str.upper()
-        df = df.replace(["#VALOR!", "0", "0.0", "NONE", "NAN"], None)
+                df[col] = df[col].astype(str).str.strip()
+                
+        df = df.replace(["#VALOR!", "0", "0.0", "NONE", "NAN", "nan", "None"], None)
         df = df.dropna(subset=["SIGLA DO DOCUMENTO", "NOME DO DOCUMENTO", "RESPONSÁVEL"], how="all")
+        
         if "STATUS DO DOCUMENTO NORMATIVO" in df.columns:
+            # Substituição inteligente aceitando variações de maiúsculas/minúsculas vindas do Excel
             df["STATUS DO DOCUMENTO NORMATIVO"] = df["STATUS DO DOCUMENTO NORMATIVO"].replace({
                 "VERIFICADO AGUARDA DEVOLUÇÃO SETOR": "AGUARD_DEV_DO_SETOR",
                 "VERIFICADO AGUARDA DEVOLUÇÃO DO SETOR": "AGUARD_DEV_DO_SETOR",
                 "VERF AG DEV - SETOR": "AGUARD_DEV_DO_SETOR",
-                "EM VERIFICAÇÃO": "EM VERF INTERNA"
+                "EM VERIFICAÇÃO": "EM VERF INTERNA",
+                "Verificado Aguarda Devolução Setor": "AGUARD_DEV_DO_SETOR",
+                "Verificado Aguarda Devolução do Setor": "AGUARD_DEV_DO_SETOR",
+                "Verf Ag Dev - Setor": "AGUARD_DEV_DO_SETOR",
+                "Em Verificação": "EM VERF INTERNA",
+                "em verificação": "EM VERF INTERNA",
+                "aprovado": "APROVADO", "Aprovado": "APROVADO",
+                "cancelado": "CANCELADO", "Cancelado": "CANCELADO"
             })
     except Exception as e:
         st.error(f"Erro ao processar o arquivo: {e}")
@@ -144,11 +158,10 @@ for col in df.columns:
 if col_real_g3:
     df_g3_base = df[df["STATUS DO DOCUMENTO NORMATIVO"] == "APROVADO"].copy()
     df_g3_base[col_real_g3] = df_g3_base[col_real_g3].replace({
-        "VENCIDO": "Vencidos",
-        "VÁLIDO": "Válidos",
-        "NO PRAZO": "No Prazo",
-        "A": "Prestes a Vencer",
-        "PRESTES A VENCER": "Prestes a Vencer"
+        "VENCIDO": "Vencidos", "Vencido": "Vencidos", "vencido": "Vencidos",
+        "VÁLIDO": "Válidos", "Válido": "Válidos", "valido": "Válidos", "VÁLIDOS": "Válidos",
+        "NO PRAZO": "No Prazo", "No Prazo": "No Prazo", "no prazo": "No Prazo",
+        "A": "Prestes a Vencer", "PRESTES A VENCER": "Prestes a Vencer", "Prestes a Vencer": "Prestes a Vencer"
     })
     status_validade_disponiveis = ["Válidos", "Vencidos", "No Prazo", "Prestes a Vencer"]
     validade_selecionada = st.multiselect("Filtrar Status de Validade:", options=status_validade_disponiveis, default=status_validade_disponiveis)
@@ -170,36 +183,18 @@ else:
 
 st.markdown("---")
 
+# Mapeia nomes antigos independentemente de estarem em maiúsculo ou minúsculo
 df_prof = df.copy()
 if "RESPONSÁVEL" in df_prof.columns:
-    df_prof["RESPONSÁVEL"] = df_prof["RESPONSÁVEL"].replace({"SONALIA": "OUTROS", "SABRINA": "OUTROS", "SONALHYA": "OUTROS"})
+    df_prof["RESPONSÁVEL"] = df_prof["RESPONSÁVEL"].replace({
+        "SONALIA": "OUTROS", "SABRINA": "OUTROS", "SONALHYA": "OUTROS",
+        "Sonalia": "OUTROS", "Sabrina": "OUTROS", "sonalia": "OUTROS", "sabrina": "OUTROS"
+    })
 
 st.subheader("4 Documentos por profissional")
 if "RESPONSÁVEL" in df_prof.columns:
-    profissionais_lista = sorted([p for p in df_prof["RESPONSÁVEL"].dropna().unique().tolist() if p != "OUTROS"])
+    profissionais_lista = sorted(list(set([p for p in df_prof["RESPONSÁVEL"].dropna().unique().tolist() if p.upper() != "OUTROS"])))
     prof_selecionado_g4 = st.selectbox("Filtrar por profissional para o Gráfico 4:", options=["Todos"] + profissionais_lista)
     df_g4 = df_prof.copy() if prof_selecionado_g4 == "Todos" else df_prof[df_prof["RESPONSÁVEL"] == prof_selecionado_g4]
     df_g4_counts = df_g4.groupby(["RESPONSÁVEL", "STATUS DO DOCUMENTO NORMATIVO"]).size().reset_index(name="Quantidade")
     if not df_g4_counts.empty:
-        fig4 = px.bar(df_g4_counts, x="Quantidade", y="RESPONSÁVEL", color="STATUS DO DOCUMENTO NORMATIVO", barmode="group", orientation="h", height=500, text="Quantidade", labels={"RESPONSÁVEL": "Profissional", "Quantidade": "N° de Documentos"}, color_discrete_map=mapa_cores_status)
-        fig4.update_traces(textposition="outside", textfont=dict(size=15))
-        fig4.update_layout(
-            legend=dict(font=dict(size=13), title_font=dict(size=14)),
-            xaxis=dict(title_font=dict(size=14), tickfont=dict(size=13)),
-            yaxis=dict(title_font=dict(size=14), tickfont=dict(size=13))
-        )
-        st.plotly_chart(fig4, use_container_width=True)
-    else:
-        st.info("Nenhum dado de profissional encontrado para gerar o Gráfico 4.")
-
-st.markdown("---")
-
-st.subheader("5 Documentos por Tipo / Profissional")
-if "RESPONSÁVEL" in df_prof.columns:
-    prof_selecionado_g5 = st.selectbox("Selecione o Responsável para Filtrar a Análise Cruzada:", options=profissionais_lista)
-    df_g5_filtrado = df_prof[df_prof["RESPONSÁVEL"] == prof_selecionado_g5]
-    df_g5_counts = df_g5_filtrado.groupby(["SIGLA DO DOCUMENTO", "STATUS DO DOCUMENTO NORMATIVO"]).size().reset_index(name="Quantidade")
-    if not df_g5_counts.empty:
-        ori_5 = "h" if tipo_grafico_5 == "Barras Horizontais" else "v"
-        x_val = "Quantidade" if ori_5 == "h" else "SIGLA DO DOCUMENTO"
-        y_val = "SIGLA DO DOCUMENTO" if ori_5 == "h" else "Quantidade"
