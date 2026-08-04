@@ -63,6 +63,7 @@ stats_texto = {
 }
 
 # --- 3. FLUXO DE CARREGAMENTO (WORD .DOCX) ---
+# Mantido no escopo principal para evitar que a tela quebre ou o botão suma
 arquivo_word = st.file_uploader("Arraste o arquivo WORD (.docx) aqui para auditoria", type=["docx"])
 
 porcentagem_conforme = 100
@@ -71,18 +72,22 @@ if arquivo_word:
     nome_arquivo_doc = arquivo_word.name
     doc = docx.Document(arquivo_word)
     
-    # VALIDAÇÃO DE MARGENS (Norma Zero Hospitalar)
+    # VALIDAÇÃO DE MARGENS (Padrão ABNT Trabalhos Acadêmicos)
     for section in doc.sections:
         sup = round(section.top_margin.cm, 1) if section.top_margin else 0
         inf = round(section.bottom_margin.cm, 1) if section.bottom_margin else 0
         esq = round(section.left_margin.cm, 1) if section.left_margin else 0
         dir_m = round(section.right_margin.cm, 1) if section.right_margin else 0
         
-        if sup != 2.0 or inf != 2.0 or esq != 2.0 or dir_m != 3.0:
+        # Regra ABNT atualizada: Superior 3.0, Esquerda 3.0, Inferior 2.0, Direita 2.0
+        if sup != 3.0 or esq != 3.0 or inf != 2.0 or dir_m != 2.0:
             stats_texto["MARGENS"] = "NÃO"
-            erros_formatacao.append(f"❌ **Margens Inconformes**: Detectado Sup: {sup}cm, Inf: {inf}cm, Esq: {esq}cm, Dir: {dir_m}cm. Ajuste para o padrão Norma Zero (2cm, 2cm, 2cm, 3cm).")
+            erros_formatacao.append(
+                f"❌ **Margens Inconformes**: Detectado Sup: {sup}cm, Inf: {inf}cm, Esq: {esq}cm, Dir: {dir_m}cm. "
+                f"Ajuste para o padrão ABNT (Superior e Esquerda: 3cm / Inferior e Direita: 2cm)."
+            )
 
-    # [O restante dos seus loops originais entra aqui]
+    # [O restante dos seus loops originais de análise de texto/tabelas entra aqui]
     # ...
     
     # --- CÁLCULO DINÂMICO APÓS A LEITURA DO ARQUIVO ---
