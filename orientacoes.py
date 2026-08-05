@@ -17,7 +17,7 @@ NOMES_TIPOS = {
     "REG": "REGIMENTO INTERNO (REG)",
     "ROT": "ROTINA (ROT)",
     "POL": "POLÍTICA INSTITUCIONAL (POL)"
-}  # <-- Chave fechada corretamente aqui
+}
 
 # --- 2. BARRA LATERAL (CONTROLES E CHECKBOXES) ---
 st.sidebar.header("⚙️ Controles de Auditoria (NAQH)")
@@ -79,15 +79,13 @@ if arquivo_word:
         esq = round(section.left_margin.cm, 1) if section.left_margin else 0
         dir_m = round(section.right_margin.cm, 1) if section.right_margin else 0
         
-        # Regra ABNT atualizada: Superior 3.0, Esquerda 3.0, Inferior 2.0, Direita 2.0
+        # AJUSTE OS NÚMEROS ABAIXO CASO PRECISE CONFIGURAR OUTRA MEDIDA COMO PADRÃO:
         if sup != 3.0 or esq != 3.0 or inf != 2.0 or dir_m != 2.0:
             stats_texto["MARGENS"] = "NÃO"
             erros_formatacao.append(
                 f"❌ **Margens Inconformes**: Detectado Sup: {sup}cm, Inf: {inf}cm, Esq: {esq}cm, Dir: {dir_m}cm. "
-                f"Ajuste para o padrão ABNT (Superior e Esquerda: 3cm / Inferior e Direita: 2cm)."
+                f"Ajuste para o padrão exigido (Superior e Esquerda: 3cm / Inferior e Direita: 2cm)."
             )
-
-# [O restante dos seus loops originais de análise de texto/tabelas entra aqui se necessário]
 
 # --- CÁLCULO DINÂMICO APÓS A LEITURA DO ARQUIVO ---
 lista_erros_painel = list(set(erros_formatacao))
