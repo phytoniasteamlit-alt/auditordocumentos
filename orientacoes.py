@@ -17,10 +17,11 @@ NOMES_TIPOS = {
     "REG": "REGIMENTO INTERNO (REG)",
     "ROT": "ROTINA (ROT)",
     "POL": "POLÍTICA INSTITUCIONAL (POL)"
-}
+}  # <-- Chave fechada corretamente aqui
 
 # --- 2. BARRA LATERAL (CONTROLES E CHECKBOXES) ---
 st.sidebar.header("⚙️ Controles de Auditoria (NAQH)")
+
 tem_impressos_inconformes = st.sidebar.checkbox("⚠️ Há imagens/fotos de impressos ilegíveis ou inconformes?")
 logo_hospital_manual = st.sidebar.checkbox("Autorizar Manualmente: Logomarca do Hospital")
 codigo_manual = st.sidebar.checkbox("Autorizar Manualmente: Código do Documento")
@@ -48,22 +49,21 @@ historico_dados = {
 }
 
 stats_texto = {
-    "PAPEL": "SIM", 
+    "PAPEL": "SIM",
     "MARGENS": "SIM",
     "MODELO DA FONTE E TAMANHO (CORPO DO TEXTO)": "SIM",
     "FONTE E TAMANHO (DENTRO DE TABELAS/HISTÓRICO)": "SIM",
-    "ESPAÇAMENTO ENTRE LINHAS": "SIM", 
-    "ALINHAMENTO": "SIM", 
+    "ESPAÇAMENTO ENTRE LINHAS": "SIM",
+    "ALINHAMENTO": "SIM",
     "PARÁGRAFO": "SIM",
-    "FIGURAS, TABELAS E GRÁFICOS": "SIM", 
-    "PAGINAÇÃO": "SIM", 
+    "FIGURAS, TABELAS E GRÁFICOS": "SIM",
+    "PAGINAÇÃO": "SIM",
     "MARCA D'AGUA": "SIM",
-    "REFERÊNCIAS": "SIM", 
+    "REFERÊNCIAS": "SIM",
     "APÊNDICES/ ANEXOS": "OPCIONAL"
 }
 
 # --- 3. FLUXO DE CARREGAMENTO (WORD .DOCX) ---
-# Mantido no escopo principal para evitar que a tela quebre ou o botão suma
 arquivo_word = st.file_uploader("Arraste o arquivo WORD (.docx) aqui para auditoria", type=["docx"])
 
 porcentagem_conforme = 100
@@ -87,13 +87,12 @@ if arquivo_word:
                 f"Ajuste para o padrão ABNT (Superior e Esquerda: 3cm / Inferior e Direita: 2cm)."
             )
 
-    # [O restante dos seus loops originais de análise de texto/tabelas entra aqui]
-    # ...
-    
-    # --- CÁLCULO DINÂMICO APÓS A LEITURA DO ARQUIVO ---
-    lista_erros_painel = list(set(erros_formatacao))
-    desconto_por_erro = 5
-    porcentagem_conforme = max(0, 100 - (len(lista_erros_painel) * desconto_por_erro))
+# [O restante dos seus loops originais de análise de texto/tabelas entra aqui se necessário]
+
+# --- CÁLCULO DINÂMICO APÓS A LEITURA DO ARQUIVO ---
+lista_erros_painel = list(set(erros_formatacao))
+desconto_por_erro = 5
+porcentagem_conforme = max(0, 100 - (len(lista_erros_painel) * desconto_por_erro))
 
 # --- 4. INTERFACE GRÁFICA ---
 st.markdown("---")
@@ -101,27 +100,31 @@ st.info(f"📄 **Tipo de Documento Identificado pelo Sistema**: {NOMES_TIPOS.get
 st.subheader("📋 Ficha de Verificação Consolidada (Espelho Oficial)")
 
 col_p1, col_p2 = st.columns(2)
+
 with col_p1:
     st.progress(porcentagem_conforme / 100)
+
 with col_p2:
     st.subheader(f"📊 {porcentagem_conforme}% Conformidade")
 
 def render_linha_ficha(nome_item, status_atual):
     c1, c2 = st.columns(2)
     c1.markdown(f"**{nome_item}**")
+    
     if status_atual == "SIM":
         marcador = "🟩 **[X] SIM**"
     elif status_atual == "NÃO":
         marcador = "🟥 **[X] NÃO**"
     else:
         marcador = "🔷 **[X] OPCIONAL**"
+        
     c2.markdown(marcador)
 
-st.markdown("### 🔹 CABEÇALHO")
+st.markdown("### ♦️ CABEÇALHO")
 for k, v in cabecalho_dados.items():
     render_linha_ficha(k, "SIM" if v else "NÃO")
 
-st.markdown("### 🔹 ITENS TEXTO")
+st.markdown("### ♦️ ITENS TEXTO")
 for item, stat in stats_texto.items():
     render_linha_ficha(item, stat)
 
