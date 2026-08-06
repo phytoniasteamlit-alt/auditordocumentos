@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import unicodedata
 
 # Configuração da página mantida idêntica
 st.set_page_config(
@@ -8,6 +9,12 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# Função auxiliar para remover acentos e evitar quebras nos filtros de nomes
+def remover_acentos(texto):
+    if not isinstance(texto, str):
+        return texto
+    return "".join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
 
 header_left, header_right = st.columns(2)
 
@@ -142,10 +149,7 @@ for col in df.columns:
         break
 
 if col_real_g3:
-    # Coleta os dados removendo linhas com erros textuais ou em branco na coluna de validade
     df_g3_base = df.dropna(subset=[col_real_g3]).copy()
-    
-    # Padroniza e traduz os textos para bater com o multiselect mesmo sem o status "APROVADO" preenchido
     df_g3_base[col_real_g3] = df_g3_base[col_real_g3].astype(str).str.upper().str.strip()
     df_g3_base[col_real_g3] = df_g3_base[col_real_g3].replace({
         "VENCIDO": "Vencidos",
@@ -190,7 +194,12 @@ st.subheader("4 Documentos por profissional")
 if "RESPONSÁVEL" in df_prof.columns:
     profissionais_lista = sorted([p for p in df_prof["RESPONSÁVEL"].dropna().unique().tolist() if p != "OUTROS"])
     prof_selecionado_g4 = st.selectbox("Filtrar por profissional para o Gráfico 4:", options=["Todos"] + profissionais_lista)
-    df_g4 = df_prof.copy() if prof_selecionado_g4 == "Todos" else df_prof[df_prof["RESPONSÁVEL"] == prof_selecionado_g4]
+    
+    # Filtro inteligente ignorando diferenças de acentos
+    df_prof["RESPONSÁVEL_LIMPO"] = df_prof["RESPONSÁVEL"].apply(remover_acentos)
+    prof_sel_g4_limpo = remover_acentos(prof_selecionado_g4)
+    
+    df_g4 = df_prof.copy() if prof_selecionado_g4 == "Todos" else df_prof[df_prof["RESPONSÁVEL_LIMPO"] == prof_sel_g4_limpo]
     df_g4_counts = df_g4.groupby(["RESPONSÁVEL", "STATUS DO DOCUMENTO NORMATIVO"]).size().reset_index(name="Quantidade")
     
     if not df_g4_counts.empty:
@@ -202,14 +211,12 @@ if "RESPONSÁVEL" in df_prof.columns:
 
 st.markdown("---")
 
+# ==================== BLOCO DO GRÁFICO 5 CORRIGIDO ====================
 st.subheader("5 Documentos por Tipo / Profissional")
 if "RESPONSÁVEL" in df_prof.columns:
     prof_selecionado_g5 = st.selectbox("Selecione o Responsável para Filtrar a Análise Cruzada:", options=profissionais_lista)
-    df_g5_filtrado = df_prof[df_prof["RESPONSÁVEL"] == prof_selecionado_g5]
-    df_g5_counts = df_g5_filtrado.groupby(["SIGLA DO DOCUMENTO", "STATUS DO DOCUMENTO NORMATIVO"]).size().reset_index(name="Quantidade")
     
-    if not df_g5_counts.empty:
-        ori_5 = "h" if tipo_grafico_5 == "Barras Horizontais" else "v"
-        x_val = "Quantidade" if ori_5 == "h" else "SIGLA DO DOCUMENTO"
-        y_val = "SIGLA DO DOCUMENTO" if ori_5 == "h" else "Quantidade"
-        
+    # Criamos colunas auxiliares sem acento para cruzar as informações com segurança
+    df_prof["RESPONSÁVEL_LIMPO"] = df_prof["RESPONSÁVEL"].apply(remover_acentos)
+    prof_sel_g5_limpo = remover_acentos(prof_selecionado_g5)
+    
