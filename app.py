@@ -215,8 +215,10 @@ if "RESPONSÁVEL" in df_prof.columns:
 
 st.markdown("---")
 
-# ==================== BLOCO DO GRÁFICO 5 TOTALMENTE AJUSTADO ====================
+# ==================== BLOCO DO GRÁFICO 5 TOTALMENTE CORRIGIDO NO FORMATO ====================
 st.subheader("5 Documentos por Tipo / Profissional")
 if "RESPONSÁVEL" in df_prof.columns:
-    # CORREÇÃO AQUI: Adicionada a opção ["Todos"] idêntica ao gráfico 4 para inicializar sem quebras
-    prof_selecionado_g5 = st.selectbox("Selecione o Responsável para Filtrar a Análise Cruzada:", options=["Todos"] + profissionais_lista, key="sb_grafico_5_todos")
+    prof_selecionado_g5 = st.selectbox("Selecione o Responsável para Filtrar a Análise Cruzada:", options=["Todos"] + profissionais_lista, key="sb_grafico_5_final_todos")
+    
+    prof_sel_g5_limpo = normalizar_texto(prof_selecionado_g5)
+    
