@@ -2,12 +2,37 @@ import streamlit as st
 import hashlib
 import pandas as pd
 from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 
+# Escopo para ler e modificar etiquetas no Gmail
+SCOPES = ['https://googleapis.com']
+
 def get_gmail_service():
-    # Puxa as credenciais diretamente do painel de Secrets do Streamlit Cloud
-    creds = Credentials.from_authorized_user_info(st.secrets["gmail_creds"])
-    return build('gmail', 'v1', credentials=creds)
+    # 1. Tenta recuperar as credenciais do usuário já salvas na sessão do app
+    if 'gmail_token' in st.session_state:
+        creds = Credentials.from_authorized_user_info(st.session_state['gmail_token'], SCOPES)
+        return build('gmail', 'v1', credentials=creds)
+        
+    # 2. Se o usuário veio redirecionado pelo login do Google, processa o código de acesso
+    query_params = st.query_params
+    if "code" in query_params:
+        flow = Flow.from_client_config({"web": st.secrets["gmail_creds"]}, scopes=SCOPES)
+        flow.redirect_uri = "https://automatizacaodocduplicadosnmz.streamlit.app/"
+        flow.fetch_token(code=query_params["code"])
+        st.session_state['gmail_token'] = flow.credentials.to_json()
+        # Limpa o link para remover o código de autenticação exposto da barra de navegação
+        st.query_params.clear()
+        return build('gmail', 'v1', credentials=flow.credentials)
+        
+    # 3. Se não estiver logado, exibe o link de login institucional do Google
+    flow = Flow.from_client_config({"web": st.secrets["gmail_creds"]}, scopes=SCOPES)
+    flow.redirect_uri = "https://automatizacaodocduplicadosnmz.streamlit.app/"
+    auth_url, _ = flow.authorization_url(prompt='select_account')
+    
+    st.info("🔑 É necessário autenticar este aplicativo na conta de e-mail monitorada para começar.")
+    st.link_button("Fazer Login com o Google", auth_url, type="primary")
+    st.stop()
 
 def obter_ou_criar_marcador(service):
     nome_marcador = "🚨 ANEXO DUPLICADO"
@@ -35,13 +60,18 @@ def render_page():
     st.title("📊 Verificador de Anexos Duplicados")
     st.markdown("Busca anexos Word/PDF e marca duplicados com etiqueta vermelha e estrela direto no Gmail.")
     
+    # Executa a validação de login antes de mostrar o botão de busca
+    try:
+        service = get_gmail_service()
+    except Exception as e:
+        st.error(f"Erro na autenticação do Google: {e}")
+        st.info("Verifique se as chaves nos Secrets estão corretas.")
+        st.stop()
+        
     if st.button("Buscar e Etiquetar Duplicados"):
         with st.spinner("Analisando caixa de entrada..."):
             try:
-                service = get_gmail_service()
                 label_id = obter_ou_criar_marcador(service)
-                
-                # Busca mensagens recentes com anexos
                 results = service.users().messages().list(userId='me', q="has:attachment", maxResults=20).execute()
                 messages = results.get('messages', [])
                 
@@ -87,5 +117,4 @@ def render_page():
                     st.info("Nenhum anexo PDF ou Word elegível foi encontrado.")
                     
             except Exception as e:
-                st.error(f"Erro ao conectar com o Gmail: {e}")
-                st.info("Verifique se as chaves nos Secrets do Streamlit Cloud foram preenchidas.")
+                st.error(f"Erro ao processar e-mails: {e}")
