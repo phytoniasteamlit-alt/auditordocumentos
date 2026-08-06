@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
+# Configuração da página mantida idêntica
 st.set_page_config(
     page_title="Painel de Indicadores Norma Zero",
     layout="wide",
@@ -10,9 +11,11 @@ st.set_page_config(
 
 header_left, header_right = st.columns(2)
 
+# Mantido o título com o emoji original
 with header_left:
     st.markdown("<h1 style='margin: 0; padding: 0; font-size: 2.2rem;'>📊 Painel de Indicadores Norma Zero</h1>", unsafe_allow_html=True)
 
+# Mantido o nome do hospital, os emojis e o nome da coordenadora Fabrícia Rocha
 with header_right:
     st.markdown('<div style="text-align: right; line-height: 1.2; padding-bottom: 10px;"><span style="font-size: 16px; font-weight: bold;">🏥 Hospital da Cidade</span><br><span style="font-size: 14px; color: #888;">👩‍💼 Coord: Fabrícia Rocha</span></div>', unsafe_allow_html=True)
 
@@ -22,6 +25,7 @@ st.sidebar.header("⚙️ Painel de Controle")
 uploaded_file = st.sidebar.file_uploader("Carregar Planilha Excel (.xlsx):", type=["xlsx"])
 st.sidebar.markdown("---")
 
+# Mantida a customização visual original da barra lateral
 st.sidebar.subheader("🎨 Customização Visual")
 paleta_selecionada = st.sidebar.selectbox(
     "Tema de Cores Geral (Gráficos 1, 2 e 5):",
@@ -90,6 +94,7 @@ try:
 except:
     media_dias_total = 0.0
 
+# Linha de métricas originais com todos os emojis mantidos
 m1, m2, m3, m4, m5 = st.columns(5)
 m1.metric(label="📄 Total de Documentos", value=total_docs)
 m2.metric(label="✅ Aprovados", value=aprovados)
@@ -128,6 +133,7 @@ with row1_col2:
 
 st.markdown("---")
 
+# ==================== BLOCO DO GRÁFICO 3 CORRIGIDO ====================
 st.subheader("3 Validade por Tipo de Documentos")
 col_real_g3 = None
 for col in df.columns:
@@ -136,12 +142,11 @@ for col in df.columns:
         break
 
 if col_real_g3:
-    # CORREÇÃO AQUI: Removemos o filtro engessado de apenas "APROVADO" para permitir listar a validade dos outros status da planilha
-    df_g3_base = df.copy()
+    # Coleta os dados removendo linhas com erros textuais ou em branco na coluna de validade
+    df_g3_base = df.dropna(subset=[col_real_g3]).copy()
     
-    # Garante a limpeza de possíveis valores nulos ou erros de string textuais na coluna de validade
-    df_g3_base = df_g3_base.dropna(subset=[col_real_g3])
-    
+    # Padroniza e traduz os textos para bater com o multiselect mesmo sem o status "APROVADO" preenchido
+    df_g3_base[col_real_g3] = df_g3_base[col_real_g3].astype(str).str.upper().str.strip()
     df_g3_base[col_real_g3] = df_g3_base[col_real_g3].replace({
         "VENCIDO": "Vencidos",
         "VÁLIDO": "Válidos",
@@ -157,13 +162,23 @@ if col_real_g3:
     
     if not df_g3_filtrado_val.empty:
         df_g3_counts = df_g3_filtrado_val.groupby(["SIGLA DO DOCUMENTO", col_real_g3]).size().reset_index(name="Quantidade")
-        fig3 = px.bar(df_g3_counts, x="SIGLA DO DOCUMENTO", y="Quantidade", color=col_real_g3, text="Quantidade", barmode="group", labels={"SIGLA DO DOCUMENTO": "Tipo de Documento", col_real_g3: "Status de Validade"})
+        
+        fig3 = px.bar(df_g3_counts, 
+                      x="SIGLA DO DOCUMENTO", 
+                      y="Quantidade", 
+                      color=col_real_g3, 
+                      text="Quantidade", 
+                      barmode="group", 
+                      labels={"SIGLA DO DOCUMENTO": "Tipo de Documento", col_real_g3: "Status de Validade"},
+                      color_discrete_sequence=cor_sequencia)
+        
         fig3.update_traces(textposition="outside")
         st.plotly_chart(fig3, use_container_width=True)
     else:
         st.info("Nenhum dado encontrado para os status de validade selecionados.")
 else:
     st.warning("Coluna de Validade não encontrada no arquivo carregado.")
+# ======================================================================
 
 st.markdown("---")
 
@@ -198,8 +213,3 @@ if "RESPONSÁVEL" in df_prof.columns:
         x_val = "Quantidade" if ori_5 == "h" else "SIGLA DO DOCUMENTO"
         y_val = "SIGLA DO DOCUMENTO" if ori_5 == "h" else "Quantidade"
         
-        fig5 = px.bar(df_g5_counts, x=x_val, y=y_val, color="STATUS DO DOCUMENTO NORMATIVO", text="Quantidade", orientation=ori_5, barmode="group", labels={"SIGLA DO DOCUMENTO": "Tipo de Documento", "Quantidade": "Quantidade de Documentos"}, color_discrete_map=mapa_cores_status)
-        fig5.update_traces(textposition="outside")
-        st.plotly_chart(fig5, use_container_width=True)
-    else:
-        st.warning(f"Não foram encontrados dados para a profissional {prof_selecionado_g5}.")
