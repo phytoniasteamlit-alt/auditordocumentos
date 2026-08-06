@@ -61,7 +61,9 @@ mapa_cores_status = {
 
 if uploaded_file is not None:
     try:
+        # Lendo de volta estritamente a aba DADOS_GRÁFICOS
         df = pd.read_excel(uploaded_file, sheet_name="DADOS_GRÁFICOS")
+        
         for col in df.columns:
             df = df.rename(columns={col: col.strip().upper()})
         
@@ -141,7 +143,7 @@ with row1_col2:
 
 st.markdown("---")
 
-# ==================== BLOCO DO GRÁFICO 3 TOTALMENTE CORRIGIDO ====================
+# ==================== BLOCO DO GRÁFICO 3 MANTIDO FUNCIONANDO ====================
 st.subheader("3 Validade por Tipo de Documentos")
 col_real_g3 = None
 for col in df.columns:
@@ -191,7 +193,6 @@ df_prof = df.copy()
 if "RESPONSÁVEL" in df_prof.columns:
     df_prof["RESPONSÁVEL"] = df_prof["RESPONSÁVEL"].replace({"SONALIA": "OUTROS", "SABRINA": "OUTROS", "SONALHYA": "OUTROS"})
 
-# Criação de um índice de comparação limpo para os gráficos por profissionais
 if "RESPONSÁVEL" in df_prof.columns:
     df_prof["RESPONSÁVEL_COMPARA"] = df_prof["RESPONSÁVEL"].apply(normalizar_texto)
 
@@ -214,10 +215,10 @@ if "RESPONSÁVEL" in df_prof.columns:
 
 st.markdown("---")
 
-# ==================== BLOCO DO GRÁFICO 5 ISOLADO E CORRIGIDO ====================
+# ==================== BLOCO DO GRÁFICO 5 REMAPEADO E SEGURO ====================
 st.subheader("5 Documentos por Tipo / Profissional")
 if "RESPONSÁVEL" in df_prof.columns:
-    prof_selecionado_g5 = st.selectbox("Selecione o Responsável para Filtrar a Análise Cruzada:", options=profissionais_lista, key="sb_grafico_5")
+    prof_selecionado_g5 = st.selectbox("Selecione o Responsável para Filtrar a Análise Cruzada:", options=profissionais_lista, key="sb_grafico_5_novo")
     
     prof_sel_g5_limpo = normalizar_texto(prof_selecionado_g5)
     
