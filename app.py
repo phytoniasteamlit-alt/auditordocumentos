@@ -10,10 +10,11 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Função auxiliar para remover acentos e evitar quebras nos filtros de nomes
-def remover_acentos(texto):
+# Função para normalizar e remover acentos/espaços de textos para evitar quebras de comparação
+def normalizar_texto(texto):
     if not isinstance(texto, str):
-        return texto
+        return ""
+    texto = texto.strip().upper()
     return "".join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
 
 header_left, header_right = st.columns(2)
@@ -190,16 +191,18 @@ df_prof = df.copy()
 if "RESPONSÁVEL" in df_prof.columns:
     df_prof["RESPONSÁVEL"] = df_prof["RESPONSÁVEL"].replace({"SONALIA": "OUTROS", "SABRINA": "OUTROS", "SONALHYA": "OUTROS"})
 
+# Criamos uma coluna na base de dados totalmente limpa de acentos para as buscas dos gráficos 4 e 5
+if "RESPONSÁVEL" in df_prof.columns:
+    df_prof["RESPONSÁVEL_COMPARA"] = df_prof["RESPONSÁVEL"].apply(normalizar_texto)
+
 st.subheader("4 Documentos por profissional")
 if "RESPONSÁVEL" in df_prof.columns:
     profissionais_lista = sorted([p for p in df_prof["RESPONSÁVEL"].dropna().unique().tolist() if p != "OUTROS"])
     prof_selecionado_g4 = st.selectbox("Filtrar por profissional para o Gráfico 4:", options=["Todos"] + profissionais_lista)
     
-    # Filtro inteligente ignorando diferenças de acentos
-    df_prof["RESPONSÁVEL_LIMPO"] = df_prof["RESPONSÁVEL"].apply(remover_acentos)
-    prof_sel_g4_limpo = remover_acentos(prof_selecionado_g4)
+    prof_sel_g4_limpo = normalizar_texto(prof_selecionado_g4)
     
-    df_g4 = df_prof.copy() if prof_selecionado_g4 == "Todos" else df_prof[df_prof["RESPONSÁVEL_LIMPO"] == prof_sel_g4_limpo]
+    df_g4 = df_prof.copy() if prof_selecionado_g4 == "Todos" else df_prof[df_prof["RESPONSÁVEL_COMPARA"] == prof_sel_g4_limpo]
     df_g4_counts = df_g4.groupby(["RESPONSÁVEL", "STATUS DO DOCUMENTO NORMATIVO"]).size().reset_index(name="Quantidade")
     
     if not df_g4_counts.empty:
@@ -216,7 +219,4 @@ st.subheader("5 Documentos por Tipo / Profissional")
 if "RESPONSÁVEL" in df_prof.columns:
     prof_selecionado_g5 = st.selectbox("Selecione o Responsável para Filtrar a Análise Cruzada:", options=profissionais_lista)
     
-    # Criamos colunas auxiliares sem acento para cruzar as informações com segurança
-    df_prof["RESPONSÁVEL_LIMPO"] = df_prof["RESPONSÁVEL"].apply(remover_acentos)
-    prof_sel_g5_limpo = remover_acentos(prof_selecionado_g5)
-    
+    # Normaliza o valor vindo do selectbox para bater perfeitamente com a coluna limpa
