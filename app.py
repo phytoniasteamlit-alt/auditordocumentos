@@ -136,9 +136,12 @@ for col in df.columns:
         break
 
 if col_real_g3:
-    df_g3_base = df[df["STATUS DO DOCUMENTO NORMATIVO"] == "APROVADO"].copy()
+    # CORREÇÃO AQUI: Removemos o filtro engessado de apenas "APROVADO" para permitir listar a validade dos outros status da planilha
+    df_g3_base = df.copy()
     
-    # CORREÇÃO AQUI: Mapeando os termos em maiúsculo gerados pelo tratamento inicial de dados
+    # Garante a limpeza de possíveis valores nulos ou erros de string textuais na coluna de validade
+    df_g3_base = df_g3_base.dropna(subset=[col_real_g3])
+    
     df_g3_base[col_real_g3] = df_g3_base[col_real_g3].replace({
         "VENCIDO": "Vencidos",
         "VÁLIDO": "Válidos",
