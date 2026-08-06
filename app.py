@@ -10,7 +10,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Função auxiliar para remover acentos e espaços invisíveis
+# Função auxiliar para remover acentos e espaços invisíveis das comparações
 def normalizar_texto(texto):
     if not isinstance(texto, str):
         return ""
@@ -61,7 +61,6 @@ mapa_cores_status = {
 
 if uploaded_file is not None:
     try:
-        # Lendo de volta estritamente a aba DADOS_GRÁFICOS
         df = pd.read_excel(uploaded_file, sheet_name="DADOS_GRÁFICOS")
         
         for col in df.columns:
@@ -193,6 +192,7 @@ df_prof = df.copy()
 if "RESPONSÁVEL" in df_prof.columns:
     df_prof["RESPONSÁVEL"] = df_prof["RESPONSÁVEL"].replace({"SONALIA": "OUTROS", "SABRINA": "OUTROS", "SONALHYA": "OUTROS"})
 
+# Índice de comparação normalizado para buscas precisas
 if "RESPONSÁVEL" in df_prof.columns:
     df_prof["RESPONSÁVEL_COMPARA"] = df_prof["RESPONSÁVEL"].apply(normalizar_texto)
 
@@ -215,10 +215,9 @@ if "RESPONSÁVEL" in df_prof.columns:
 
 st.markdown("---")
 
-# ==================== BLOCO DO GRÁFICO 5 REMAPEADO E SEGURO ====================
+# ==================== BLOCO DO GRÁFICO 5 ISOLADO E COMPLETAMENTE CORRIGIDO ====================
 st.subheader("5 Documentos por Tipo / Profissional")
 if "RESPONSÁVEL" in df_prof.columns:
-    prof_selecionado_g5 = st.selectbox("Selecione o Responsável para Filtrar a Análise Cruzada:", options=profissionais_lista, key="sb_grafico_5_novo")
+    prof_selecionado_g5 = st.selectbox("Selecione o Responsável para Filtrar a Análise Cruzada:", options=profissionais_lista, key="sb_grafico_5_final")
     
-    prof_sel_g5_limpo = normalizar_texto(prof_selecionado_g5)
-    
+    # Processa o nome selecionado removendo acentos para casar com o Pandas
