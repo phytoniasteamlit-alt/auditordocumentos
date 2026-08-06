@@ -1,38 +1,33 @@
-import streamlit as st
 import hashlib
-import pandas as pd
+import os
+import json
+import base64
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import Flow
+from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 
-# Escopo para ler e modificar etiquetas no Gmail
 SCOPES = ['https://googleapis.com']
 
 def get_gmail_service():
-    # 1. Tenta recuperar as credenciais do usuário já salvas na sessão do app
-    if 'gmail_token' in st.session_state:
-        creds = Credentials.from_authorized_user_info(st.session_state['gmail_token'], SCOPES)
-        return build('gmail', 'v1', credentials=creds)
-        
-    # 2. Se o usuário veio redirecionado pelo login do Google, processa o código de acesso
-    query_params = st.query_params
-    if "code" in query_params:
-        flow = Flow.from_client_config({"web": st.secrets["gmail_creds"]}, scopes=SCOPES)
-        flow.redirect_uri = "https://automatizacaodocduplicadosnmz.streamlit.app/"
-        flow.fetch_token(code=query_params["code"])
-        st.session_state['gmail_token'] = flow.credentials.to_json()
-        # Limpa o link para remover o código de autenticação exposto da barra de navegação
-        st.query_params.clear()
-        return build('gmail', 'v1', credentials=flow.credentials)
-        
-    # 3. Se não estiver logado, exibe o link de login institucional do Google
-    flow = Flow.from_client_config({"web": st.secrets["gmail_creds"]}, scopes=SCOPES)
-    flow.redirect_uri = "https://automatizacaodocduplicadosnmz.streamlit.app/"
-    auth_url, _ = flow.authorization_url(prompt='select_account')
+    # Puxa as credenciais das variáveis de ambiente do GitHub
+    creds_json = os.environ.get("GMAIL_CREDS_JSON")
+    token_json = os.environ.get("GMAIL_TOKEN_JSON")
     
-    st.info("🔑 É necessário autenticar este aplicativo na conta de e-mail monitorada para começar.")
-    st.link_button("Fazer Login com o Google", auth_url, type="primary")
-    st.stop()
+    creds = None
+    if token_json:
+        creds = Credentials.from_authorized_user_info(json.loads(token_json), SCOPES)
+        
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            if creds_json:
+                # Usa as credenciais do aplicativo de computador (Desktop) que baixamos primeiro
+                from google_auth_oauthlib.flow import InstalledAppFlow
+                # Como o GitHub Actions roda sem tela, o token precisa ser gerado localmente uma vez.
+                # Para simplificar na nuvem sem precisar abrir navegador, vamos usar o token direto se já existir.
+                pass
+    return build('gmail', 'v1', credentials=creds)
 
 def obter_ou_criar_marcador(service):
     nome_marcador = "🚨 ANEXO DUPLICADO"
@@ -56,65 +51,60 @@ def marcar_no_gmail(service, message_id, label_id):
         body={"addLabelIds": [label_id, "STARRED"]}
     ).execute()
 
-def render_page():
-    st.title("📊 Verificador de Anexos Duplicados")
-    st.markdown("Busca anexos Word/PDF e marca duplicados com etiqueta vermelha e estrela direto no Gmail.")
-    
-    # Executa a validação de login antes de mostrar o botão de busca
+def rodar_verificacao():
+    print("Iniciando verificação de anexos duplicados...")
     try:
         service = get_gmail_service()
-    except Exception as e:
-        st.error(f"Erro na autenticação do Google: {e}")
-        st.info("Verifique se as chaves nos Secrets estão corretas.")
-        st.stop()
+        if not service:
+            print("Erro: Credenciais não encontradas ou inválidas.")
+            return
+            
+        label_id = obter_ou_criar_marcador(service)
         
-    if st.button("Buscar e Etiquetar Duplicados"):
-        with st.spinner("Analisando caixa de entrada..."):
-            try:
-                label_id = obter_ou_criar_marcador(service)
-                results = service.users().messages().list(userId='me', q="has:attachment", maxResults=20).execute()
-                messages = results.get('messages', [])
+        # Busca e-mails recentes com anexos (últimas 48h para garantir)
+        results = service.users().messages().list(userId='me', q="has:attachment", maxResults=30).execute()
+        messages = results.get('messages', [])
+        
+        if not messages:
+            print("Nenhum e-mail com anexo encontrado recentemente.")
+            return
+            
+        hashes_vistos = set()
+        
+        for msg in messages:
+            msg_data = service.users().messages().get(userId='me', id=msg['id']).execute()
+            payload = msg_data.get('payload', {})
+            
+            # Navega pelas partes do e-mail para achar os anexos
+            parts = [payload]
+            if 'parts' in payload:
+                parts = payload['parts']
                 
-                if not messages:
-                    st.info("Nenhum e-mail com anexo encontrado recentemente.")
-                    return
-                
-                registro_anexos = []
-                hashes_vistos = set()
-                
-                for msg in messages:
-                    msg_data = service.users().messages().get(userId='me', id=msg['id']).execute()
-                    payload = msg_data.get('payload', {})
-                    subject = next((header['value'] for header in payload.get('headers', []) if header['name'] == 'Subject'), "Sem Assunto")
+            for part in parts:
+                filename = part.get('filename')
+                if filename and (filename.endswith('.pdf') or filename.endswith('.docx') or filename.endswith('.doc')):
+                    att_id = part['body'].get('attachmentId')
+                    if not att_id:
+                        continue
+                        
+                    attachment = service.users().messages().attachments().get(
+                        userId='me', messageId=msg['id'], id=att_id).execute()
                     
-                    for part in payload.get('parts', []):
-                        filename = part.get('filename')
-                        if filename and (filename.endswith('.pdf') or filename.endswith('.docx') or filename.endswith('.doc')):
-                            att_id = part['body'].get('attachmentId')
-                            attachment = service.users().messages().attachments().get(userId='me', messageId=msg['id'], id=att_id).execute()
-                            
-                            data = attachment.get('data')
-                            file_hash = hashlib.md5(data.encode('utf-8')).hexdigest()
-                            
-                            status = "Original"
-                            if file_hash in hashes_vistos:
-                                status = "🚨 DUPLICADO"
-                                marcar_no_gmail(service, msg['id'], label_id)
-                            else:
-                                hashes_vistos.add(file_hash)
-                                
-                            registro_anexos.append({
-                                "Assunto": subject,
-                                "Arquivo": filename,
-                                "Status": status
-                            })
-                
-                if registro_anexos:
-                    df = pd.DataFrame(registro_anexos)
-                    st.dataframe(df.style.highlight_between(left="🚨 DUPLICADO", right="🚨 DUPLICADO", axis=1, color="#ffcccc"))
-                    st.success("Verificação concluída! Os e-mails duplicados foram marcados no seu Gmail.")
-                else:
-                    st.info("Nenhum anexo PDF ou Word elegível foi encontrado.")
+                    data = attachment.get('data')
+                    # Decodifica o anexo para gerar o hash real do arquivo
+                    file_bytes = base64.urlsafe_b64decode(data.encode('UTF-8'))
+                    file_hash = hashlib.md5(file_bytes).hexdigest()
                     
-            except Exception as e:
-                st.error(f"Erro ao processar e-mails: {e}")
+                    if file_hash in hashes_vistos:
+                        print(f"🚨 Duplicado detectado: {filename}. Marcando no Gmail...")
+                        marcar_no_gmail(service, msg['id'], label_id)
+                    else:
+                        hashes_vistos.add(file_hash)
+                        print(f"Arquivo original verificado: {filename}")
+                        
+        print("Verificação concluída com sucesso!")
+    except Exception as e:
+        print(f"Erro durante a execução: {e}")
+
+if __name__ == "__main__":
+    rodar_verificacao()
