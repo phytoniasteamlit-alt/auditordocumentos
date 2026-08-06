@@ -3,14 +3,14 @@ import pandas as pd
 import plotly.express as px
 import unicodedata
 
-# Configuração da página original preservada
+# Configuração da página mantida idêntica
 st.set_page_config(
     page_title="Painel de Indicadores Norma Zero",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Função para higienizar strings e ignorar erros de acentuação/caixa alta nos filtros
+# Função auxiliar para remover acentos e evitar quebras em comparações de texto
 def normalizar_texto(texto):
     if not isinstance(texto, str):
         return ""
@@ -19,11 +19,11 @@ def normalizar_texto(texto):
 
 header_left, header_right = st.columns(2)
 
-# Cabeçalho original mantido com o emoji correspondente
+# Título principal mantido com o emoji original
 with header_left:
     st.markdown("<h1 style='margin: 0; padding: 0; font-size: 2.2rem;'>📊 Painel de Indicadores Norma Zero</h1>", unsafe_allow_html=True)
 
-# Bloco de identificação do hospital e coordenação intactos
+# Identificação do hospital e da coordenadora mantidos intactos
 with header_right:
     st.markdown('<div style="text-align: right; line-height: 1.2; padding-bottom: 10px;"><span style="font-size: 16px; font-weight: bold;">🏥 Hospital da Cidade</span><br><span style="font-size: 14px; color: #888;">👩‍💼 Coord: Fabrícia Rocha</span></div>', unsafe_allow_html=True)
 
@@ -33,7 +33,7 @@ st.sidebar.header("⚙️ Painel de Controle")
 uploaded_file = st.sidebar.file_uploader("Carregar Planilha Excel (.xlsx):", type=["xlsx"])
 st.sidebar.markdown("---")
 
-# Customização de paleta e estilo na barra lateral originais
+# Customização visual da barra lateral mantida idêntica
 st.sidebar.subheader("🎨 Customização Visual")
 paleta_selecionada = st.sidebar.selectbox(
     "Tema de Cores Geral (Gráficos 1, 2 e 5):",
@@ -102,7 +102,7 @@ try:
 except:
     media_dias_total = 0.0
 
-# Cards de métricas originais preservados com os respectivos emojis
+# Linha de blocos de métricas originais com todos os emojis
 m1, m2, m3, m4, m5 = st.columns(5)
 m1.metric(label="📄 Total de Documentos", value=total_docs)
 m2.metric(label="✅ Aprovados", value=aprovados)
@@ -141,7 +141,7 @@ with row1_col2:
 
 st.markdown("---")
 
-# ==================== BLOCO DO GRÁFICO 3 CORRIGIDO E FUNCIONAL ====================
+# ==================== BLOCO DO GRÁFICO 3 MANTIDO FUNCIONANDO ====================
 st.subheader("3 Validade por Tipo de Documentos")
 col_real_g3 = None
 for col in df.columns:
@@ -191,7 +191,7 @@ df_prof = df.copy()
 if "RESPONSÁVEL" in df_prof.columns:
     df_prof["RESPONSÁVEL"] = df_prof["RESPONSÁVEL"].replace({"SONALIA": "OUTROS", "SABRINA": "OUTROS", "SONALHYA": "OUTROS"})
 
-# Criação de um índice limpo para realizar as buscas com segurança
+# Criação de um índice de comparação limpo de acentuação para buscas precisas
 if "RESPONSÁVEL" in df_prof.columns:
     df_prof["RESPONSÁVEL_COMPARA"] = df_prof["RESPONSÁVEL"].apply(normalizar_texto)
 
@@ -214,9 +214,8 @@ if "RESPONSÁVEL" in df_prof.columns:
 
 st.markdown("---")
 
-# ==================== BLOCO DO GRÁFICO 5 REESTRUTURADO E SEGURO ====================
+# ==================== BLOCO DO GRÁFICO 5 REESTRUTURADO E BLINDADO ====================
 st.subheader("5 Documentos por Tipo / Profissional")
 if "RESPONSÁVEL" in df_prof.columns:
     prof_selecionado_g5 = st.selectbox("Selecione o Responsável para Filtrar a Análise Cruzada:", options=profissionais_lista)
     
-    # Processa a string selecionada na tela eliminando acentuações para fazer a busca
