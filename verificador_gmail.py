@@ -1,34 +1,12 @@
 import streamlit as st
 import hashlib
 import pandas as pd
-import os
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 
-# Escopos necessários para ler, modificar etiquetas e gerenciar anexos no Gmail
-SCOPES = ['https://googleapis.com']
-
 def get_gmail_service():
-    creds = None
-    # O arquivo token.json guarda as credenciais do usuário após o primeiro login automático
-    if os.path.exists('token.json'):
-        creds = Credentials.from_authorized_user_file('token.json', SCOPES)
-        
-    # Se não houver credenciais válidas prontas, o script faz o login inicial
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            # ATENÇÃO: Mude o nome abaixo para o nome exato do arquivo .json que você baixou do Google Cloud
-            flow = InstalledAppFlow.from_client_secrets_file('client_secret.json', SCOPES)
-            creds = flow.run_local_server(port=0)
-            
-        # Salva o token para não precisar fazer login de novo na próxima vez
-        with open('token.json', 'w') as token:
-            token.write(creds.to_json())
-            
+    # Puxa as credenciais diretamente do painel de Secrets do Streamlit Cloud
+    creds = Credentials.from_authorized_user_info(st.secrets["gmail_creds"])
     return build('gmail', 'v1', credentials=creds)
 
 def obter_ou_criar_marcador(service):
@@ -110,4 +88,4 @@ def render_page():
                     
             except Exception as e:
                 st.error(f"Erro ao conectar com o Gmail: {e}")
-                st.info("Verifique se o arquivo JSON de credenciais está na pasta raiz com o nome correto.")
+                st.info("Verifique se as chaves nos Secrets do Streamlit Cloud foram preenchidas.")
