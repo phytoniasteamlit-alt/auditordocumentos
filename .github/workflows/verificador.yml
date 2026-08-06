@@ -1,0 +1,30 @@
+name: Verificador Automatico do Gmail
+
+on:
+  schedule:
+    - cron: '0 * * * *' # Roda automaticamente a cada hora
+  workflow_dispatch: # Permite que você force a execução manualmente se quiser
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Baixar codigo do repositorio
+      uses: actions/checkout@v3
+
+    - name: Configurar o Python
+      uses: actions/setup-python@v4
+      with:
+        python-python: '3.10'
+
+    - name: Instalar dependencias
+      run: |
+        python -m pip install --upgrade pip
+        pip install google-api-python-client google-auth-httplib2 google-auth-oauthlib pandas
+
+    - name: Executar verificador do Gmail
+      env:
+        # Puxa os acessos de forma segura das chaves do GitHub
+        GMAIL_CREDS_JSON: ${{ secrets.GMAIL_CREDS_JSON }}
+        GMAIL_TOKEN_JSON: ${{ secrets.GMAIL_TOKEN_JSON }}
+      run: python verificador_gmail.py
