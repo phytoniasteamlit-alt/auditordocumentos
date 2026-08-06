@@ -10,7 +10,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Função auxiliar para remover acentos e evitar quebras em comparações de texto
+# Função auxiliar para remover acentos e espaços invisíveis
 def normalizar_texto(texto):
     if not isinstance(texto, str):
         return ""
@@ -102,7 +102,7 @@ try:
 except:
     media_dias_total = 0.0
 
-# Linha de blocos de métricas originais com todos os emojis
+# Linha de blocos de métricas originais com todos os emojis mantidos
 m1, m2, m3, m4, m5 = st.columns(5)
 m1.metric(label="📄 Total de Documentos", value=total_docs)
 m2.metric(label="✅ Aprovados", value=aprovados)
@@ -141,7 +141,7 @@ with row1_col2:
 
 st.markdown("---")
 
-# ==================== BLOCO DO GRÁFICO 3 MANTIDO FUNCIONANDO ====================
+# ==================== BLOCO DO GRÁFICO 3 TOTALMENTE CORRIGIDO ====================
 st.subheader("3 Validade por Tipo de Documentos")
 col_real_g3 = None
 for col in df.columns:
@@ -191,15 +191,18 @@ df_prof = df.copy()
 if "RESPONSÁVEL" in df_prof.columns:
     df_prof["RESPONSÁVEL"] = df_prof["RESPONSÁVEL"].replace({"SONALIA": "OUTROS", "SABRINA": "OUTROS", "SONALHYA": "OUTROS"})
 
+# Criação de um índice de comparação limpo para os gráficos por profissionais
+if "RESPONSÁVEL" in df_prof.columns:
+    df_prof["RESPONSÁVEL_COMPARA"] = df_prof["RESPONSÁVEL"].apply(normalizar_texto)
+
 st.subheader("4 Documentos por profissional")
 if "RESPONSÁVEL" in df_prof.columns:
     profissionais_lista = sorted([p for p in df_prof["RESPONSÁVEL"].dropna().unique().tolist() if p != "OUTROS"])
     prof_selecionado_g4 = st.selectbox("Filtrar por profissional para o Gráfico 4:", options=["Todos"] + profissionais_lista)
     
-    df_prof["G4_COMPARA"] = df_prof["RESPONSÁVEL"].apply(normalizar_texto)
     prof_sel_g4_limpo = normalizar_texto(prof_selecionado_g4)
     
-    df_g4 = df_prof.copy() if prof_selecionado_g4 == "Todos" else df_prof[df_prof["G4_COMPARA"] == prof_sel_g4_limpo]
+    df_g4 = df_prof.copy() if prof_selecionado_g4 == "Todos" else df_prof[df_prof["RESPONSÁVEL_COMPARA"] == prof_sel_g4_limpo]
     df_g4_counts = df_g4.groupby(["RESPONSÁVEL", "STATUS DO DOCUMENTO NORMATIVO"]).size().reset_index(name="Quantidade")
     
     if not df_g4_counts.empty:
@@ -214,8 +217,7 @@ st.markdown("---")
 # ==================== BLOCO DO GRÁFICO 5 ISOLADO E CORRIGIDO ====================
 st.subheader("5 Documentos por Tipo / Profissional")
 if "RESPONSÁVEL" in df_prof.columns:
-    # Isolamos as chaves dos seletores usando o parâmetro key do Streamlit
-    prof_selecionado_g5 = st.selectbox("Selecione o Responsável para Filtrar a Análise Cruzada:", options=profissionais_lista, key="selectbox_grafico_5")
+    prof_selecionado_g5 = st.selectbox("Selecione o Responsável para Filtrar a Análise Cruzada:", options=profissionais_lista, key="sb_grafico_5")
     
-    # Criamos um DataFrame totalmente novo para o Gráfico 5 não herdar lógicas cruzadas do Gráfico 4
-    df_g5_isolado = df_prof.copy()
+    prof_sel_g5_limpo = normalizar_texto(prof_selecionado_g5)
+    
