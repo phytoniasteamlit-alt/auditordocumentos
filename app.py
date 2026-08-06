@@ -20,8 +20,8 @@ st.markdown("---")
 
 st.sidebar.header("⚙️ Painel de Controle")
 uploaded_file = st.sidebar.file_uploader("Carregar Planilha Excel (.xlsx):", type=["xlsx"])
-
 st.sidebar.markdown("---")
+
 st.sidebar.subheader("🎨 Customização Visual")
 paleta_selecionada = st.sidebar.selectbox(
     "Tema de Cores Geral (Gráficos 1, 2 e 5):",
@@ -52,11 +52,14 @@ if uploaded_file is not None:
         df = pd.read_excel(uploaded_file, sheet_name="DADOS_GRÁFICOS")
         for col in df.columns:
             df = df.rename(columns={col: col.strip().upper()})
+        
         for col in df.columns:
             if df[col].dtype == "object":
                 df[col] = df[col].astype(str).str.strip().str.upper()
+                
         df = df.replace(["#VALOR!", "0", "0.0", "NONE", "NAN"], None)
         df = df.dropna(subset=["SIGLA DO DOCUMENTO", "NOME DO DOCUMENTO", "RESPONSÁVEL"], how="all")
+        
         if "STATUS DO DOCUMENTO NORMATIVO" in df.columns:
             df["STATUS DO DOCUMENTO NORMATIVO"] = df["STATUS DO DOCUMENTO NORMATIVO"].replace({
                 "VERIFICADO AGUARDA DEVOLUÇÃO SETOR": "AGUARD_DEV_DO_SETOR",
@@ -64,6 +67,7 @@ if uploaded_file is not None:
                 "VERF AG DEV - SETOR": "AGUARD_DEV_DO_SETOR",
                 "EM VERIFICAÇÃO": "EM VERF INTERNA"
             })
+            
     except Exception as e:
         st.error(f"Erro ao processar o arquivo: {e}")
         st.stop()
@@ -73,11 +77,13 @@ else:
 
 status_documento = df["STATUS DO DOCUMENTO NORMATIVO"].fillna("NÃO INFORMADO")
 total_docs = len(df)
+
 aprovados = len(df[status_documento == "APROVADO"])
 verf_1 = len(df[status_documento == "AGUARD_DEV_DO_SETOR"])
 verf_2 = len(df[status_documento == "EM VERF INTERNA"])
 
 col_media_dias = "MÉDIA I.A.A.A" if "MÉDIA I.A.A.A" in df.columns else df.columns[-1]
+
 try:
     media_valores = pd.to_numeric(df[col_media_dias], errors='coerce').dropna()
     media_dias_total = round(media_valores.mean(), 1) if len(media_valores) > 0 else 0.0
@@ -85,11 +91,11 @@ except:
     media_dias_total = 0.0
 
 m1, m2, m3, m4, m5 = st.columns(5)
-m1.metric(label="📋 Total de Documentos", value=total_docs)
+m1.metric(label="📄 Total de Documentos", value=total_docs)
 m2.metric(label="✅ Aprovados", value=aprovados)
-m3.metric(label="⏰ T - 1º Verf", value=verf_1)
+m3.metric(label="📅 T - 1º Verf", value=verf_1)
 m4.metric(label="🔍 T - 2º Verf", value=verf_2)
-m5.metric(label="📅 Temp Total até Aprov", value=f"{media_dias_total} dias" if media_dias_total > 0 else "N/A")
+m5.metric(label="⏳ Temp Total até Aprov", value=f"{media_dias_total} dias" if media_dias_total > 0 else "N/A")
 
 st.markdown("---")
 
@@ -101,6 +107,7 @@ with row1_col1:
     df_g1_filtrado = df[df["STATUS DO DOCUMENTO NORMATIVO"].isin(status_alvo)]
     df_g1 = df_g1_filtrado["STATUS DO DOCUMENTO NORMATIVO"].value_counts().reset_index()
     df_g1.columns = ["STATUS DO DOCUMENTO NORMATIVO", "Quantidade"]
+    
     if not df_g1.empty:
         fig1 = px.pie(df_g1, names="STATUS DO DOCUMENTO NORMATIVO", values="Quantidade", hole=0.4, color="STATUS DO DOCUMENTO NORMATIVO", color_discrete_map=mapa_cores_status)
         fig1.update_traces(textinfo='value+label', textposition='inside')
@@ -112,6 +119,7 @@ with row1_col2:
     df_g2_filtrado = df[df["STATUS DO DOCUMENTO NORMATIVO"] == "APROVADO"]
     df_g2 = df_g2_filtrado["SIGLA DO DOCUMENTO"].value_counts().reset_index()
     df_g2.columns = ["Tipo de Documento", "Quantidade Aprovada"]
+    
     if not df_g2.empty:
         fig2 = px.bar(df_g2, x="Quantidade Aprovada", y="Tipo de Documento", text="Quantidade Aprovada", orientation="h", color="Tipo de Documento", color_discrete_sequence=cor_sequencia)
         fig2.update_traces(textposition="outside")
@@ -129,6 +137,8 @@ for col in df.columns:
 
 if col_real_g3:
     df_g3_base = df[df["STATUS DO DOCUMENTO NORMATIVO"] == "APROVADO"].copy()
+    
+    # CORREÇÃO AQUI: Mapeando os termos em maiúsculo gerados pelo tratamento inicial de dados
     df_g3_base[col_real_g3] = df_g3_base[col_real_g3].replace({
         "VENCIDO": "Vencidos",
         "VÁLIDO": "Válidos",
@@ -136,9 +146,12 @@ if col_real_g3:
         "A": "Prestes a Vencer",
         "PRESTES A VENCER": "Prestes a Vencer"
     })
+    
     status_validade_disponiveis = ["Válidos", "Vencidos", "No Prazo", "Prestes a Vencer"]
     validade_selecionada = st.multiselect("Filtrar Status de Validade:", options=status_validade_disponiveis, default=status_validade_disponiveis)
+    
     df_g3_filtrado_val = df_g3_base[df_g3_base[col_real_g3].isin(validade_selecionada)]
+    
     if not df_g3_filtrado_val.empty:
         df_g3_counts = df_g3_filtrado_val.groupby(["SIGLA DO DOCUMENTO", col_real_g3]).size().reset_index(name="Quantidade")
         fig3 = px.bar(df_g3_counts, x="SIGLA DO DOCUMENTO", y="Quantidade", color=col_real_g3, text="Quantidade", barmode="group", labels={"SIGLA DO DOCUMENTO": "Tipo de Documento", col_real_g3: "Status de Validade"})
@@ -161,6 +174,7 @@ if "RESPONSÁVEL" in df_prof.columns:
     prof_selecionado_g4 = st.selectbox("Filtrar por profissional para o Gráfico 4:", options=["Todos"] + profissionais_lista)
     df_g4 = df_prof.copy() if prof_selecionado_g4 == "Todos" else df_prof[df_prof["RESPONSÁVEL"] == prof_selecionado_g4]
     df_g4_counts = df_g4.groupby(["RESPONSÁVEL", "STATUS DO DOCUMENTO NORMATIVO"]).size().reset_index(name="Quantidade")
+    
     if not df_g4_counts.empty:
         fig4 = px.bar(df_g4_counts, x="Quantidade", y="RESPONSÁVEL", color="STATUS DO DOCUMENTO NORMATIVO", barmode="group", orientation="h", height=450, text="Quantidade", labels={"RESPONSÁVEL": "Profissional", "Quantidade": "N° de Documentos"}, color_discrete_map=mapa_cores_status)
         fig4.update_traces(textposition="outside")
@@ -175,10 +189,12 @@ if "RESPONSÁVEL" in df_prof.columns:
     prof_selecionado_g5 = st.selectbox("Selecione o Responsável para Filtrar a Análise Cruzada:", options=profissionais_lista)
     df_g5_filtrado = df_prof[df_prof["RESPONSÁVEL"] == prof_selecionado_g5]
     df_g5_counts = df_g5_filtrado.groupby(["SIGLA DO DOCUMENTO", "STATUS DO DOCUMENTO NORMATIVO"]).size().reset_index(name="Quantidade")
+    
     if not df_g5_counts.empty:
         ori_5 = "h" if tipo_grafico_5 == "Barras Horizontais" else "v"
         x_val = "Quantidade" if ori_5 == "h" else "SIGLA DO DOCUMENTO"
         y_val = "SIGLA DO DOCUMENTO" if ori_5 == "h" else "Quantidade"
+        
         fig5 = px.bar(df_g5_counts, x=x_val, y=y_val, color="STATUS DO DOCUMENTO NORMATIVO", text="Quantidade", orientation=ori_5, barmode="group", labels={"SIGLA DO DOCUMENTO": "Tipo de Documento", "Quantidade": "Quantidade de Documentos"}, color_discrete_map=mapa_cores_status)
         fig5.update_traces(textposition="outside")
         st.plotly_chart(fig5, use_container_width=True)
