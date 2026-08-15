@@ -42,8 +42,8 @@ with st.sidebar:
     cor_tema = st.selectbox("Tema de Cores Geral:", ["Padrão (Azul)", "Vibrante", "Warm"])
     escala_cores = px.colors.sequential.Blues if cor_tema == "Padrão (Azul)" else (px.colors.sequential.Plasma if cor_tema == "Vibrante" else px.colors.sequential.Sunset)
 
-# 4. Cabeçalho Principal (Layout Identidade Visual Solicitada)
-col_titulo, col_info = st.columns()
+# 4. Cabeçalho Principal (CORRIGIDO: Inserido o número 2 dentro de st.columns)
+col_titulo, col_info = st.columns(2)
 with col_titulo:
     st.markdown("# 📊 Painel de Indicadores")
     st.markdown("## Norma Zero")
@@ -167,5 +167,3 @@ if uploaded_file is not None:
 
     except Exception as e:
         st.error(f"⚠️ Erro crítico no processamento da matriz: {e}")
-
-st.info("💡 Por favor, use o menu lateral para carregar a sua planilha original e ativar os gráficos interativos.")
