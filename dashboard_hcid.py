@@ -157,22 +157,24 @@ if uploaded_file is not None:
         # BLOCO VISUAL: ANEXO
         # -----------------------------------------------------------------
         with aba_anexo:
-            try:
-                df_raw_anexo = pd.read_excel(uploaded_file, sheet_name="ANEXO", header=None)
-                df_filtro_anexo = processar_escala_complexa(df_raw_anexo)
+            df_raw_anexo = pd.read_excel(uploaded_file, sheet_name="ANEXO", header=None)
+            df_filtro_anexo = processar_escala_complexa(df_raw_anexo)
+            
+            if not df_filtro_anexo.empty:
+                meses_anexo = df_filtro_anexo["Mês"].unique()
+                mes_sel_anexo = st.multiselect("Selecione os Meses para Análise (Anexo):", meses_anexo, default=meses_anexo)
+                df_final_anexo = df_filtro_anexo[df_filtro_anexo["Mês"].isin(mes_sel_anexo)]
                 
-                if not df_filtro_anexo.empty:
-                    meses_anexo = df_filtro_anexo["Mês"].unique()
-                    mes_sel_anexo = st.multiselect("Selecione os Meses para Análise (Anexo):", meses_anexo, default=meses_anexo)
-                    df_final_anexo = df_filtro_anexo[df_filtro_anexo["Mês"].isin(mes_sel_anexo)]
-                    
-                    st.plotly_chart(px.bar(df_final_anexo, y="Vagas Ocupadas", title="1. Total de Vagas de Estágio no Anexo", color_discrete_sequence=escala_cores), use_container_width=True)
-                    st.plotly_chart(px.histogram(df_final_anexo, x="Setor", title="2. Total de Setores Disponibilizados por Campo de Estágio no Anexo", color_discrete_sequence=escala_cores), use_container_width=True)
-                    st.plotly_chart(px.bar(df_final_anexo, x="Setor", y="Vagas Ocupadas", title="3. Setores Disponibilizados para a Realização de Estágio no Anexo"), use_container_width=True)
-                    st.plotly_chart(px.bar(df_final_anexo, x="Setor", y="Vagas Ocupadas", color="Categoria Profissional", title="4. Categorias Profissionais Contempladas no Estágio por Setor no Anexo", barmode="group"), use_container_width=True)
-                    st.plotly_chart(px.bar(df_final_anexo, x="Vagas Ocupadas", y="Setor", orientation="h", title="5. Total de Vagas de Estágio Disponibilizadas por Setor no Anexo", color_discrete_sequence=escala_cores), use_container_width=True)
-                    st.plotly_chart(px.pie(df_final_anexo, names="Turno", values="Vagas Ocupadas", title="6. Total de Vagas de Estágio no Anexo por Turno"), use_container_width=True)
-                    st.plotly_chart(px.bar(df_final_anexo, x="Dia da Semana", y="Vagas Ocupadas", color="Turno", title="7. Total de Estagiários por Turno e por Dia no Anexo", barmode="group"), use_container_width=True)
-                else:
-                    st.info("ℹ️ Os gráficos do Anexo serão ativados automaticamente assim que houver registros de vagas maiores que zero na planilha.")
-            except Exception:
+                st.plotly_chart(px.bar(df_final_anexo, y="Vagas Ocupadas", title="1. Total de Vagas de Estágio no Anexo", color_discrete_sequence=escala_cores), use_container_width=True)
+                st.plotly_chart(px.histogram(df_final_anexo, x="Setor", title="2. Total de Setores Disponibilizados por Campo de Estágio no Anexo", color_discrete_sequence=escala_cores), use_container_width=True)
+                st.plotly_chart(px.bar(df_final_anexo, x="Setor", y="Vagas Ocupadas", title="3. Setores Disponibilizados para a Realização de Estágio no Anexo"), use_container_width=True)
+                st.plotly_chart(px.bar(df_final_anexo, x="Setor", y="Vagas Ocupadas", color="Categoria Profissional", title="4. Categorias Profissionais Contempladas no Estágio por Setor no Anexo", barmode="group"), use_container_width=True)
+                st.plotly_chart(px.bar(df_final_anexo, x="Vagas Ocupadas", y="Setor", orientation="h", title="5. Total de Vagas de Estágio Disponibilizadas por Setor no Anexo", color_discrete_sequence=escala_cores), use_container_width=True)
+                st.plotly_chart(px.pie(df_final_anexo, names="Turno", values="Vagas Ocupadas", title="6. Total de Vagas de Estágio no Anexo por Turno"), use_container_width=True)
+                st.plotly_chart(px.bar(df_final_anexo, x="Dia da Semana", y="Vagas Ocupadas", color="Turno", title="7. Total de Estagiários por Turno e por Dia no Anexo", barmode="group"), use_container_width=True)
+            else:
+                st.info("ℹ️ Os gráficos do Anexo serão ativados automaticamente assim que houver registros de vagas maiores que zero na planilha.")
+
+    except Exception as e:
+        st.error(f"⚠️ Erro crítico no processamento da matriz: {e}")
+else:
