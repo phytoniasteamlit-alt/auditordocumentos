@@ -154,7 +154,7 @@ if uploaded_file is not None:
                 st.warning("Nenhum dado numérico de vagas encontrado na escala da aba HCID.")
 
         # -----------------------------------------------------------------
-        # BLOCO VISUAL: ANEXO (Apontado exatamente para a aba "ANEXO" em maiúsculo)
+        # BLOCO VISUAL: ANEXO
         # -----------------------------------------------------------------
         with aba_anexo:
             try:
@@ -174,5 +174,5 @@ if uploaded_file is not None:
                     st.plotly_chart(px.pie(df_final_anexo, names="Turno", values="Vagas Ocupadas", title="6. Total de Vagas de Estágio no Anexo por Turno"), use_container_width=True)
                     st.plotly_chart(px.bar(df_final_anexo, x="Dia da Semana", y="Vagas Ocupadas", color="Turno", title="7. Total de Estagiários por Turno e por Dia no Anexo", barmode="group"), use_container_width=True)
                 else:
-                    # Mensagem elegante enquanto o anexo não for preenchido com dados reais
-
+                    st.info("ℹ️ Os gráficos do Anexo serão ativados automaticamente assim que houver registros de vagas maiores que zero na planilha.")
+            except Exception:
