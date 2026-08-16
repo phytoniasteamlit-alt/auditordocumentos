@@ -74,8 +74,8 @@ st.markdown("---")
 # =========================================================================
 def processar_escala_complexa(df_raw):
     # Preenche horizontalmente as linhas de Mês (Linha 5/Índice 4) e Dia (Linha 6/Índice 5)
-    df_raw.iloc[4, :] = df_raw.iloc[4, :].ffill()
-    df_raw.iloc[5, :] = df_raw.iloc[5, :].ffill()
+    df_raw.iloc[4, ] = df_raw.iloc[4, ].ffill()
+    df_raw.iloc[5, ] = df_raw.iloc[5, ].ffill()
     
     # Preenche verticalmente os Setores (Coluna A e B) e Categorias (Coluna C) para baixo
     df_raw.iloc[:, 0] = df_raw.iloc[:, 0].ffill()
@@ -88,9 +88,9 @@ def processar_escala_complexa(df_raw):
     for idx_linha in range(7, len(df_raw)):
         linha_atual = df_raw.iloc[idx_linha]
         
-        setor_macro = str(linha_atual.iloc[0]).strip()
-        sub_setor = str(linha_atual.iloc[1]).strip()
-        categoria = str(linha_atual.iloc[2]).strip()
+        setor_macro = str(linha_atual.iloc).strip()
+        sub_setor = str(linha_atual.iloc).strip()
+        categoria = str(linha_atual.iloc).strip()
         
         if sub_setor and sub_setor != "None" and sub_setor != "nan" and sub_setor != setor_macro:
             setor_final = f"{setor_macro} - {sub_setor}"
@@ -100,7 +100,6 @@ def processar_escala_complexa(df_raw):
         if any(termo in setor_final.lower() for termo in ["total", "quantitativo", "hospital", "setor"]):
             continue
             
-        # Percorre as colunas temporais de calendário a partir da Coluna I (índice 8)
         for idx_col in range(8, len(df_raw.columns)):
             valor_vaga = linha_atual.iloc[idx_col]
             
@@ -146,22 +145,25 @@ if uploaded_file is not None:
             mes_sel_hcid = st.multiselect("Selecione os Meses para Análise (HCID):", meses_hcid, default=meses_hcid)
             df_final_hcid = df_filtro_hcid[df_filtro_hcid["Mês"].isin(mes_sel_hcid)]
             
-            # 1. Card indicador de alta precisão
-            total_geral_vagas = df_final_hcid["Vagas Ocupadas"].sum()
-            st.metric(label="📈 1. Total Geral de Vagas de Estágio Ocupadas no HCID", value=f"{total_geral_vagas} Vagas")
-            st.markdown("---")
+            # MATEMÁTICA CORRIGIDA: Descobre a capacidade real de vagas por setor sem somar os dias repetidos
+            df_vagas_reais_hcid = df_final_hcid.groupby(["Mês", "Setor", "Categoria Profissional"], as_index=False)["Vagas Ocupadas"].max()
+            df_vagas_por_mes_hcid = df_vagas_reais_hcid.groupby("Mês", as_index=False)["Vagas Ocupadas"].sum()
             
-            # G2: Total de setores disponibilizados (Otimizado para exibir números no topo de forma precisa)
+            # G1: Total de Vagas de Estágio no HCID por Mês (Gráfico de Barras Limpo e Organizado)
+            fig1 = px.bar(df_vagas_por_mes_hcid, x="Mês", y="Vagas Ocupadas", title="1. Total de Vagas de Estágio no HCID (Capacidade Real Consolidada)", color_discrete_sequence=[paleta_pasteis], text_auto=True)
+            st.plotly_chart(fig1, use_container_width=True)
+            
+            # G2: Total de setores disponibilizados
             df_g2 = df_final_hcid.groupby("Setor", as_index=False)["Vagas Ocupadas"].count().rename(columns={"Vagas Ocupadas": "Ocorrências"})
             fig2 = px.bar(df_g2, x="Setor", y="Ocorrências", title="2. Total de Setores Disponibilizados para Campo de Estágio no HCID (Frequência de Dias)", color_discrete_sequence=[paleta_pasteis], text_auto=True)
             st.plotly_chart(fig2, use_container_width=True)
             
-            # G3: Setores disponibilizados para a realização de estágio (Soma)
-            df_g3 = df_final_hcid.groupby("Setor", as_index=False)["Vagas Ocupadas"].sum()
-            fig3 = px.bar(df_g3, x="Setor", y="Vagas Ocupadas", title="3. Setores Disponibilizados para a Realização de Estágio no HCID (Soma de Vagas)", color_discrete_sequence=[paleta_pasteis], text_auto=True)
+            # G3: Setores disponibilizados para a realização de estágio (Soma de Capacidade Máxima)
+            df_g3 = df_vagas_reais_hcid.groupby("Setor", as_index=False)["Vagas Ocupadas"].sum()
+            fig3 = px.bar(df_g3, x="Setor", y="Vagas Ocupadas", title="3. Setores Disponibilizados para a Realização de Estágio no HCID (Vagas por Campo)", color_discrete_sequence=[paleta_pasteis], text_auto=True)
             st.plotly_chart(fig3, use_container_width=True)
             
-            # G4: Categorias profissionais
+            # G4: Categorias profissionais contempladas
             fig4 = px.bar(df_final_hcid, x="Setor", y="Vagas Ocupadas", color="Categoria Profissional", title="4. Categorias Profissionais Contempladas no Estágio por Setor no HCID", barmode="group", color_discrete_sequence=paleta_pasteis)
             st.plotly_chart(fig4, use_container_width=True)
             
@@ -189,11 +191,7 @@ if uploaded_file is not None:
             mes_sel_anexo = st.multiselect("Selecione os Meses para Análise (Anexo):", meses_anexo, default=meses_anexo)
             df_final_anexo = df_filtro_anexo[df_filtro_anexo["Mês"].isin(mes_sel_anexo)]
             
-            total_geral_anexo = df_final_anexo["Vagas Ocupadas"].sum()
-            st.metric(label="📈 1. Total Geral de Vagas de Estágio Ocupadas no Anexo", value=f"{total_geral_anexo} Vagas")
-            st.markdown("---")
-            
-            df_g2_ax = df_final_anexo.groupby("Setor", as_index=False)["Vagas Ocupadas"].count().rename(columns={"Vagas Ocupadas": "Ocorrências"})
-            fig2_ax = px.bar(df_g2_ax, x="Setor", y="Ocorrências", title="2. Total de Setores Disponibilizados por Campo de Estágio no Anexo (Frequência de Dias)", color_discrete_sequence=[paleta_pasteis], text_auto=True)
-            st.plotly_chart(fig2_ax, use_container_width=True)
+            # Matemática corrigida para o Anexo
+            df_vagas_reais_anexo = df_final_anexo.groupby(["Mês", "Setor", "Categoria Profissional"], as_index=False)["Vagas Ocupadas"].max()
+            df_vagas_por_mes_anexo = df_vagas_reais_anexo.groupby("Mês", as_index=False)["Vagas Ocupadas"].sum()
             
