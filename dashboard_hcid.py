@@ -38,7 +38,7 @@ with st.sidebar:
     uploaded_file = st.file_uploader("Upload", type=["xlsx"], label_visibility="collapsed")
     
     st.markdown("---")
-    st.markdown("### 🎨 Customização Visual")
+    st.markdown("### 🎨 Personalização Visual")
     cor_tema = st.selectbox("Paleta de Cores Pastéis:", ["Azul Soft", "Candy Menta", "Sunset Pastel"])
     
     # Definição das paletas de tons pastéis personalizadas
@@ -73,24 +73,27 @@ st.markdown("---")
 # ⚙️ PROCESSADOR INTELIGENTE DE MATRIZ HOSPITALAR (MÁGICA DO PYTHON)
 # =========================================================================
 def processar_escala_complexa(df_raw):
+    # Preenche células mescladas verticais primárias (Setor e Categoria)
     df_raw.iloc[:, 0] = df_raw.iloc[:, 0].ffill()
     df_raw.iloc[:, 1] = df_raw.iloc[:, 1].ffill()
     df_raw.iloc[:, 2] = df_raw.iloc[:, 2].ffill()
     
-    linha_mes = df_raw.iloc.ffill()
-    linha_dia = df_raw.iloc.ffill()
-    linha_turno = df_raw
+    # Preenche linhas de cabeçalho da escala (Mês, Dia, Turno)
+    linha_mes = df_raw.iloc[4].ffill()
+    linha_dia = df_raw.iloc[5].ffill()
+    linha_turno = df_raw.iloc[6]
     
     dados_estruturados = []
     
+    # Percorre os dados reais que iniciam na Linha 8 (índice 7 do Python)
     for idx_linha in range(7, len(df_raw)):
         linha_atual = df_raw.iloc[idx_linha]
         
-        setor_macro = str(linha_atual.iloc).strip()
-        sub_setor = str(linha_atual.iloc).strip()
-        categoria = str(linha_atual.iloc).strip()
+        setor_macro = str(linha_atual.iloc[0]).strip()
+        sub_setor = str(linha_atual.iloc[1]).strip()
+        categoria = str(linha_atual.iloc[2]).strip()
         
-        if sub_setor and sub_setor != "None" and sub_setor != setor_macro:
+        if sub_setor and sub_setor != "None" and sub_setor != "nan" and sub_setor != setor_macro:
             setor_final = f"{setor_macro} - {sub_setor}"
         else:
             setor_final = setor_macro
@@ -106,13 +109,12 @@ def processar_escala_complexa(df_raw):
                 if qtd_vagas <= 0:
                     continue
                     
-                mes = str(linha_mes.iloc[4, idx_col]).strip().upper()
-                dia = str(linha_dia.iloc[5, idx_col]).strip().capitalize()
-                turno = str(linha_turno.iloc[6, idx_col]).strip()
+                mes = str(linha_mes.iloc[idx_col]).strip().upper()
+                dia = str(linha_dia.iloc[idx_col]).strip().capitalize()
+                turno = str(linha_turno.iloc[idx_col]).strip()
                 
-                # Limpeza de resíduos de texto ou nulos
-                if mes == "NONE" or "nan" in mes.lower(): continue
-                if dia == "None" or "nan" in dia.lower(): continue
+                if mes == "NONE" or "nan" in mes.lower() or not mes: continue
+                if dia == "None" or "nan" in dia.lower() or not dia: continue
                 
                 if "manh" in turno.lower(): turno = "Manhã"
                 elif "tard" in turno.lower(): turno = "Tarde"
@@ -145,34 +147,27 @@ if uploaded_file is not None:
                 mes_sel_hcid = st.multiselect("Selecione os Meses para Análise (HCID):", meses_hcid, default=meses_hcid)
                 df_final_hcid = df_filtro_hcid[df_filtro_hcid["Mês"].isin(mes_sel_hcid)]
                 
-                # CARD DE ALTA PRECISÃO (Substituindo o antigo gráfico 1 esquisito)
+                # Gráfico 1 substituído por Card indicador de alta precisão
                 total_geral_vagas = df_final_hcid["Vagas Ocupadas"].sum()
                 st.metric(label="📈 1. Total Geral de Vagas de Estágio Ocupadas no HCID", value=f"{total_geral_vagas} Vagas")
                 st.markdown("---")
                 
-                # G2: Total de setores disponibilizados
                 fig2 = px.histogram(df_final_hcid, x="Setor", title="2. Total de Setores Disponibilizados para Campo de Estágio no HCID", color_discrete_sequence=[paleta_pasteis[0]])
-                fig2.update_layout(update_traces=dict(texttemplate='%{y}', textposition='outside'))
                 st.plotly_chart(fig2, use_container_width=True)
                 
-                # G3: Setores disponibilizados para a realização de estágio
                 df_g3 = df_final_hcid.groupby("Setor", as_index=False)["Vagas Ocupadas"].sum()
                 fig3 = px.bar(df_g3, x="Setor", y="Vagas Ocupadas", title="3. Setores Disponibilizados para a Realização de Estágio no HCID (Soma de Vagas)", color_discrete_sequence=[paleta_pasteis[1]], text_auto=True)
                 st.plotly_chart(fig3, use_container_width=True)
                 
-                # G4: Categorias profissionais contempladas no estágio por setor
                 fig4 = px.bar(df_final_hcid, x="Setor", y="Vagas Ocupadas", color="Categoria Profissional", title="4. Categorias Profissionais Contempladas no Estágio por Setor no HCID", barmode="group", color_discrete_sequence=paleta_pasteis)
                 st.plotly_chart(fig4, use_container_width=True)
                 
-                # G5: Total de vagas disponibilizadas por setor (Horizontal Estilo Desejado)
                 fig5 = px.bar(df_g3, x="Vagas Ocupadas", y="Setor", orientation="h", title="5. Total de Vagas de Estágio Disponibilizadas por Setor no HCID", color_discrete_sequence=[paleta_pasteis[2]], text_auto=True)
                 st.plotly_chart(fig5, use_container_width=True)
                 
-                # G6: Total de vagas do HCID por turno (Pizza Pastel)
                 fig6 = px.pie(df_final_hcid, names="Turno", values="Vagas Ocupadas", title="6. Total de Vagas de Estágio do HCID por Turno", color_discrete_sequence=paleta_pasteis)
                 st.plotly_chart(fig6, use_container_width=True)
                 
-                # G7: Total de estagiários por turno, por dia (Limpo e preciso)
                 fig7 = px.bar(df_final_hcid, x="Dia da Semana", y="Vagas Ocupadas", color="Turno", title="7. Total de Estagiários por Turno, por Dia, no HCID", barmode="group", color_discrete_sequence=paleta_pasteis, text_auto=True)
                 st.plotly_chart(fig7, use_container_width=True)
             else:
@@ -193,5 +188,10 @@ if uploaded_file is not None:
                     st.metric(label="📈 1. Total Geral de Vagas de Estágio Ocupadas no Anexo", value=f"{total_geral_anexo} Vagas")
                     st.markdown("---")
                     
-                    st.plotly_chart(px.histogram(df_final_anexo, x="Setor", title="2. Total de Setores Disponibilizados por Campo de Estágio no Anexo", color_discrete_sequence=[paleta_pasteis[0]]), use_container_width=True)
+                    fig2_ax = px.histogram(df_final_anexo, x="Setor", title="2. Total de Setores Disponibilizados por Campo de Estágio no Anexo", color_discrete_sequence=[paleta_pasteis[0]])
+                    st.plotly_chart(fig2_ax, use_container_width=True)
+                    
                     df_g3_ax = df_final_anexo.groupby("Setor", as_index=False)["Vagas Ocupadas"].sum()
+                    fig3_ax = px.bar(df_g3_ax, x="Setor", y="Vagas Ocupadas", title="3. Setores Disponibilizados para a Realização de Estágio no Anexo", color_discrete_sequence=[paleta_pasteis[1]], text_auto=True)
+                    st.plotly_chart(fig3_ax, use_container_width=True)
+                    
