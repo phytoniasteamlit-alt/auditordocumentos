@@ -42,7 +42,7 @@ with st.sidebar:
     cor_tema = st.selectbox("Tema de Cores Geral:", ["Padrão (Azul)", "Vibrante", "Warm"])
     escala_cores = px.colors.sequential.Blues if cor_tema == "Padrão (Azul)" else (px.colors.sequential.Plasma if cor_tema == "Vibrante" else px.colors.sequential.Sunset)
 
-# 4. Cabeçalho Principal (Atualizado: Removido o termo Norma Zero)
+# 4. Cabeçalho Principal
 col_titulo, col_info = st.columns(2)
 with col_titulo:
     st.markdown("# 📊 Painel de Indicadores")
@@ -64,12 +64,13 @@ st.markdown("---")
 # ⚙️ PROCESSADOR INTELIGENTE DE MATRIZ HOSPITALAR (MÁGICA DO PYTHON)
 # =========================================================================
 def processar_escala_complexa(df_raw):
-    df_raw.iloc[:, 0] = df_raw.iloc[:, 0].ffill()
-    df_raw.iloc[:, 1] = df_raw.iloc[:, 1].ffill()
-    df_raw.iloc[:, 2] = df_raw.iloc[:, 2].ffill()
+    # CORREÇÃO CRUCIAL: Nova sintaxe correta do ffill() para evitar o erro de iLocIndexer
+    df_raw[0] = df_raw[0].ffill()
+    df_raw[1] = df_raw[1].ffill()
+    df_raw[2] = df_raw[2].ffill()
     
-    linha_mes = df_raw.iloc.ffill()
-    linha_dia = df_raw.iloc.ffill()
+    linha_mes = df_raw.ffill()
+    linha_dia = df_raw.ffill()
     linha_turno = df_raw
     
     dados_estruturados = []
@@ -77,9 +78,9 @@ def processar_escala_complexa(df_raw):
     for idx_linha in range(7, len(df_raw)):
         linha_atual = df_raw.iloc[idx_linha]
         
-        setor_macro = str(linha_atual.iloc).strip()
-        sub_setor = str(linha_atual.iloc).strip()
-        categoria = str(linha_atual.iloc).strip()
+        setor_macro = str(linha_atual.iloc[0]).strip()
+        sub_setor = str(linha_atual.iloc[1]).strip()
+        categoria = str(linha_atual.iloc[2]).strip()
         
         if sub_setor and sub_setor != "None" and sub_setor != setor_macro:
             setor_final = f"{setor_macro} - {sub_setor}"
