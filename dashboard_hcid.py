@@ -89,9 +89,9 @@ def processar_escala_complexa(df_raw):
     for idx_linha in range(7, len(df_raw)):
         linha_atual = df_raw.iloc[idx_linha]
         
-        setor_macro = str(linha_atual.iloc).strip()
-        sub_setor = str(linha_atual.iloc).strip()
-        categoria = str(linha_atual.iloc).strip()
+        setor_macro = str(linha_atual.iloc[0]).strip()
+        sub_setor = str(linha_atual.iloc[1]).strip()
+        categoria = str(linha_atual.iloc[2]).strip()
         
         if sub_setor and sub_setor != "None" and sub_setor != "nan" and sub_setor != setor_macro:
             setor_final = f"{setor_macro} - {sub_setor}"
@@ -111,9 +111,9 @@ def processar_escala_complexa(df_raw):
                 if qtd_vagas <= 0:
                     continue
                     
-                mes = str(linha_mes.iloc[idx_col]).strip().upper()
-                dia = str(linha_dia.iloc[idx_col]).strip().capitalize()
-                turno = str(linha_turno.iloc[idx_col]).strip()
+                mes = str(linha_mes.iloc[0, idx_col]).strip().upper()
+                dia = str(linha_dia.iloc[1, idx_col]).strip().capitalize()
+                turno = str(linha_turno.iloc[2, idx_col]).strip()
                 
                 # Ignora células fantasmas de cabeçalhos vazios ou inválidos
                 if mes == "NONE" or "nan" in mes.lower() or not mes: continue
@@ -133,24 +133,34 @@ def processar_escala_complexa(df_raw):
                     "Vagas Ocupadas": qtd_vagas
                 })
                 
-    return pd.DataFrame(dados_estruturados)
+    df_resultado = pd.DataFrame(dados_estruturados)
+    
+    # Define a ordenação padrão cronológica dos dias da semana
+    if not df_resultado.empty:
+        ordem_dias = ["Segunda", "Segunda-feira", "Terça", "Terça-feira", "Quarta", "Quarta-feira", 
+                      "Quinta", "Quinta-feira", "Sexta", "Sexta-feira", "Sábado", "Domingo"]
+        df_resultado["Dia da Semana"] = pd.Categorical(df_resultado["Dia da Semana"], categories=ordem_dias, ordered=True)
+        
+    return df_resultado
 
 # 5. Renderização e Execução do Upload
 if uploaded_file is not None:
     try:
         aba_hcid, aba_anexo = st.tabs(["🏢 UNIDADE HCID", "📑 UNIDADE ANEXO"])
         
+        # =========================================================================
         # --- BLOCO VISUAL: HCID ---
+        # =========================================================================
         with aba_hcid:
             df_raw_hcid = pd.read_excel(uploaded_file, sheet_name="HCID", header=None)
             df_filtro_hcid = processar_escala_complexa(df_raw_hcid)
             
             if not df_filtro_hcid.empty:
                 meses_hcid = [m for m in df_filtro_hcid["Mês"].unique() if m and m != "NAN"]
-                mes_sel_hcid = st.multiselect("Selecione os Meses para Análise (HCID):", meses_hcid, default=meses_hcid)
+                mes_sel_hcid = st.multiselect("Selecione os Meses para Análise (HCID):", meses_hcid, default=meses_hcid, key="ms_hcid")
                 df_final_hcid = df_filtro_hcid[df_filtro_hcid["Mês"].isin(mes_sel_hcid)]
                 
-                # CARD DE ALTA PRECISÃO (Substituindo o antigo gráfico 1 esquisito)
+                # G1: CARD DE ALTA PRECISÃO
                 total_geral_vagas = df_final_hcid["Vagas Ocupadas"].sum()
                 st.metric(label="📈 1. Total Geral de Vagas de Estágio Ocupadas no HCID", value=f"{total_geral_vagas} Vagas")
                 st.markdown("---")
@@ -177,35 +187,14 @@ if uploaded_file is not None:
                 st.plotly_chart(fig6, use_container_width=True)
                 
                 # G7: Total de estagiários por turno, por dia (Limpo e preciso)
-                fig7 = px.bar(df_final_hcid, x="Dia da Semana", y="Vagas Ocupadas", color="Turno", title="7. Total de Estagiários por Turno, por Dia, no HCID", barmode="group", color_discrete_sequence=paleta_pasteis, text_auto=True)
+                df_g7_hcid = df_final_hcid.sort_values("Dia da Semana")
+                fig7 = px.bar(df_g7_hcid, x="Dia da Semana", y="Vagas Ocupadas", color="Turno", title="7. Total de Estagiários por Turno, por Dia, no HCID", barmode="group", color_discrete_sequence=paleta_pasteis, text_auto=True)
                 st.plotly_chart(fig7, use_container_width=True)
             else:
                 st.warning("Nenhum dado numérico de vagas encontrado na escala da aba HCID.")
 
+        # =========================================================================
         # --- BLOCO VISUAL: ANEXO ---
+        # =========================================================================
         with aba_anexo:
             df_raw_anexo = pd.read_excel(uploaded_file, sheet_name="ANEXO", header=None)
-            df_filtro_anexo = processar_escala_complexa(df_raw_anexo)
-            
-            if not df_filtro_anexo.empty:
-                meses_anexo = [m for m in df_filtro_anexo["Mês"].unique() if m and m != "NAN"]
-                mes_sel_anexo = st.multiselect("Selecione os Meses para Análise (Anexo):", meses_anexo, default=meses_anexo)
-                df_final_anexo = df_filtro_anexo[df_filtro_anexo["Mês"].isin(mes_sel_anexo)]
-                
-                total_geral_anexo = df_final_anexo["Vagas Ocupadas"].sum()
-                st.metric(label="📈 1. Total Geral de Vagas de Estágio Ocupadas no Anexo", value=f"{total_geral_anexo} Vagas")
-                st.markdown("---")
-                
-                fig2_ax = px.histogram(df_final_anexo, x="Setor", title="2. Total de Setores Disponibilizados por Campo de Estágio no Anexo", color_discrete_sequence=[paleta_pasteis])
-Use o código com cuidado.st.plotly_chart(fig2_ax, use_container_width=True)df_g3_ax = df_final_anexo.groupby("Setor", as_index=False)["Vagas Ocupadas"].sum()fig3_ax = px.bar(df_g3_ax, x="Setor", y="Vagas Ocupadas", title="3. Setores Disponibilizados para a Realização de Estágio no Anexo", color_discrete_sequence=[paleta_pasteis], text_auto=True)st.plotly_chart(fig3_ax, use_container_width=True)fig4_ax = px.bar(df_final_anexo, x="Setor", y="Vagas Ocupadas", color="Categoria Profissional", title="4. Categorias Profissionais Contempladas no Estágio por Setor no Anexo", barmode="group", color_discrete_sequence=paleta_pasteis)st.plotly_chart(fig4_ax, use_container_width=True)fig5_ax = px.bar(df_g3_ax, x="Vagas Ocupadas", y="Setor", orientation="h", title="5. Total de Vagas de Estágio Disponibilizadas por Setor no Anexo", color_discrete_sequence=[paleta_pasteis], text_auto=True)st.plotly_chart(fig5_ax, use_container_width=True)fig6_ax = px.pie(df_final_anexo, names="Turno", values="Vagas Ocupadas", title="6. Total de Vagas de Estágio no Anexo por Turno", color_discrete_sequence=paleta_pasteis)st.plotly_chart(fig6_ax, use_container_width=True)fig7_ax = px.bar(df_final_anexo, x="Dia da Semana", y="Vagas Ocupadas", color="Turno", title="7. Total de Estagiários por Turno e por Dia no Anexo", barmode="group", color_discrete_sequence=paleta_pasteis, text_auto=True)st.plotly_chart(fig7_ax, use_container_width=True)else:st.info("ℹ️ Os gráficos do Anexo serão ativados automaticamente assim que houver registros de vagas maiores que zero na planilha.")except Exception as e:st.error(f"⚠️ Erro crítico no processamento da matriz: {e}")st.info("💡 Por favor, use o menu lateral para carregar a sua planilha original e ativar os gráficos interativos.")
----
-
-### 🏁 Passos Finais de Atualização:
-
-1. Salve o código clicando no botão verde **"Commit changes..."** no GitHub.
-2. Acesse o seu aplicativo Streamlit.
-3. Clique em **"Manage app"** no canto inferior direito, vá nos três pontinhos e clique em **"Reboot app"** (Reiniciar aplicativo) para limpar o servidor.
-
-<FollowUp>
-Assim que o servidor concluir a reinicialização rápida com esse script limpo de blocos redundantes, a tela oficial do painel abriu de forma perfeita? Pode carregar o arquivo para ver a transformação visual completa!
-</FollowUp>
