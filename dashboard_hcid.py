@@ -68,21 +68,25 @@ st.markdown("---")
 # ⚙️ PROCESSADOR INTELIGENTE DE MATRIZ HOSPITALAR (MÁGICA DO PYTHON)
 # =========================================================================
 def processar_escala_complexa(df_raw):
-    # Preenche células mescladas verticais nas colunas de Setor e Categoria
-    df_raw.iloc[:, 0] = df_raw.iloc[:, 0].ffill()
-    df_raw.iloc[:, 1] = df_raw.iloc[:, 1].ffill()
-    df_raw.iloc[:, 2] = df_raw.iloc[:, 2].ffill()
+    if df_raw.empty or len(df_raw) < 4:
+        return pd.DataFrame()
+
+    # Cria cópias isoladas das linhas de cabeçalho e aplica o ffill horizontal para mesclados
+    linha_mes_série = df_raw.iloc[0].ffill()
+    linha_dia_série = df_raw.iloc[1].ffill()
+    linha_turno_série = df_raw.iloc[2]
     
-    # Isola e limpa os cabeçalhos temporais (Mês, Dia, Turno) antes da iteração
-    linha_mes_raw = df_raw.iloc[0].ffill()
-    linha_dia_raw = df_raw.iloc[1].ffill()
-    linha_turno_raw = df_raw.iloc[2]
+    # Preenche células mescladas verticais nas colunas iniciais de Setor e Categoria
+    df_dados_limpos = df_raw.copy()
+    df_dados_limpos.iloc[:, 0] = df_dados_limpos.iloc[:, 0].ffill()
+    df_dados_limpos.iloc[:, 1] = df_dados_limpos.iloc[:, 1].ffill()
+    df_dados_limpos.iloc[:, 2] = df_dados_limpos.iloc[:, 2].ffill()
     
     dados_estruturados = []
     
     # Percorre as linhas de dados reais começando na Linha 8 (índice 7 do Python)
-    for idx_linha in range(7, len(df_raw)):
-        linha_atual = df_raw.iloc[idx_linha]
+    for idx_linha in range(7, len(df_dados_limpos)):
+        linha_atual = df_dados_limpos.iloc[idx_linha]
         setor_macro = str(linha_atual.iloc[0]).strip()
         sub_setor = str(linha_atual.iloc[1]).strip()
         categoria = str(linha_atual.iloc[2]).strip()
@@ -92,21 +96,25 @@ def processar_escala_complexa(df_raw):
         else:
             setor_final = setor_macro
             
-        if any(termo in setor_final.lower() for termo in ["total", "quantitativo", "hospital", "setor"]):
+        if any(termo in setor_final.lower() for termo in ["total", "quantitativo", "hospital", "setor", "none", "nan"]):
             continue
             
         # Percorre as colunas temporais de calendário a partir da Coluna I (índice 8)
         for idx_col in range(8, len(df_raw.columns)):
             valor_vaga = linha_atual.iloc[idx_col]
             
-            if pd.notna(valor_vaga) and (isinstance(valor_vaga, (int, float)) or str(valor_vaga).isdigit()):
-                qtd_vagas = int(valor_vaga)
-                if qtd_vagas <= 0:
+            # Validação robusta de números (inteiros ou floats maiores que zero)
+            if pd.notna(valor_vaga):
+                try:
+                    qtd_vagas = int(float(valor_vaga))
+                    if qtd_vagas <= 0:
+                        continue
+                except ValueError:
                     continue
                     
-                mes = str(linha_mes_raw.iloc[idx_col]).strip().upper()
-                dia = str(linha_dia_raw.iloc[idx_col]).strip().capitalize()
-                turno = str(linha_turno_raw.iloc[idx_col]).strip()
+                mes = str(linha_mes_série.iloc[idx_col]).strip().upper()
+                dia = str(linha_dia_série.iloc[idx_col]).strip().capitalize()
+                turno = str(linha_turno_série.iloc[idx_col]).strip()
                 
                 if mes == "NONE" or "nan" in mes.lower() or not mes: continue
                 if dia == "None" or "nan" in dia.lower() or not dia: continue
@@ -139,61 +147,56 @@ def processar_escala_complexa(df_raw):
 if uploaded_file is not None:
     aba_hcid, aba_anexo = st.tabs(["🏢 UNIDADE HCID", "📑 UNIDADE ANEXO"])
     
-    # =========================================================================
     # --- BLOCO VISUAL: HCID ---
-    # =========================================================================
     with aba_hcid:
         df_raw_hcid = pd.read_excel(uploaded_file, sheet_name="HCID", header=None)
         df_filtro_hcid = processar_escala_complexa(df_raw_hcid)
         
         if not df_filtro_hcid.empty:
             meses_hcid = [m for m in df_filtro_hcid["Mês"].unique() if m and m != "NAN"]
-            mes_sel_hcid = st.multiselect("Selecione os Meses para Análise (HCID):", meses_hcid, default=meses_hcid, key="ms_hcid")
+            mes_sel_hcid = st.multiselect("Selecione os Meses (HCID):", meses_hcid, default=meses_hcid, key="ms_hcid")
             df_final_hcid = df_filtro_hcid[df_filtro_hcid["Mês"].isin(mes_sel_hcid)]
             
-            # G1: CARD DE ALTA PRECISÃO
             total_geral_vagas = df_final_hcid["Vagas Ocupadas"].sum()
             st.metric(label="📈 1. Total Geral de Vagas de Estágio Ocupadas no HCID", value=f"{total_geral_vagas} Vagas")
             st.markdown("---")
             
-            # G2: Total de setores disponibilizados
             fig2 = px.histogram(df_final_hcid, x="Setor", title="2. Total de Setores Disponibilizados para Campo de Estágio no HCID", color_discrete_sequence=[paleta_pasteis])
             st.plotly_chart(fig2, use_container_width=True)
             
-            # G3: Setores disponibilizados para a realização de estágio (Soma de vagas ocupadas)
             df_g3 = df_final_hcid.groupby("Setor", as_index=False)["Vagas Ocupadas"].sum()
             fig3 = px.bar(df_g3, x="Setor", y="Vagas Ocupadas", title="3. Setores Disponibilizados para a Realização de Estágio no HCID (Soma de Vagas)", color_discrete_sequence=[paleta_pasteis], text_auto=True)
             st.plotly_chart(fig3, use_container_width=True)
             
-            # G4: Categorias profissionais contempladas no estágio por setor
             fig4 = px.bar(df_final_hcid, x="Setor", y="Vagas Ocupadas", color="Categoria Profissional", title="4. Categorias Profissionais Contempladas no Estágio por Setor no HCID", barmode="group", color_discrete_sequence=paleta_pasteis)
             st.plotly_chart(fig4, use_container_width=True)
             
-            # G5: Total de vagas disponibilizadas por setor (Horizontal)
             fig5 = px.bar(df_g3, x="Vagas Ocupadas", y="Setor", orientation="h", title="5. Total de Vagas de Estágio Disponibilizadas por Setor no HCID", color_discrete_sequence=[paleta_pasteis], text_auto=True)
             st.plotly_chart(fig5, use_container_width=True)
             
-            # G6: Total de vagas do HCID por turno (Pizza Pastel)
             fig6 = px.pie(df_final_hcid, names="Turno", values="Vagas Ocupadas", title="6. Total de Vagas de Estágio do HCID por Turno", color_discrete_sequence=paleta_pasteis)
             st.plotly_chart(fig6, use_container_width=True)
             
-            # G7: Total de estagiários por turno por dia no HCID
             df_g7_hcid = df_final_hcid.sort_values("Dia da Semana")
             fig7 = px.bar(df_g7_hcid, x="Dia da Semana", y="Vagas Ocupadas", color="Turno", title="7. Total de Estagiários por Turno, por Dia, no HCID", barmode="group", color_discrete_sequence=paleta_pasteis, text_auto=True)
             st.plotly_chart(fig7, use_container_width=True)
         else:
-            st.warning("Nenhum dado numérico de vagas encontrado na escala da aba HCID.")
+            st.warning("Nenhum dado numérico de vagas encontrado na escala da aba HCID. Verifique a estrutura das linhas iniciais.")
 
-    # =========================================================================
     # --- BLOCO VISUAL: ANEXO ---
-    # =========================================================================
     with aba_anexo:
         df_raw_anexo = pd.read_excel(uploaded_file, sheet_name="ANEXO", header=None)
         df_filtro_anexo = processar_escala_complexa(df_raw_anexo)
         
         if not df_filtro_anexo.empty:
             meses_anexo = [m for m in df_filtro_anexo["Mês"].unique() if m and m != "NAN"]
-            mes_sel_anexo = st.multiselect("Selecione os Meses para Análise (Anexo):", meses_anexo, default=meses_anexo, key="ms_anexo")
+            mes_sel_anexo = st.multiselect("Selecione os Meses (Anexo):", meses_anexo, default=meses_anexo, key="ms_anexo")
             df_final_anexo = df_filtro_anexo[df_filtro_anexo["Mês"].isin(mes_sel_anexo)]
             
-            # G1: Total geral Anexo
+            total_geral_anexo = df_final_anexo["Vagas Ocupadas"].sum()
+            st.metric(label="📈 1. Total Geral de Vagas de Estágio Ocupadas no Anexo", value=f"{total_geral_anexo} Vagas")
+            st.markdown("---")
+            
+            fig2_ax = px.histogram(df_final_anexo, x="Setor", title="2. Total de Setores Disponibilizados por Campo de Estágio no Anexo", color_discrete_sequence=[paleta_pasteis])
+            st.plotly_chart(fig2_ax, use_container_width=True)
+            
