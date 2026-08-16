@@ -68,25 +68,20 @@ st.markdown("---")
 # ⚙️ PROCESSADOR INTELIGENTE DE MATRIZ HOSPITALAR (MÁGICA DO PYTHON)
 # =========================================================================
 def processar_escala_complexa(df_raw):
-    if df_raw.empty or len(df_raw) < 4:
-        return pd.DataFrame()
-
-    # Cria cópias isoladas das linhas de cabeçalho e aplica o ffill horizontal para mesclados
-    linha_mes_série = df_raw.iloc[0].ffill()
-    linha_dia_série = df_raw.iloc[1].ffill()
-    linha_turno_série = df_raw.iloc[2]
+    # Restaura exatamente o preenchimento lógico original do seu código
+    df_raw.iloc[:, 0] = df_raw.iloc[:, 0].ffill()
+    df_raw.iloc[:, 1] = df_raw.iloc[:, 1].ffill()
+    df_raw.iloc[:, 2] = df_raw.iloc[:, 2].ffill()
     
-    # Preenche células mescladas verticais nas colunas iniciais de Setor e Categoria
-    df_dados_limpos = df_raw.copy()
-    df_dados_limpos.iloc[:, 0] = df_dados_limpos.iloc[:, 0].ffill()
-    df_dados_limpos.iloc[:, 1] = df_dados_limpos.iloc[:, 1].ffill()
-    df_dados_limpos.iloc[:, 2] = df_dados_limpos.iloc[:, 2].ffill()
+    linha_mes = df_raw.ffill()
+    linha_dia = df_raw.ffill()
+    linha_turno = df_raw
     
     dados_estruturados = []
     
-    # Percorre as linhas de dados reais começando na Linha 8 (índice 7 do Python)
-    for idx_linha in range(7, len(df_dados_limpos)):
-        linha_atual = df_dados_limpos.iloc[idx_linha]
+    for idx_linha in range(7, len(df_raw)):
+        linha_atual = df_raw.iloc[idx_linha]
+        
         setor_macro = str(linha_atual.iloc[0]).strip()
         sub_setor = str(linha_atual.iloc[1]).strip()
         categoria = str(linha_atual.iloc[2]).strip()
@@ -96,25 +91,20 @@ def processar_escala_complexa(df_raw):
         else:
             setor_final = setor_macro
             
-        if any(termo in setor_final.lower() for termo in ["total", "quantitativo", "hospital", "setor", "none", "nan"]):
+        if any(termo in setor_final.lower() for termo in ["total", "quantitativo", "hospital", "setor"]):
             continue
             
-        # Percorre as colunas temporais de calendário a partir da Coluna I (índice 8)
         for idx_col in range(8, len(df_raw.columns)):
             valor_vaga = linha_atual.iloc[idx_col]
             
-            # Validação robusta de números (inteiros ou floats maiores que zero)
-            if pd.notna(valor_vaga):
-                try:
-                    qtd_vagas = int(float(valor_vaga))
-                    if qtd_vagas <= 0:
-                        continue
-                except ValueError:
+            if pd.notna(valor_vaga) and (isinstance(valor_vaga, (int, float)) or str(valor_vaga).isdigit()):
+                qtd_vagas = int(valor_vaga)
+                if qtd_vagas <= 0:
                     continue
                     
-                mes = str(linha_mes_série.iloc[idx_col]).strip().upper()
-                dia = str(linha_dia_série.iloc[idx_col]).strip().capitalize()
-                turno = str(linha_turno_série.iloc[idx_col]).strip()
+                mes = str(linha_mes.iloc[0, idx_col]).strip().upper()
+                dia = str(linha_dia.iloc[1, idx_col]).strip().capitalize()
+                turno = str(linha_turno.iloc[2, idx_col]).strip()
                 
                 if mes == "NONE" or "nan" in mes.lower() or not mes: continue
                 if dia == "None" or "nan" in dia.lower() or not dia: continue
@@ -135,7 +125,6 @@ def processar_escala_complexa(df_raw):
                 
     df_resultado = pd.DataFrame(dados_estruturados)
     
-    # Define a ordenação padrão cronológica dos dias da semana
     if not df_resultado.empty:
         ordem_dias = ["Segunda", "Segunda-feira", "Terça", "Terça-feira", "Quarta", "Quarta-feira", 
                       "Quinta", "Quinta-feira", "Sexta", "Sexta-feira", "Sábado", "Domingo"]
@@ -181,7 +170,7 @@ if uploaded_file is not None:
             fig7 = px.bar(df_g7_hcid, x="Dia da Semana", y="Vagas Ocupadas", color="Turno", title="7. Total de Estagiários por Turno, por Dia, no HCID", barmode="group", color_discrete_sequence=paleta_pasteis, text_auto=True)
             st.plotly_chart(fig7, use_container_width=True)
         else:
-            st.warning("Nenhum dado numérico de vagas encontrado na escala da aba HCID. Verifique a estrutura das linhas iniciais.")
+            st.warning("Nenhum dado numérico de vagas encontrado na escala da aba HCID.")
 
     # --- BLOCO VISUAL: ANEXO ---
     with aba_anexo:
@@ -199,4 +188,11 @@ if uploaded_file is not None:
             
             fig2_ax = px.histogram(df_final_anexo, x="Setor", title="2. Total de Setores Disponibilizados por Campo de Estágio no Anexo", color_discrete_sequence=[paleta_pasteis])
             st.plotly_chart(fig2_ax, use_container_width=True)
+            
+            df_g3_ax = df_final_anexo.groupby("Setor", as_index=False)["Vagas Ocupadas"].sum()
+            fig3_ax = px.bar(df_g3_ax, x="Setor", y="Vagas Ocupadas", title="3. Setores Disponibilizados para a Realização de Estágio no Anexo", color_discrete_sequence=[paleta_pasteis], text_auto=True)
+            st.plotly_chart(fig3_ax, use_container_width=True)
+            
+            fig4_ax = px.bar(df_final_anexo, x="Setor", y="Vagas Ocupadas", color="Categoria Profissional", title="4. Categorias Profissionais Contempladas no Estágio por Setor no Anexo", barmode="group", color_discrete_sequence=paleta_pasteis)
+            st.plotly_chart(fig4_ax, use_container_width=True)
             
