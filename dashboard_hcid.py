@@ -85,9 +85,9 @@ def processar_escala_complexa(df_raw):
     for idx_linha in range(7, len(df_raw)):
         linha_atual = df_raw.iloc[idx_linha]
         
-        setor_macro = str(linha_atual.iloc[0]).strip()
-        sub_setor = str(linha_atual.iloc[1]).strip()
-        categoria = str(linha_atual.iloc[2]).strip()
+        setor_macro = str(linha_atual.iloc).strip()
+        sub_setor = str(linha_atual.iloc).strip()
+        categoria = str(linha_atual.iloc).strip()
         
         if sub_setor and sub_setor != "None" and sub_setor != "nan" and sub_setor != setor_macro:
             setor_final = f"{setor_macro} - {sub_setor}"
@@ -137,11 +137,11 @@ def processar_escala_complexa(df_raw):
 
 # 5. Renderização e Execução do Upload
 if uploaded_file is not None:
-    try:
-        aba_hcid, aba_anexo = st.tabs(["🏢 UNIDADE HCID", "📑 UNIDADE ANEXO"])
-        
-        # --- BLOCO VISUAL: HCID ---
-        with aba_hcid:
+    aba_hcid, aba_anexo = st.tabs(["🏢 UNIDADE HCID", "📑 UNIDADE ANEXO"])
+    
+    # --- BLOCO VISUAL: HCID ---
+    with aba_hcid:
+        try:
             df_raw_hcid = pd.read_excel(uploaded_file, sheet_name="HCID", header=None)
             df_filtro_hcid = processar_escala_complexa(df_raw_hcid)
             
@@ -175,9 +175,12 @@ if uploaded_file is not None:
                 st.plotly_chart(fig7, use_container_width=True)
             else:
                 st.warning("Nenhum dado numérico de vagas encontrado na escala da aba HCID.")
+        except Exception as e_hcid:
+            st.error(f"Erro ao processar a aba HCID: {e_hcid}")
 
-        # --- BLOCO VISUAL: ANEXO ---
-        with aba_anexo:
+    # --- BLOCO VISUAL: ANEXO ---
+    with aba_anexo:
+        try:
             df_raw_anexo = pd.read_excel(uploaded_file, sheet_name="ANEXO", header=None)
             df_filtro_anexo = processar_escala_complexa(df_raw_anexo)
             
