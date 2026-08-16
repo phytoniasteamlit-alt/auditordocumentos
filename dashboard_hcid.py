@@ -68,16 +68,19 @@ st.markdown("---")
 # ⚙️ PROCESSADOR INTELIGENTE DE MATRIZ HOSPITALAR (MÁGICA DO PYTHON)
 # =========================================================================
 def processar_escala_complexa(df_raw):
+    # Preenche células mescladas verticais nas primeiras colunas de identificação
     df_raw.iloc[:, 0] = df_raw.iloc[:, 0].ffill()
     df_raw.iloc[:, 1] = df_raw.iloc[:, 1].ffill()
     df_raw.iloc[:, 2] = df_raw.iloc[:, 2].ffill()
     
-    linha_mes = df_raw.iloc.ffill()
-    linha_dia = df_raw.iloc.ffill()
-    linha_turno = df_raw.iloc
+    # Captura e preenche horizontalmente os cabeçalhos temporais (Mês na linha 0, Dia na linha 1)
+    linha_mes = df_raw.iloc[0].ffill()
+    linha_dia = df_raw.iloc[1].ffill()
+    linha_turno = df_raw.iloc[2]
     
     dados_estruturados = []
     
+    # Percorre as linhas de dados reais começando na Linha 8 (índice 7)
     for idx_linha in range(7, len(df_raw)):
         linha_atual = df_raw.iloc[idx_linha]
         setor_macro = str(linha_atual.iloc[0]).strip()
@@ -92,6 +95,7 @@ def processar_escala_complexa(df_raw):
         if any(termo in setor_final.lower() for termo in ["total", "quantitativo", "hospital", "setor"]):
             continue
             
+        # Analisa os dados de vagas a partir da Coluna I (índice 8)
         for idx_col in range(8, len(df_raw.columns)):
             valor_vaga = linha_atual.iloc[idx_col]
             
@@ -100,9 +104,9 @@ def processar_escala_complexa(df_raw):
                 if qtd_vagas <= 0:
                     continue
                     
-                mes = str(linha_mes.iloc[0, idx_col]).strip().upper()
-                dia = str(linha_dia.iloc[1, idx_col]).strip().capitalize()
-                turno = str(linha_turno.iloc[2, idx_col]).strip()
+                mes = str(linha_mes.iloc[idx_col]).strip().upper()
+                dia = str(linha_dia.iloc[idx_col]).strip().capitalize()
+                turno = str(linha_turno.iloc[idx_col]).strip()
                 
                 if mes == "NONE" or "nan" in mes.lower() or not mes: continue
                 if dia == "None" or "nan" in dia.lower() or not dia: continue
@@ -190,7 +194,4 @@ if uploaded_file is not None:
             df_g3_ax = df_final_anexo.groupby("Setor", as_index=False)["Vagas Ocupadas"].sum()
             fig3_ax = px.bar(df_g3_ax, x="Setor", y="Vagas Ocupadas", title="3. Setores Disponibilizados para a Realização de Estágio no Anexo", color_discrete_sequence=[paleta_pasteis], text_auto=True)
             st.plotly_chart(fig3_ax, use_container_width=True)
-            
-            fig4_ax = px.bar(df_final_anexo, x="Setor", y="Vagas Ocupadas", color="Categoria Profissional", title="4. Categorias Profissionais Contempladas no Estágio por Setor no Anexo", barmode="group", color_discrete_sequence=paleta_pasteis)
-            st.plotly_chart(fig4_ax, use_container_width=True)
             
