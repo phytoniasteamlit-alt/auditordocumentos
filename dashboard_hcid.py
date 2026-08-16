@@ -49,7 +49,7 @@ with st.sidebar:
     else:
         paleta_pasteis = ["#FFB7B2", "#FFDAC1", "#E2F0CB", "#B5EAD7", "#C7CEEA", "#FFC6FF"]
 
-# 4. Cabeçalho Principal Customizado (Atualizado com NEP, NEPEX e Setor)
+# 4. Cabeçalho Principal Customizado (NEP, NEPEX e Setor)
 col_titulo, col_info = st.columns([1.2, 1.8])
 with col_titulo:
     st.markdown("# 📊 Painel de Indicadores")
@@ -164,7 +164,7 @@ if uploaded_file is not None:
                 fig3 = px.bar(df_g3, x="Setor", y="Vagas Ocupadas", title="3. Setores Disponibilizados para a Realização de Estágio no HCID (Soma de Vagas)", color_discrete_sequence=[paleta_pasteis], text_auto=True)
                 st.plotly_chart(fig3, use_container_width=True)
                 
-                # G4: Categorias profissionais contempladas no estágio por setor
+                # G4: Categorias profissionais contempladas no estágio por sector
                 fig4 = px.bar(df_final_hcid, x="Setor", y="Vagas Ocupadas", color="Categoria Profissional", title="4. Categorias Profissionais Contempladas no Estágio por Setor no HCID", barmode="group", color_discrete_sequence=paleta_pasteis)
                 st.plotly_chart(fig4, use_container_width=True)
                 
@@ -196,3 +196,4 @@ if uploaded_file is not None:
                 st.metric(label="📈 1. Total Geral de Vagas de Estágio Ocupadas no Anexo", value=f"{total_geral_anexo} Vagas")
                 st.markdown("---")
                 
+                fig2_ax = px.histogram(df_final_anexo, x="Setor", title="2. Total de Setores Disponibilizados por Campo de Estágio no Anexo", color_discrete_sequence=[paleta_pasteis])
