@@ -164,7 +164,7 @@ if uploaded_file is not None:
                 fig3 = px.bar(df_g3, x="Setor", y="Vagas Ocupadas", title="3. Setores Disponibilizados para a Realização de Estágio no HCID (Soma de Vagas)", color_discrete_sequence=[paleta_pasteis], text_auto=True)
                 st.plotly_chart(fig3, use_container_width=True)
                 
-                # G4: Categorias profissionais contempladas no estágio por sector
+                # G4: Categorias profissionais contempladas no estágio por setor
                 fig4 = px.bar(df_final_hcid, x="Setor", y="Vagas Ocupadas", color="Categoria Profissional", title="4. Categorias Profissionais Contempladas no Estágio por Setor no HCID", barmode="group", color_discrete_sequence=paleta_pasteis)
                 st.plotly_chart(fig4, use_container_width=True)
                 
@@ -197,3 +197,15 @@ if uploaded_file is not None:
                 st.markdown("---")
                 
                 fig2_ax = px.histogram(df_final_anexo, x="Setor", title="2. Total de Setores Disponibilizados por Campo de Estágio no Anexo", color_discrete_sequence=[paleta_pasteis])
+Use o código com cuidado.st.plotly_chart(fig2_ax, use_container_width=True)df_g3_ax = df_final_anexo.groupby("Setor", as_index=False)["Vagas Ocupadas"].sum()fig3_ax = px.bar(df_g3_ax, x="Setor", y="Vagas Ocupadas", title="3. Setores Disponibilizados para a Realização de Estágio no Anexo", color_discrete_sequence=[paleta_pasteis], text_auto=True)st.plotly_chart(fig3_ax, use_container_width=True)fig4_ax = px.bar(df_final_anexo, x="Setor", y="Vagas Ocupadas", color="Categoria Profissional", title="4. Categorias Profissionais Contempladas no Estágio por Setor no Anexo", barmode="group", color_discrete_sequence=paleta_pasteis)st.plotly_chart(fig4_ax, use_container_width=True)fig5_ax = px.bar(df_g3_ax, x="Vagas Ocupadas", y="Setor", orientation="h", title="5. Total de Vagas de Estágio Disponibilizadas por Setor no Anexo", color_discrete_sequence=[paleta_pasteis], text_auto=True)st.plotly_chart(fig5_ax, use_container_width=True)fig6_ax = px.pie(df_final_anexo, names="Turno", values="Vagas Ocupadas", title="6. Total de Vagas de Estágio no Anexo por Turno", color_discrete_sequence=paleta_pasteis)st.plotly_chart(fig6_ax, use_container_width=True)fig7_ax = px.bar(df_final_anexo, x="Dia da Semana", y="Vagas Ocupadas", color="Turno", title="7. Total de Estagiários por Turno e por Dia no Anexo", barmode="group", color_discrete_sequence=paleta_pasteis, text_auto=True)st.plotly_chart(fig7_ax, use_container_width=True)else:st.info("ℹ️ Os gráficos do Anexo serão ativados automaticamente assim que houver registros de vagas maiores que zero na planilha.")except Exception as e:st.error(f"⚠️ Erro crítico no processamento da matriz: {e}")st.info("💡 Por favor, use o menu lateral para carregar a sua planilha original e ativar os gráficos interativos.")
+---
+
+### 🏁 Passos Finais de Atualização:
+
+1. Salve o código clicando no botão verde **"Commit changes..."** no GitHub.
+2. Acesse o seu aplicativo Streamlit.
+3. Clique em **"Manage app"** no canto inferior direito, vá nos três pontinhos e clique em **"Reboot app"** (Reiniciar aplicativo) para limpar o servidor.
+
+<FollowUp>
+Assim que o servidor concluir a reinicialização rápida com esse script limpo de blocos redundantes, a tela oficial do painel abriu de forma perfeita? Pode carregar o arquivo para ver a transformação visual completa!
+</FollowUp>
