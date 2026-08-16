@@ -79,9 +79,9 @@ def processar_escala_complexa(df_raw):
     df_raw.iloc[:, 2] = df_raw.iloc[:, 2].ffill()
     
     # Trata de forma isolada e limpa as linhas de cabeçalho da escala (Mês, Dia, Turno)
-    linha_mes = df_raw.iloc[4].ffill()
-    linha_dia = df_raw.iloc[5].ffill()
-    linha_turno = df_raw.iloc[6]
+    linha_mes = df_raw.iloc.ffill()
+    linha_dia = df_raw.iloc.ffill()
+    linha_turno = df_raw.iloc
     
     dados_estruturados = []
     
@@ -89,9 +89,9 @@ def processar_escala_complexa(df_raw):
     for idx_linha in range(7, len(df_raw)):
         linha_atual = df_raw.iloc[idx_linha]
         
-        setor_macro = str(linha_atual.iloc[0]).strip()
-        sub_setor = str(linha_atual.iloc[1]).strip()
-        categoria = str(linha_atual.iloc[2]).strip()
+        setor_macro = str(linha_atual.iloc).strip()
+        sub_setor = str(linha_atual.iloc).strip()
+        categoria = str(linha_atual.iloc).strip()
         
         if sub_setor and sub_setor != "None" and sub_setor != "nan" and sub_setor != setor_macro:
             setor_final = f"{setor_macro} - {sub_setor}"
@@ -115,7 +115,7 @@ def processar_escala_complexa(df_raw):
                 dia = str(linha_dia.iloc[idx_col]).strip().capitalize()
                 turno = str(linha_turno.iloc[idx_col]).strip()
                 
-                # Ignora células fantasmas de cabeçalhos vazios
+                # Ignora células fantasmas de cabeçalhos vazios ou inválidos
                 if mes == "NONE" or "nan" in mes.lower() or not mes: continue
                 if dia == "None" or "nan" in dia.lower() or not dia: continue
                 
@@ -184,16 +184,15 @@ if uploaded_file is not None:
 
         # --- BLOCO VISUAL: ANEXO ---
         with aba_anexo:
-            try:
-                df_raw_anexo = pd.read_excel(uploaded_file, sheet_name="ANEXO", header=None)
-                df_filtro_anexo = processar_escala_complexa(df_raw_anexo)
+            df_raw_anexo = pd.read_excel(uploaded_file, sheet_name="ANEXO", header=None)
+            df_filtro_anexo = processar_escala_complexa(df_raw_anexo)
+            
+            if not df_filtro_anexo.empty:
+                meses_anexo = [m for m in df_filtro_anexo["Mês"].unique() if m and m != "NAN"]
+                mes_sel_anexo = st.multiselect("Selecione os Meses para Análise (Anexo):", meses_anexo, default=meses_anexo)
+                df_final_anexo = df_filtro_anexo[df_filtro_anexo["Mês"].isin(mes_sel_anexo)]
                 
-                if not df_filtro_anexo.empty:
-                    meses_anexo = [m for m in df_filtro_anexo["Mês"].unique() if m and m != "NAN"]
-                    mes_sel_anexo = st.multiselect("Selecione os Meses para Análise (Anexo):", meses_anexo, default=meses_anexo)
-                    df_final_anexo = df_filtro_anexo[df_filtro_anexo["Mês"].isin(mes_sel_anexo)]
-                    
-                    total_geral_anexo = df_final_anexo["Vagas Ocupadas"].sum()
-                    st.metric(label="📈 1. Total Geral de Vagas de Estágio Ocupadas no Anexo", value=f"{total_geral_anexo} Vagas")
-                    st.markdown("---")
-                    
+                total_geral_anexo = df_final_anexo["Vagas Ocupadas"].sum()
+                st.metric(label="📈 1. Total Geral de Vagas de Estágio Ocupadas no Anexo", value=f"{total_geral_anexo} Vagas")
+                st.markdown("---")
+                
