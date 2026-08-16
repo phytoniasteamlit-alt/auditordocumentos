@@ -49,7 +49,7 @@ with st.sidebar:
     else:
         paleta_pasteis = ["#FFB7B2", "#FFDAC1", "#E2F0CB", "#B5EAD7", "#C7CEEA", "#FFC6FF"]
 
-# 4. Cabeçalho Principal Customizado (Atualizado com NEP, NEPEX e Setor)
+# 4. Cabeçalho Principal Customizado (NEP, NEPEX e Setor)
 col_titulo, col_info = st.columns([1.2, 1.8])
 with col_titulo:
     st.markdown("# 📊 Painel de Indicadores")
@@ -73,15 +73,15 @@ st.markdown("---")
 # ⚙️ PROCESSADOR INTELIGENTE DE MATRIZ HOSPITALAR (MÁGICA DO PYTHON)
 # =========================================================================
 def processar_escala_complexa(df_raw):
-    # Preenche células mescladas verticais primárias (Setor e Categoria)
+    # Trata células mescladas verticais primárias (Setor e Categoria)
     df_raw.iloc[:, 0] = df_raw.iloc[:, 0].ffill()
     df_raw.iloc[:, 1] = df_raw.iloc[:, 1].ffill()
     df_raw.iloc[:, 2] = df_raw.iloc[:, 2].ffill()
     
-    # Preenche linhas de cabeçalho da escala (Mês, Dia, Turno)
-    linha_mes = df_raw.iloc[4].ffill()
-    linha_dia = df_raw.iloc[5].ffill()
-    linha_turno = df_raw.iloc[6]
+    # Trata de forma isolada e limpa as linhas de cabeçalho da escala (Mês, Dia, Turno)
+    linha_mes = df_raw.iloc.ffill()
+    linha_dia = df_raw.iloc.ffill()
+    linha_turno = df_raw.iloc
     
     dados_estruturados = []
     
@@ -89,9 +89,9 @@ def processar_escala_complexa(df_raw):
     for idx_linha in range(7, len(df_raw)):
         linha_atual = df_raw.iloc[idx_linha]
         
-        setor_macro = str(linha_atual.iloc[0]).strip()
-        sub_setor = str(linha_atual.iloc[1]).strip()
-        categoria = str(linha_atual.iloc[2]).strip()
+        setor_macro = str(linha_atual.iloc).strip()
+        sub_setor = str(linha_atual.iloc).strip()
+        categoria = str(linha_atual.iloc).strip()
         
         if sub_setor and sub_setor != "None" and sub_setor != "nan" and sub_setor != setor_macro:
             setor_final = f"{setor_macro} - {sub_setor}"
@@ -147,27 +147,33 @@ if uploaded_file is not None:
                 mes_sel_hcid = st.multiselect("Selecione os Meses para Análise (HCID):", meses_hcid, default=meses_hcid)
                 df_final_hcid = df_filtro_hcid[df_filtro_hcid["Mês"].isin(mes_sel_hcid)]
                 
-                # Gráfico 1 substituído por Card indicador de alta precisão
+                # Card indicador de alta precisão (Gráfico 1 corrigido)
                 total_geral_vagas = df_final_hcid["Vagas Ocupadas"].sum()
                 st.metric(label="📈 1. Total Geral de Vagas de Estágio Ocupadas no HCID", value=f"{total_geral_vagas} Vagas")
                 st.markdown("---")
                 
-                fig2 = px.histogram(df_final_hcid, x="Setor", title="2. Total de Setores Disponibilizados para Campo de Estágio no HCID", color_discrete_sequence=[paleta_pasteis[0]])
+                # G2
+                fig2 = px.histogram(df_final_hcid, x="Setor", title="2. Total de Setores Disponibilizados para Campo de Estágio no HCID", color_discrete_sequence=[paleta_pasteis])
                 st.plotly_chart(fig2, use_container_width=True)
                 
+                # G3
                 df_g3 = df_final_hcid.groupby("Setor", as_index=False)["Vagas Ocupadas"].sum()
-                fig3 = px.bar(df_g3, x="Setor", y="Vagas Ocupadas", title="3. Setores Disponibilizados para a Realização de Estágio no HCID (Soma de Vagas)", color_discrete_sequence=[paleta_pasteis[1]], text_auto=True)
+                fig3 = px.bar(df_g3, x="Setor", y="Vagas Ocupadas", title="3. Setores Disponibilizados para a Realização de Estágio no HCID (Soma de Vagas)", color_discrete_sequence=[paleta_pasteis], text_auto=True)
                 st.plotly_chart(fig3, use_container_width=True)
                 
+                # G4
                 fig4 = px.bar(df_final_hcid, x="Setor", y="Vagas Ocupadas", color="Categoria Profissional", title="4. Categorias Profissionais Contempladas no Estágio por Setor no HCID", barmode="group", color_discrete_sequence=paleta_pasteis)
                 st.plotly_chart(fig4, use_container_width=True)
                 
-                fig5 = px.bar(df_g3, x="Vagas Ocupadas", y="Setor", orientation="h", title="5. Total de Vagas de Estágio Disponibilizadas por Setor no HCID", color_discrete_sequence=[paleta_pasteis[2]], text_auto=True)
+                # G5
+                fig5 = px.bar(df_g3, x="Vagas Ocupadas", y="Setor", orientation="h", title="5. Total de Vagas de Estágio Disponibilizadas por Setor no HCID", color_discrete_sequence=[paleta_pasteis], text_auto=True)
                 st.plotly_chart(fig5, use_container_width=True)
                 
+                # G6
                 fig6 = px.pie(df_final_hcid, names="Turno", values="Vagas Ocupadas", title="6. Total de Vagas de Estágio do HCID por Turno", color_discrete_sequence=paleta_pasteis)
                 st.plotly_chart(fig6, use_container_width=True)
                 
+                # G7
                 fig7 = px.bar(df_final_hcid, x="Dia da Semana", y="Vagas Ocupadas", color="Turno", title="7. Total de Estagiários por Turno, por Dia, no HCID", barmode="group", color_discrete_sequence=paleta_pasteis, text_auto=True)
                 st.plotly_chart(fig7, use_container_width=True)
             else:
@@ -175,23 +181,26 @@ if uploaded_file is not None:
 
         # --- BLOCO VISUAL: ANEXO ---
         with aba_anexo:
-            try:
-                df_raw_anexo = pd.read_excel(uploaded_file, sheet_name="ANEXO", header=None)
-                df_filtro_anexo = processar_escala_complexa(df_raw_anexo)
+            df_raw_anexo = pd.read_excel(uploaded_file, sheet_name="ANEXO", header=None)
+            df_filtro_anexo = processar_escala_complexa(df_raw_anexo)
+            
+            if not df_filtro_anexo.empty:
+                meses_anexo = [m for m in df_filtro_anexo["Mês"].unique() if m and m != "NAN"]
+                mes_sel_anexo = st.multiselect("Selecione os Meses para Análise (Anexo):", meses_anexo, default=meses_anexo)
+                df_final_anexo = df_filtro_anexo[df_filtro_anexo["Mês"].isin(mes_sel_anexo)]
                 
-                if not df_filtro_anexo.empty:
-                    meses_anexo = [m for m in df_filtro_anexo["Mês"].unique() if m and m != "NAN"]
-                    mes_sel_anexo = st.multiselect("Selecione os Meses para Análise (Anexo):", meses_anexo, default=meses_anexo)
-                    df_final_anexo = df_filtro_anexo[df_filtro_anexo["Mês"].isin(mes_sel_anexo)]
-                    
-                    total_geral_anexo = df_final_anexo["Vagas Ocupadas"].sum()
-                    st.metric(label="📈 1. Total Geral de Vagas de Estágio Ocupadas no Anexo", value=f"{total_geral_anexo} Vagas")
-                    st.markdown("---")
-                    
-                    fig2_ax = px.histogram(df_final_anexo, x="Setor", title="2. Total de Setores Disponibilizados por Campo de Estágio no Anexo", color_discrete_sequence=[paleta_pasteis[0]])
-                    st.plotly_chart(fig2_ax, use_container_width=True)
-                    
-                    df_g3_ax = df_final_anexo.groupby("Setor", as_index=False)["Vagas Ocupadas"].sum()
-                    fig3_ax = px.bar(df_g3_ax, x="Setor", y="Vagas Ocupadas", title="3. Setores Disponibilizados para a Realização de Estágio no Anexo", color_discrete_sequence=[paleta_pasteis[1]], text_auto=True)
-                    st.plotly_chart(fig3_ax, use_container_width=True)
-                    
+                # Card indicador Anexo
+                total_geral_anexo = df_final_anexo["Vagas Ocupadas"].sum()
+                st.metric(label="📈 1. Total Geral de Vagas de Estágio Ocupadas no Anexo", value=f"{total_geral_anexo} Vagas")
+                st.markdown("---")
+                
+                # G2 Anexo
+                fig2_ax = px.histogram(df_final_anexo, x="Setor", title="2. Total de Setores Disponibilizados por Campo de Estágio no Anexo", color_discrete_sequence=[paleta_pasteis])
+                st.plotly_chart(fig2_ax, use_container_width=True)
+                
+                # G3 Anexo
+                df_g3_ax = df_final_anexo.groupby("Setor", as_index=False)["Vagas Ocupadas"].sum()
+                fig3_ax = px.bar(df_g3_ax, x="Setor", y="Vagas Ocupadas", title="3. Setores Disponibilizados para a Realização de Estágio no Anexo", color_discrete_sequence=[paleta_pasteis], text_auto=True)
+                st.plotly_chart(fig3_ax, use_container_width=True)
+                
+                # G4 Anexo
