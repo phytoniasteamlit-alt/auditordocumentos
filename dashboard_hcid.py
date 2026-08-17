@@ -25,7 +25,7 @@ def extrair_numero(valor):
     v_str = "".join(filter(str.isdigit, str(valor)))
     return int(v_str) if v_str != "" else 0
 
-# --- CABEÇALHO SUPERIOR MANTIDO ---
+# --- CABEÇALHO SUPERIOR ---
 header_left, header_right = st.columns(2)
 header_left.markdown("<h1 style='margin: 0; padding: 0; font-size: 2.2rem;'>📊 Painel de Indicadores de Estágio</h1>", unsafe_allow_html=True)
 header_right.markdown(
@@ -47,32 +47,32 @@ st.sidebar.header("⚙️ Painel de Controle")
 uploaded_file = st.sidebar.file_uploader("Carregar Planilha de Estágios (.xlsx):", type=["xlsx"])
 
 # ==============================================================================
-# 3. MOTOR DE PROCESSAMENTO DA MATRIZ DE CALENDÁRIO DO HCID
+# 3. MOTOR DE PROCESSAMENTO ATUALIZADO PARA PANDAS NOVO
 # ==============================================================================
 if uploaded_file is not None:
     excel_file = pd.ExcelFile(uploaded_file)
     abas_disponiveis = excel_file.sheet_names
     aba_alvo = "HCID_BDD" if "HCID_BDD" in abas_disponiveis else ("HCID" if "HCID" in abas_disponiveis else abas_disponiveis)
     
-    # Carrega a planilha bruta mantendo a integridade de todas as linhas de cabeçalho
+    # Carrega a tabela bruta sem cabeçalho automático
     df_raw = pd.read_excel(uploaded_file, sheet_name=aba_alvo, header=None)
     
-    # Captura as 3 linhas estruturais do cabeçalho do calendário (Meses, Dias, Turnos)
-    linha_meses = df_raw.iloc[4].fillna(method='ffill').fillna("").astype(str).tolist()
-    linha_dias = df_raw.iloc[5].fillna(method='ffill').fillna("").astype(str).tolist()
-    linha_turnos = df_raw.iloc[6].fillna("").astype(str).tolist()
+    # CORREÇÃO PANDAS MODERNO: Usa .ffill(axis=1) para propagar os cabeçalhos mesclados na horizontal
+    linha_meses = df_raw.iloc[3].ffill().fillna("").astype(str).tolist()
+    linha_dias = df_raw.iloc[4].ffill().fillna("").astype(str).tolist()
+    linha_turnos = df_raw.iloc[5].fillna("").astype(str).tolist()
     
-    # Isola as linhas com registros de dados reais (Linha 8 física em diante)
+    # Isola o corpo de dados reais (A partir da Linha 8 física / índice 7)
     df_corpo = df_raw.iloc[7:].copy()
     
-    # Preenchimento em cascata das colunas estruturais mescladas (Setor, Sub-setor, Categoria)
-    df_corpo[0] = df_corpo[0].replace(["nan", "NAN", ""], pd.NA).ffill().fillna("GERAL")
-    df_corpo[1] = df_corpo[1].replace(["nan", "NAN", ""], pd.NA).ffill().fillna("GERAL")
-    df_corpo[2] = df_corpo[2].replace(["nan", "NAN", ""], pd.NA).ffill().fillna("NÃO ESPECIFICADO")
+    # Preenchimento em cascata vertical das informações estruturais dos setores
+    df_corpo.iloc[:, 0] = df_corpo.iloc[:, 0].replace(["nan", "NAN", ""], pd.NA).ffill().fillna("GERAL")
+    df_corpo.iloc[:, 1] = df_corpo.iloc[:, 1].replace(["nan", "NAN", ""], pd.NA).ffill().fillna("GERAL")
+    df_corpo.iloc[:, 2] = df_corpo.iloc[:, 2].replace(["nan", "NAN", ""], pd.NA).ffill().fillna("NÃO ESPECIFICADO")
     
     registros_vagas = []
     
-    # Executa a varredura matricial convertendo a planilha em banco de dados linear
+    # Varredura matricial convertendo a planilha em banco de dados linear
     for _, row in df_corpo.iterrows():
         setor = str(row[0]).strip().upper()
         sub_setor = str(row[1]).strip().upper()
@@ -92,7 +92,7 @@ if uploaded_file is not None:
                 dia_nome = str(linha_dias[col_idx]).strip().upper()
                 turno_nome = str(linha_turnos[col_idx]).strip().upper()
                 
-                # Validação estrita se a coluna atual mapeia um período válido de estágio
+                # Validação se a coluna pertence à matriz de agendamentos temporais
                 if any(m in mes_nome for m in ["AGO", "SET", "OUT", "NOV", "DEZ"]) or "VAGAS" in mes_nome:
                     if "VAGAS" in mes_nome or mes_nome == "": 
                         mes_nome = "AGOSTO"
@@ -112,7 +112,7 @@ if uploaded_file is not None:
     df_master = pd.DataFrame(registros_vagas)
     
     # ==============================================================================
-    # 4. EXIBIÇÃO EM CAIXAS DE TEXTO DESTACADAS (MÉTRICAS EXECUTIVAS PROPOSTAS)
+    # 4. EXIBIÇÃO EM CAIXAS DE TEXTO DESTACADAS (MÉTRICAS EXECUTIVAS)
     # ==============================================================================
     if not df_master.empty:
         st.markdown("### 📋 Resumo Executivo de Capacidade (HCID)")
@@ -134,7 +134,7 @@ if uploaded_file is not None:
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("##### 🗓️ total de estagiário por dia")
         
-        col_seletor, _ = st.columns([1, 3])
+        col_seletor, _ = st.columns(2)
         dias_disponiveis = sorted(df_master["DIA_SEMANA"].unique())
         dia_selecionado = col_seletor.selectbox("Selecione o Dia da Semana para Filtrar os Totais:", dias_disponiveis)
         
@@ -143,12 +143,12 @@ if uploaded_file is not None:
         
         cc1, cc2 = st.columns(2)
         cc1.info(f"🟢 **total de estagiário por dia turno manha ({dia_selecionado}):** {vagas_dia_m} alunos em campo.")
-        cc2.warning(f"orange **total de estagiário por dia turno tarde ({dia_selecionado}):** {vagas_dia_t} alunos em campo.")
+        cc2.warning(f"🟠 **total de estagiário por dia turno tarde ({dia_selecionado}):** {vagas_dia_t} alunos em campo.")
         
         st.markdown("---")
         
         # ==============================================================================
-        # 5. RENDERIZAÇÃO DOS GRÁFICOS INTERATIVOS COM OS NOMES EXATOS SOLICITADOS
+        # 5. RENDERIZAÇÃO DOS GRÁFICOS INTERATIVOS
         # ==============================================================================
         col_g1, col_g2 = st.columns(2)
         
@@ -177,6 +177,8 @@ if uploaded_file is not None:
             fig2.update_traces(textposition="outside", cliponaxis=False)
             st.plotly_chart(fig2, use_container_width=True)
             
-        # --- NOVO GRÁFICO: SEPARAÇÃO CRONOLÓGICA POR MÊS SOLICITADA ---
+        # --- GRÁFICO CRONOLÓGICO POR MÊS SOLICITADO ---
         st.markdown("---")
         st.markdown("### 📅 Distribuição Mensal Organizada de Vagas Ocupadas por Turno")
+        st.caption("Gráfico que separa a volumetria por mês, discriminando a quantidade por turno (Manhã/Tarde) e indicando os setores ocupados.")
+        
