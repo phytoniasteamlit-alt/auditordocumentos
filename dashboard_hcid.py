@@ -69,7 +69,7 @@ else:
 sub_or = "h" if estilo_grafico == "Barras Horizontais" else "v"
 
 # ==============================================================================
-# 3. MOTOR DE PROCESSAMENTO DE DADOS EXECUTIVO
+# 3. MOTOR DE PROCESSAMENTO DE DADOS BLINDADO (BUSCA DINÂMICA)
 # ==============================================================================
 if uploaded_file is not None:
     try:
@@ -92,8 +92,10 @@ if uploaded_file is not None:
             if not sheet_name or sheet_name not in abas_disponiveis:
                 return pd.DataFrame(), pd.DataFrame(), "SETOR_RAW", "SUB_SETOR_RAW", "CATEGORIA_RAW"
             
+            # Carrega a planilha sem cabeçalho para varrer as linhas e achar onde começam os dados reais
             df_bruto = pd.read_excel(uploaded_file, sheet_name=sheet_name, header=None)
             
+            # 1. Localiza a linha correta do cabeçalho
             linha_cabecalho = 0
             for idx, row in df_bruto.iterrows():
                 row_str = " ".join([str(x).upper() for x in row.dropna()])
@@ -101,52 +103,57 @@ if uploaded_file is not None:
                     linha_cabecalho = idx
                     break
             
-            cabecalhos_originais = [str(c).strip().replace('\n', ' ') for c in df_bruto.iloc[linha_cabecalho]]
-            df_aba = df_bruto.iloc[linha_cabecalho+1:].copy()
-            df_aba.columns = cabecalhos_originais
+            # 2. Descobre dinamicamente os índices das colunas analisando as linhas próximas ao cabeçalho
+            cabecalho_linha = df_bruto.iloc[linha_cabecalho]
+            sub_cabecalho_linha = df_bruto.iloc[linha_cabecalho+1] if (linha_cabecalho + 1 < len(df_bruto)) else cabecalho_linha
             
-            col_setor, col_sub, col_cat = None, None, None
-            col_manha, col_tarde = None, None
+            idx_setor, idx_sub, idx_cat = 0,  1,  2
+            idx_manha, idx_tarde = 3,  4
             
-            for idx_c, col_nome in enumerate(df_aba.columns):
-                c_norm = normalizar_texto(col_nome)
-                if "SUB" in c_norm: col_sub = idx_c
-                elif "SETOR" in c_norm or "CAMPO" in c_norm: col_setor = idx_c
-                elif "PROF" in c_norm or "CAT" in c_norm: col_cat = idx_c
-                elif "MANH" in c_norm: col_manha = idx_c
-                elif "TARD" in c_norm: col_tarde = idx_c
+            # Varre as primeiras linhas para identificar onde estão as palavras chaves das colunas
+            for r_idx in range(max(0, linha_cabecalho-2), min(len(df_bruto), linha_cabecalho+3)):
+                for c_idx in range(len(df_bruto.columns)):
+                    celula = normalizar_texto(df_bruto.iloc[r_idx, c_idx])
+                    if "SUB" in celula: idx_sub = c_idx
+                    elif "SETOR" in celula or "CAMPO" in celula: idx_setor = c_idx
+                    elif "PROF" in celula or "CAT" in celula: idx_cat = c_idx
+                    elif "MANH" in celula: idx_manha = c_idx
+                    elif "TARD" in celula: idx_tarde = c_idx
 
-            col_setor = col_setor if col_setor is not None else 0
-            col_sub = col_sub if col_sub is not None else 1
-            col_cat = col_cat if col_cat is not None else 2
-            col_manha = col_manha if col_manha is not None else 3
-            col_tarde = col_tarde if col_tarde is not None else 4
+            # Corta a tabela mantendo apenas os dados úteis
+            df_aba = df_bruto.iloc[linha_cabecalho+1:].copy()
             
+            # Monta o DataFrame final limpo
             df_final = pd.DataFrame()
-            df_final["SETOR_RAW"] = df_aba.iloc[:, col_setor].ffill()
-            df_final["SUB_SETOR_RAW"] = df_aba.iloc[:, col_sub].fillna("")
-            df_final["CATEGORIA_RAW"] = df_aba.iloc[:, col_cat]
+            df_final["SETOR_RAW"] = df_aba.iloc[:, idx_setor].ffill()
+            df_final["SUB_SETOR_RAW"] = df_aba.iloc[:, idx_sub].fillna("")
+            df_final["CATEGORIA_RAW"] = df_aba.iloc[:, idx_cat]
             
+            # Limpa ruídos de linhas vazias e textos de cabeçalho duplicados ou totais fixos do Excel
             df_final = df_final[df_final["CATEGORIA_RAW"].notna()]
+            df_final["CATEGORIA_STR"] = df_final["CATEGORIA_RAW"].astype(str).str.strip()
+            df_final = df_final[(df_final["CATEGORIA_STR"] != "") & (~df_final["CATEGORIA_STR"].str.upper().contains("CATEGOR|PROFISS|TOTAL", na=False))]
             df_final = df_final[~df_final["SETOR_RAW"].astype(str).str.upper().str.contains("TOTAL|QUANTITATIVO|HOSPITAL", na=False)]
-            df_final = df_final[~df_final["CATEGORIA_RAW"].astype(str).str.upper().str.contains("TOTAL|QUANTITATIVO|HOSPITAL", na=False)]
             
+            # Limpeza via Expressão Regular (Regex) para converter textos como "4 por turno" em inteiros puros
             def limpar_vagas(valor):
                 if pd.isna(valor) or str(valor).strip() == "": 
                     return 0
                 v_str = "".join(filter(str.isdigit, str(valor)))
                 return int(v_str) if v_str != "" else 0
             
-            df_final["VAGAS_MANHA"] = df_aba.iloc[:, col_manha].apply(limpar_vagas)
-            df_final["VAGAS_TARDE"] = df_aba.iloc[:, col_tarde].apply(limpar_vagas)
+            df_final["VAGAS_MANHA"] = df_aba.loc[df_final.index, idx_manha].apply(limpar_vagas)
+            df_final["VAGAS_TARDE"] = df_aba.loc[df_final.index, idx_tarde].apply(limpar_vagas)
             df_final["VAGAS_TOTAL"] = df_final["VAGAS_MANHA"] + df_final["VAGAS_TARDE"]
             
+            # Montagem estruturada do identificador combinado setor ➔ subsetor
             df_final["LOCAL_COMBINADO"] = df_final.apply(
                 lambda r: f"{r['SETOR_RAW']} ➔ {r['SUB_SETOR_RAW']}" if (r['SUB_SETOR_RAW'] != "" and str(r['SETOR_RAW']).upper() != str(r['SUB_SETOR_RAW']).upper()) else f"{r['SETOR_RAW']}",
                 axis=1
             )
             df_final["LOCAL_E_PROF"] = df_final["LOCAL_COMBINADO"] + " (" + df_final["CATEGORIA_RAW"].astype(str) + ")"
             
+            # Separação estrutural de dados ativos (com vagas) vs dados inativos (sem vagas alocadas)
             df_ativas = df_final[df_final["VAGAS_TOTAL"] > 0].copy()
             df_inativas = df_final[df_final["VAGAS_TOTAL"] == 0].copy()
             
@@ -156,7 +163,7 @@ if uploaded_file is not None:
         df_anexo, df_anexo_zero, ax_setor, ax_sub, ax_cat = extrair_e_limpar_dados(aba_anexo_real)
         
     except Exception as e:
-        st.error(f"Erro no processamento automático dos dados da planilha: {e}")
+        st.error(f"Erro no processamento dinâmico da planilha: {e}")
         st.stop()
 else:
     st.info("💡 Por favor, arraste ou carregue sua planilha Excel para estruturar os painéis automaticamente.")
@@ -197,18 +204,3 @@ def gerar_texto_distribuicao(df_filtrado):
 # ==============================================================================
 # 4. QUADRO I - HCID (ORGANIZAÇÃO EM ABAS INTERNAS)
 # ==============================================================================
-st.markdown("<h2 style='color: #008080; border-bottom: 2px solid #008080;'>🏢 QUADRO I - Mapeamento de Vagas Exclusivo HCID</h2>", unsafe_allow_html=True)
-
-if not df_hcid.empty:
-    m1, m2 = st.columns(2)
-    t_vagas_hcid = int(df_hcid["VAGAS_TOTAL"].sum())
-    t_setores_hcid = df_hcid["LOCAL_COMBINADO"].nunique()
-    
-    m1.metric(label="📊 1. Total de Vagas de Estágio no HCID (Soma Geral)", value=f"{t_vagas_hcid} Vagas")
-    m2.metric(label="📍 2. Total de Setores Disponibilizados p/ Campo no HCID", value=t_setores_hcid)
-    
-    tab_graficos, tab_sumario, tab_inativos = st.tabs(["📈 Painel Geral de Gráficos", "📝 Sumário de Distribuição Detalhado", "🔍 Áreas Mapeadas Sem Vagas Ativas"])
-    
-    with tab_graficos:
-        col_g1, col_g2 = st.columns(2)
-        
