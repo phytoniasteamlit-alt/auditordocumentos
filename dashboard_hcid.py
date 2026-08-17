@@ -110,7 +110,7 @@ if uploaded_file is not None:
     df_hcid = extrair_dados_aba_especifica(uploaded_file, 0)
     df_anexos = extrair_dados_aba_especifica(uploaded_file, 1) if len(abas_planilha) > 1 else pd.DataFrame()
 
-    # Criação das abas visuais do Streamlit no topo
+    # CORREÇÃO: Nome corrigido da guia para "Unidades Anexas" com emoji corporativo
     tab_hcid, tab_anexos = st.tabs(["🏥 Hospital Geral (HCID)", "🏢 Unidades Anexas"])
 
     # --------------------------------==========================================
