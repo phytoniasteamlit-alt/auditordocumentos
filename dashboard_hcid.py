@@ -60,35 +60,33 @@ else:
     cor_sequencia = ["#008080", "#4682B4", "#20B2AA", "#5F9EA0", "#B0C4DE"]
 
 # ==============================================================================
-# 3. MOTOR DE PROCESSAMENTO DE DADOS (Mapeamento Inteligente por Aba)
+# 3. MOTOR DE PROCESSAMENTO DE DADOS EXECUTIVO
 # ==============================================================================
 if uploaded_file is not None:
     try:
         excel_file = pd.ExcelFile(uploaded_file)
         abas_disponiveis = excel_file.sheet_names
         
-        # Localização exata da aba HCID
         aba_hcid_real = None
         for opcao in ["HCID_BDD", "HCID", "HCID1", "DADOS"]:
             if opcao in abas_disponiveis:
                 aba_hcid_real = opcao
                 break
                 
-        # Localização exata da aba ANEXO
         aba_anexo_real = None
         for opcao in ["ANEXO", "ANEXO2", "ANEXOS"]:
             if opcao in abas_disponiveis:
                 aba_anexo_real = opcao
                 break
         
-        # Função de mapeamento e tratamento de dados corrigida
         def extrair_e_limpar_dados(sheet_name):
             if not sheet_name or sheet_name not in abas_disponiveis:
                 return pd.DataFrame(), "SETOR", "SUB_SETOR", "CATEGORIA"
             
+            # Carrega a planilha sem cabeçalho para fazer a varredura manual
             df_bruto = pd.read_excel(uploaded_file, sheet_name=sheet_name, header=None)
             
-            # Encontra a linha de cabeçalho
+            # Localiza a linha correta das colunas (Ex: linha onde tem "Setor" ou "Categorias")
             linha_cabecalho = 0
             for idx, row in df_bruto.iterrows():
                 row_str = " ".join([str(x).upper() for x in row.dropna()])
@@ -96,10 +94,11 @@ if uploaded_file is not None:
                     linha_cabecalho = idx
                     break
             
+            # Corta a tabela a partir da linha localizada
             df_aba = df_bruto.iloc[linha_cabecalho+1:].copy()
             valores_cabecalho = [str(c).strip().replace('\n', ' ') for c in df_bruto.iloc[linha_cabecalho]]
             
-            # Corrige colunas nulas geradas por mesclagem lateral
+            # Tratamento de colunas com mesmo nome vindas do Excel
             novas_colunas = []
             ultima_coluna_valida = "COLUNA"
             for col in valores_cabecalho:
@@ -110,56 +109,47 @@ if uploaded_file is not None:
                     novas_colunas.append(ultima_coluna_valida)
             df_aba.columns = novas_colunas
             
-            # Busca textual dos cabeçalhos estruturais
-            c_setor, c_sub, c_cat = None, None, None
-            for col in set(df_aba.columns):
-                col_upper = col.upper()
-                if "SUB" in col_upper: c_sub = col
-                elif "SETOR" in col_upper or "CAMPO" in col_upper: c_setor = col
-                elif "PROF" in col_upper or "CAT" in col_upper: c_cat = col
+            # Renomeia por posição física para garantir segurança total contra erros de digitação
+            df_aba = df_aba.rename(columns={
+                df_aba.columns[0]: "SETOR_RAW",
+                df_aba.columns[1]: "SUB_SETOR_RAW",
+                df_aba.columns[2]: "CATEGORIA_RAW"
+            })
             
-            # Correção posicional segura para evitar ambiguidade de séries do pandas
-            c_setor = c_setor if c_setor is not None else df_aba.columns[0]
-            c_sub = c_sub if c_sub is not None else (df_aba.columns[1] if len(df_aba.columns) > 1 else df_aba.columns[0])
-            c_cat = c_cat if c_cat is not None else (df_aba.columns[2] if len(df_aba.columns) > 2 else df_aba.columns[0])
+            # Preenche os nomes dos setores para as linhas de especialidades de baixo
+            df_aba["SETOR_RAW"] = df_aba["SETOR_RAW"].ffill()
+            df_aba["SUB_SETOR_RAW"] = df_aba["SUB_SETOR_RAW"].fillna("")
             
-            df_aba[c_setor] = df_aba[c_setor].ffill()
-            df_aba[c_sub] = df_aba[c_sub].fillna("")
-            df_aba[c_cat] = df_aba[c_cat].ffill()
+            # Descarta linhas completamente vazias ou que sejam separadores de 'TOTAL' do Excel
+            df_aba = df_aba[df_aba["CATEGORIA_RAW"].notna()]
+            df_aba = df_aba[~df_aba["SETOR_RAW"].astype(str).str.upper().str.contains("TOTAL|QUANTITATIVO|HOSPITAL", na=False)]
+            df_aba = df_aba[~df_aba["CATEGORIA_RAW"].astype(str).str.upper().str.contains("TOTAL|QUANTITATIVO|HOSPITAL", na=False)]
             
+            # Função limpa texto isolando apenas dígitos
             def limpar_vagas(valor):
-                if pd.isna(valor): return 0
+                if pd.isna(valor) or str(valor).strip() == "": 
+                    return 0
                 v_str = "".join(filter(str.isdigit, str(valor)))
                 return int(v_str) if v_str != "" else 0
             
-            # Processamento de turnos baseado no índice posicional das colunas numéricas
-            if df_aba.shape[1] >= 5:
-                df_aba["VAGAS_MANHA"] = df_aba.iloc[:, 3].apply(limpar_vagas)
-                df_aba["VAGAS_TARDE"] = df_aba.iloc[:, 4].apply(limpar_vagas)
-            else:
-                df_aba["VAGAS_MANHA"] = df_aba.iloc[:, -1].apply(limpar_vagas)
-                df_aba["VAGAS_TARDE"] = 0
-                
+            # Captura Manhã (Coluna índice 3) e Tarde (Coluna índice 4)
+            df_aba["VAGAS_MANHA"] = df_aba.iloc[:, 3].apply(limpar_vagas)
+            df_aba["VAGAS_TARDE"] = df_aba.iloc[:, 4].apply(limpar_vagas)
             df_aba["VAGAS_TOTAL"] = df_aba["VAGAS_MANHA"] + df_aba["VAGAS_TARDE"]
             
+            # Monta o nome combinado estruturado para os eixos dos gráficos
             df_aba["LOCAL_COMBINADO"] = df_aba.apply(
-                lambda r: f"{r[c_setor]}" if (not r[c_sub] or str(r[c_setor]).upper() == str(r[c_sub]).upper() or str(r[c_sub]).strip() == "") else f"{r[c_setor]} - {r[c_sub]}",
+                lambda r: f"{r['SETOR_RAW']}" if (not r['SUB_SETOR_RAW'] or str(r['SETOR_RAW']).upper() == str(r['SUB_SETOR_RAW']).upper() or str(r['SUB_SETOR_RAW']).strip() == "") else f"{r['SETOR_RAW']} - {r['SUB_SETOR_RAW']}",
                 axis=1
             )
             
-            # Expurgar linhas inválidas e totais estáticos da tabela
-            df_aba = df_aba[
-                (~df_aba[c_setor].astype(str).str.upper().str.contains("TOTAL|QUANTITATIVO|HOSPITAL", na=False)) & 
-                (df_aba["VAGAS_TOTAL"] > 0)
-            ]
-            return df_aba, c_setor, c_sub, c_cat
+            return df_aba, "SETOR_RAW", "SUB_SETOR_RAW", "CATEGORIA_RAW"
 
-        # Processamento isolado de cada bloco
         df_hcid, hc_setor, hc_sub, hc_cat = extrair_e_limpar_dados(aba_hcid_real)
         df_anexo, ax_setor, ax_sub, ax_cat = extrair_e_limpar_dados(aba_anexo_real)
         
     except Exception as e:
-        st.error(f"Erro no processamento da planilha: {e}")
+        st.error(f"Erro no processamento automático dos dados da planilha: {e}")
         st.stop()
 else:
     st.info("💡 Por favor, arraste ou carregue sua planilha Excel para estruturar os painéis automaticamente.")
@@ -184,15 +174,18 @@ if not df_hcid.empty:
     with c1:
         df_g3 = df_hcid.groupby("LOCAL_COMBINADO")["LOCAL_COMBINADO"].count().reset_index(name="Contagem")
         fig3 = px.bar(df_g3, x="Contagem", y="LOCAL_COMBINADO", orientation="h", title="3. Setores Disponibilizados para Estágio (HCID)", color_discrete_sequence=["#008080"])
+        fig3.update_layout(yaxis={'categoryorder':'total ascending'})
         st.plotly_chart(fig3, use_container_width=True)
         
         df_g5 = df_hcid.groupby("LOCAL_COMBINADO")["VAGAS_TOTAL"].sum().reset_index()
         fig5 = px.bar(df_g5, x="VAGAS_TOTAL", y="LOCAL_COMBINADO", orientation="h", title="5. Total de Vagas Disponibilizadas por Setor (HCID)", color_discrete_sequence=["#4682B4"])
+        fig5.update_layout(yaxis={'categoryorder':'total ascending'})
         st.plotly_chart(fig5, use_container_width=True)
 
     with c2:
         df_g4 = df_hcid.groupby(["LOCAL_COMBINADO", hc_cat])["VAGAS_TOTAL"].sum().reset_index()
         fig4 = px.bar(df_g4, x="VAGAS_TOTAL", y="LOCAL_COMBINADO", color=hc_cat, barmode="stack", title="4. Categorias Profissionais Contempladas por Setor (HCID)", color_discrete_sequence=cor_sequencia)
+        fig4.update_layout(yaxis={'categoryorder':'total ascending'})
         st.plotly_chart(fig4, use_container_width=True)
         
         df_g6 = pd.DataFrame({
