@@ -99,18 +99,16 @@ def extrair_e_limpar_dados(uploaded_file, sheet_name):
 
     df_limpo = pd.DataFrame()
     df_limpo["SETOR"] = df_dados.iloc[:, idx_setor].astype(str).str.strip()
-    # Substitui strings vazias ou nulas por NaN real para o ffill funcionar corretamente repassando o setor pai
     df_limpo["SETOR"] = df_limpo["SETOR"].replace(["nan", "NAN", ""], pd.NA).ffill()
     
     df_limpo["SUB_SETOR"] = df_dados.iloc[:, idx_sub].fillna("GERAL").astype(str).str.strip().replace(["nan", "NAN", ""], "GERAL")
     df_limpo["CATEGORIA"] = df_dados.iloc[:, idx_cat].fillna("NÃO ESPECIFICADO").astype(str).str.strip()
     
-    # Extração isolada e correta utilizando os novos índices combinados
+    # Extração isolada baseada nos índices remapeados
     df_limpo["MANHÃ"] = df_dados.iloc[:, idx_manha].apply(extrair_inteiro)
     df_limpo["TARDE"] = df_dados.iloc[:, idx_tarde].apply(extrair_inteiro)
     df_limpo["TOTAL_VAGAS"] = df_limpo["MANHÃ"] + df_limpo["TARDE"]
     
-    # Limpa linhas vazias, de metadados ou de totais parciais da planilha
     linhas_validas = []
     for _, row in df_limpo.iterrows():
         txt_s = str(row["SETOR"]).upper()
@@ -205,13 +203,15 @@ def renderizar_painel_etapas(df_alvo, nome_aba_excel, chave_unica):
         st.dataframe(df_alvo[["SETOR", "SUB_SETOR", "CATEGORIA", "MANHÃ", "TARDE", "TOTAL_VAGAS"]], use_container_width=True)
 
 # ==============================================================================
-# 5. EXECUÇÃO DO FLUXO PRINCIPAL
+# 5. EXECUÇÃO DO FLUXO PRINCIPAL (CORRIGIDO SEM CONDICIONAIS INCOMPLETAS)
 # ==============================================================================
 if uploaded_file is not None:
     excel_file = pd.ExcelFile(uploaded_file)
     abas_disponiveis = excel_file.sheet_names
     
+    # Identifica as abas disponíveis de maneira sequencial e segura
     aba_hcid_real = next((op for op in ["HCID_BDD", "HCID", "HCID1", "DADOS"] if op in abas_disponiveis), abas_disponiveis[0])
     
+    # Define a aba de anexos: procura termos conhecidos, caso contrário pega a 2ª aba se existir
     aba_anexo_real = next((op for op in ["ANEXO", "ANEXO2", "ANEXOS"] if op in abas_disponiveis), None)
-    if aba_anexo_real is None and len(abas_disponiveis) > 1:
+    if not aba_anexo_real and len(abas_disponiveis) > 1:
