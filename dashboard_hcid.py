@@ -25,7 +25,7 @@ def extrair_numero(valor):
     v_str = "".join(filter(str.isdigit, str(valor)))
     return int(v_str) if v_str != "" else 0
 
-# --- CABEÇALHO SUPERIOR MANTIDO ---
+# --- CABEÇALHO SUPERIOR ---
 header_left, header_right = st.columns(2)
 header_left.markdown("<h1 style='margin: 0; padding: 0; font-size: 2.2rem;'>📊 Painel de Indicadores de Estágio</h1>", unsafe_allow_html=True)
 header_right.markdown(
@@ -47,25 +47,24 @@ st.sidebar.header("⚙️ Painel de Controle")
 uploaded_file = st.sidebar.file_uploader("Carregar Planilha de Estágios (.xlsx):", type=["xlsx"])
 
 # ==============================================================================
-# 3. MOTOR DE PROCESSAMENTO DE DADOS ADAPTADO (MÉTODO SEQUENCIAL)
+# 3. MOTOR DE PROCESSAMENTO MATRICIAL (CORREÇÃO DE SINAL DE TURNOS)
 # ==============================================================================
 if uploaded_file is not None:
     excel_file = pd.ExcelFile(uploaded_file)
     abas_disponiveis = excel_file.sheet_names
     aba_alvo = "HCID_BDD" if "HCID_BDD" in abas_disponiveis else ("HCID" if "HCID" in abas_disponiveis else abas_disponiveis)
     
-    # Carrega a tabela mapeando as colunas de forma estrita desde o topo
     df_raw = pd.read_excel(uploaded_file, sheet_name=aba_alvo, header=None)
     
-    # CORREÇÃO CRÍTICA: Aplica o ffill horizontal diretamente nas séries extraídas das linhas 3, 4 e 5 físicas
+    # CORREÇÃO CRÍTICA: Aplica ffill() horizontal em TODOS os cabeçalhos para não deixar turnos vazios se perderem
     linha_meses = pd.Series(df_raw.iloc[3, :]).ffill().fillna("").astype(str).tolist()
     linha_dias = pd.Series(df_raw.iloc[4, :]).ffill().fillna("").astype(str).tolist()
-    linha_turnos = pd.Series(df_raw.iloc[5, :]).fillna("").astype(str).tolist()
+    linha_turnos = pd.Series(df_raw.iloc[5, :]).ffill().fillna("").astype(str).tolist() # Adicionado ffill() aqui
     
-    # Define o início do corpo de dados real (Linha 8 física / índice 7)
+    # Isola o corpo de dados reais (A partir da Linha 8 física / índice 7)
     df_corpo = df_raw.iloc[7:].copy().reset_index(drop=True)
     
-    # Preenchimento em cascata estrutural (Setor, Sub-setor, Categoria) para células vazias
+    # Preenchimento em cascata vertical das colunas estruturais mescladas
     df_corpo.iloc[:, 0] = df_corpo.iloc[:, 0].replace(["nan", "NAN", ""], pd.NA).ffill().fillna("GERAL")
     df_corpo.iloc[:, 1] = df_corpo.iloc[:, 1].replace(["nan", "NAN", ""], pd.NA).ffill().fillna("GERAL")
     df_corpo.iloc[:, 2] = df_corpo.iloc[:, 2].replace(["nan", "NAN", ""], pd.NA).ffill().fillna("NÃO ESPECIFICADO")
@@ -73,22 +72,19 @@ if uploaded_file is not None:
     registros_vagas = []
     num_colunas_total = len(df_raw.columns)
     
-    # Varredura sequencial direta coluna por coluna
     for idx_row in range(len(df_corpo)):
         setor = str(df_corpo.iloc[idx_row, 0]).strip().upper()
         sub_setor = str(df_corpo.iloc[idx_row, 1]).strip().upper()
         categoria = str(df_corpo.iloc[idx_row, 2]).strip().upper()
         
-        # Filtro de contenção para ignorar linhas de divisórias ou totais
         if "TOTAL" in setor or "TOTAL" in categoria or categoria == "" or setor == "SETOR" or setor == "GERAL":
             continue
             
-        # Mapeia as colunas de dados a partir do índice de calendário 8
         for col_idx in range(8, num_colunas_total):
             vaga_bruta = df_corpo.iloc[idx_row, col_idx]
             qtd_vagas = extrair_numero(vaga_bruta)
             
-            # Recuperação em cascata se a célula diária estiver em branco
+            # Se a célula estiver zerada mas possuir registro ativo, tenta herdar do cabeçalho D ou E
             if qtd_vagas == 0:
                 turno_atual = str(linha_turnos[col_idx]).strip().upper()
                 vaga_padrao_celula = df_corpo.iloc[idx_row, 3] if "MANH" in turno_atual else df_corpo.iloc[idx_row, 4]
@@ -100,12 +96,12 @@ if uploaded_file is not None:
                 dia_name = str(linha_dias[col_idx]).strip().upper()
                 turno_name = str(linha_turnos[col_idx]).strip().upper()
                 
-                # Consolidação cronológica estruturada
                 if any(m in mes_name for m in ["AGO", "SET", "OUT", "NOV", "DEZ"]) or "VAGAS" in mes_name:
                     if "VAGAS" in mes_name or mes_name == "": 
                         mes_name = "AGOSTO"
-                    if "MANH" not in turno_name and "TARD" not in turno_name:
-                        turno_name = "MANHÃ" if "MANH" in dia_name else "TARDE"
+                        
+                    # Mapeamento do Turno corrigido baseado no cabeçalho ffill horizontal
+                    final_turno = "MANHÃ" if "MANH" in turno_name or "MANH" in dia_name else "TARDE"
                         
                     registros_vagas.append({
                         "SETOR": setor,
@@ -113,25 +109,23 @@ if uploaded_file is not None:
                         "CATEGORIA": categoria,
                         "MÊS": mes_name,
                         "DIA_SEMANA": dia_name if any(d in dia_name for d in ["SEG", "TER", "QUA", "QUI", "SEX"]) else "SEGUNDA",
-                        "TURNO": "MANHÃ" if "MANH" in turno_name else "TARDE",
+                        "TURNO": final_turno,
                         "VAGAS": qtd_vagas
                     })
                     
     df_master = pd.DataFrame(registros_vagas)
     
     # ==============================================================================
-    # 4. EXIBIÇÃO EM CAIXAS DE TEXTO EXECUTIVAS
+    # 4. EXIBIÇÃO EM CAIXAS DE TEXTO DESTACADAS (MÉTRICAS EXECUTIVAS)
     # ==============================================================================
     if not df_master.empty:
         st.markdown("### 📋 Resumo Executivo de Capacidade (HCID)")
         
-        # Somas consolidadas
         total_vagas_geral = df_master["VAGAS"].sum()
         total_setores = df_master["SETOR"].nunique()
         total_m_geral = df_master[df_master["TURNO"] == "MANHÃ"]["VAGAS"].sum()
         total_t_geral = df_master[df_master["TURNO"] == "TARDE"]["VAGAS"].sum()
         
-        # Caixas de texto requisitadas na nova estratégia
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Total de vagas de estágio geral HCID", f"{total_vagas_geral} Vagas")
         c2.metric("Total de setores disponibilizados p/ campo de estágio no HCID", f"{total_setores} Setores")
@@ -155,7 +149,7 @@ if uploaded_file is not None:
         st.markdown("---")
         
         # ==============================================================================
-        # 5. RENDERIZAÇÃO DOS GRÁFICOS SOLICITADOS
+        # 5. RENDERIZAÇÃO DOS GRÁFICOS INTERATIVOS EXECUTIVOS
         # ==============================================================================
         col_g1, col_g2 = st.columns(2)
         
@@ -181,3 +175,9 @@ if uploaded_file is not None:
                 color="VAGAS", color_continuous_scale=px.colors.sequential.Bluered, text_auto=True
             )
             fig2.update_layout(showlegend=False, height=335, margin=dict(l=20, r=35, t=10, b=10))
+            fig2.update_traces(textposition="outside", cliponaxis=False)
+            st.plotly_chart(fig2, use_container_width=True)
+            
+        # --- GRÁFICO CRONOLÓGICO MENSAL REQUISITADO ---
+        st.markdown("---")
+        st.markdown("### 📅 Distribuição Mensal Organizada de Vagas Ocupadas por Turno")
