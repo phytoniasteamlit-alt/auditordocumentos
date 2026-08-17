@@ -116,7 +116,7 @@ if uploaded_file is not None:
                 elif "SETOR" in c_norm or "CAMPO" in c_norm: idx_setor = idx_c
                 elif "PROF" in c_norm or "CAT" in c_norm: idx_cat = idx_c
                 elif "MANH" in c_norm: idx_manha = idx_c
-                elif "TARD" in c_norm: col_tarde = idx_c
+                elif "TARD" in c_norm: idx_tarde = idx_c  # CORRIGIDO: alterado de col_tarde para idx_tarde
 
             # Força a conversão das colunas base do Excel para tipos String limpos
             df_final = pd.DataFrame()
@@ -204,5 +204,3 @@ def gerar_texto_distribuicao(df_filtrado):
             total_sub = df_sub["VAGAS_TOTAL"].sum()
             m_sub = df_sub["VAGAS_MANHA"].sum()
             t_sub = df_sub["VAGAS_TARDE"].sum()
-            profissoes = ", ".join(df_sub["CATEGORIA_RAW"].unique())
-            
