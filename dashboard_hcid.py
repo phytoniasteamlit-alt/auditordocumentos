@@ -203,15 +203,14 @@ def renderizar_painel_etapas(df_alvo, nome_aba_excel, chave_unica):
         st.dataframe(df_alvo[["SETOR", "SUB_SETOR", "CATEGORIA", "MANHÃ", "TARDE", "TOTAL_VAGAS"]], use_container_width=True)
 
 # ==============================================================================
-# 5. EXECUÇÃO DO FLUXO PRINCIPAL (CORRIGIDO SEM CONDICIONAIS INCOMPLETAS)
+# 5. EXECUÇÃO DO FLUXO PRINCIPAL (LINHA DEFINITIVA SEM CONDICIONAIS QUEBRADAS)
 # ==============================================================================
 if uploaded_file is not None:
     excel_file = pd.ExcelFile(uploaded_file)
     abas_disponiveis = excel_file.sheet_names
     
-    # Identifica as abas disponíveis de maneira sequencial e segura
+    # Descobre o nome da aba principal
     aba_hcid_real = next((op for op in ["HCID_BDD", "HCID", "HCID1", "DADOS"] if op in abas_disponiveis), abas_disponiveis[0])
     
-    # Define a aba de anexos: procura termos conhecidos, caso contrário pega a 2ª aba se existir
-    aba_anexo_real = next((op for op in ["ANEXO", "ANEXO2", "ANEXOS"] if op in abas_disponiveis), None)
-    if not aba_anexo_real and len(abas_disponiveis) > 1:
+    # Lógica em linha única para a segunda aba (blinda contra IndentationError)
+    aba_anexo_real = next((op for op in ["ANEXO", "ANEXO2", "ANEXOS"] if op in abas_disponiveis), abas_disponiveis[1] if len(abas_disponiveis) > 1 and abas_disponiveis[1] != aba_hcid_real else None)
