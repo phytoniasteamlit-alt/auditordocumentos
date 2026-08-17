@@ -47,46 +47,46 @@ st.sidebar.header("⚙️ Painel de Controle")
 uploaded_file = st.sidebar.file_uploader("Carregar Planilha de Estágios (.xlsx):", type=["xlsx"])
 
 # ==============================================================================
-# 3. MOTOR DE PROCESSAMENTO CORRIGIDO PARA ESTRUTURA MATRICIAL
+# 3. MOTOR DE PROCESSAMENTO MATRICIAL CORRIGIDO (EXTRAÇÃO PURA)
 # ==============================================================================
 if uploaded_file is not None:
     excel_file = pd.ExcelFile(uploaded_file)
     abas_disponiveis = excel_file.sheet_names
-    aba_alvo = "HCID_BDD" if "HCID_BDD" in abas_disponiveis else ("HCID" if "HCID" in abas_disponiveis else abas_disponiveis)
+    aba_alvo = "HCID_BDD" if "HCID_BDD" in abas_disponiveis else ("HCID" if "HCID" in abas_disponiveis else abas_disponiveis[0])
     
-    # Carrega a tabela bruta sem cabeçalho automático
+    # Carrega a tabela bruta mantendo a integridade da grade de colunas
     df_raw = pd.read_excel(uploaded_file, sheet_name=aba_alvo, header=None)
     
-    # Processamento dos cabeçalhos horizontais (Meses na linha 3, Dias na linha 4, Turnos na linha 5)
-    # Extrai cada linha bruta como uma série e propaga as células mescladas na horizontal antes de converter para lista
-    linha_meses = df_raw.iloc[2].ffill().fillna("").astype(str).tolist()
-    linha_dias = df_raw.iloc[3].ffill().fillna("").astype(str).tolist()
-    linha_turnos = df_raw.iloc[4].fillna("").astype(str).tolist()
+    # Processamento dos cabeçalhos horizontais mesclados (Meses = linha 4, Dias = linha 5, Turnos = linha 6 física)
+    # Transpõe temporariamente para aplicar o preenchimento de mesclagem seguro do Pandas
+    linha_meses = df_raw.iloc[3].ffill().fillna("").astype(str).tolist()
+    linha_dias = df_raw.iloc[4].ffill().fillna("").astype(str).tolist()
+    linha_turnos = df_raw.iloc[5].fillna("").astype(str).tolist()
     
     # Isola o corpo de dados reais (A partir da Linha 8 física / índice 7)
     df_corpo = df_raw.iloc[7:].copy()
     
-    # Preenchimento em cascata vertical das colunas estruturais mescladas (Setor, Sub-setor, Categoria)
+    # Preenchimento em cascata vertical das informações estruturais dos blocos
     df_corpo.iloc[:, 0] = df_corpo.iloc[:, 0].replace(["nan", "NAN", ""], pd.NA).ffill().fillna("GERAL")
     df_corpo.iloc[:, 1] = df_corpo.iloc[:, 1].replace(["nan", "NAN", ""], pd.NA).ffill().fillna("GERAL")
     df_corpo.iloc[:, 2] = df_corpo.iloc[:, 2].replace(["nan", "NAN", ""], pd.NA).ffill().fillna("NÃO ESPECIFICADO")
     
     registros_vagas = []
     
-    # Varredura matricial convertendo a planilha em banco de dados linear
-    for _, row in df_corpo.iterrows():
-        # CORREÇÃO: Utiliza o fatiamento correto por índice de posição física da série
-        setor = str(row.iloc[0]).strip().upper()
-        sub_setor = str(row.iloc[1]).strip().upper()
-        categoria = str(row.iloc[2]).strip().upper()
+    # Varredura matricial com extração direta por posição atômica de célula
+    for idx_row in range(len(df_corpo)):
+        # Captura as strings limpas utilizando posicionamento absoluto na linha atual
+        setor = str(df_corpo.iloc[idx_row, 0]).strip().upper()
+        sub_setor = str(df_corpo.iloc[idx_row, 1]).strip().upper()
+        categoria = str(df_corpo.iloc[idx_row, 2]).strip().upper()
         
-        # Filtro rígido para descartar cabeçalhos duplicados, linhas de lixo ou subtotais
+        # Filtro rígido para descartar ruídos, cabeçalhos internos ou divisores
         if "TOTAL" in setor or "TOTAL" in categoria or categoria == "" or setor == "SETOR" or setor == "GERAL":
             continue
             
-        # Percorre as colunas de calendário a partir da coluna indexada 8 (Onde começam as vagas de Agosto)
-        for col_idx in range(8, len(row)):
-            vaga_bruta = row.iloc[col_idx]
+        # Percorre as colunas do calendário a partir da coluna indexada 8 (Início das vagas de Agosto)
+        for col_idx in range(8, df_corpo.shape[1]):
+            vaga_bruta = df_corpo.iloc[idx_row, col_idx]
             qtd_vagas = extrair_numero(vaga_bruta)
             
             if qtd_vagas > 0:
@@ -94,7 +94,7 @@ if uploaded_file is not None:
                 dia_nome = str(linha_dias[col_idx]).strip().upper()
                 turno_nome = str(linha_turnos[col_idx]).strip().upper()
                 
-                # Validação se a coluna pertence à matriz de agendamentos temporais
+                # Validação se a coluna percorrida faz parte do escopo cronológico
                 if any(m in mes_nome for m in ["AGO", "SET", "OUT", "NOV", "DEZ"]) or "VAGAS" in mes_nome:
                     if "VAGAS" in mes_nome or mes_nome == "": 
                         mes_nome = "AGOSTO"
@@ -119,20 +119,20 @@ if uploaded_file is not None:
     if not df_master.empty:
         st.markdown("### 📋 Resumo Executivo de Capacidade (HCID)")
         
-        # Cálculos consolidados para as caixas de texto pedidas
+        # Consolidação matemática
         total_vagas_geral = df_master["VAGAS"].sum()
         total_setores = df_master["SETOR"].nunique()
         total_m_geral = df_master[df_master["TURNO"] == "MANHÃ"]["VAGAS"].sum()
         total_t_geral = df_master[df_master["TURNO"] == "TARDE"]["VAGAS"].sum()
         
-        # Primeira linha de Caixas de Texto (Métricas de Vagas Globais)
+        # Renderização das Caixas de Texto Principais
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Total de vagas de estágio geral HCID", f"{total_vagas_geral} Vagas")
         c2.metric("Total de setores disponibilizados p/ campo de estágio no HCID", f"{total_setores} Setores")
         c3.metric("Total de vagas de estágio do HCID por turno manhã", f"{total_m_geral} M")
         c4.metric("Total de vagas de estágio do HCID tarde", f"{total_t_geral} T")
         
-        # Segunda linha de Caixas de Texto (Auditoria de Alunos por Dia de Semana)
+        # Bloco de Alunos por Dia da Semana
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("##### 🗓️ Total de estagiários por dia")
         
@@ -150,7 +150,7 @@ if uploaded_file is not None:
         st.markdown("---")
         
         # ==============================================================================
-        # 5. RENDERIZAÇÃO DOS GRÁFICOS INTERATIVOS SOLICITADOS
+        # 5. RENDERIZAÇÃO DOS GRÁFICOS INTERATIVOS EXECUTIVOS
         # ==============================================================================
         col_g1, col_g2 = st.columns(2)
         
@@ -179,5 +179,5 @@ if uploaded_file is not None:
             fig2.update_traces(textposition="outside", cliponaxis=False)
             st.plotly_chart(fig2, use_container_width=True)
             
-        # --- GRÁFICO CRONOLÓGICO POR MÊS SOLICITADO ---
+        # --- GRÁFICO CRONOLÓGICO MENSAL SOLICITADO ---
         st.markdown("---")
