@@ -61,14 +61,14 @@ else:
     cor_sequencia = ["#008080", "#4682B4", "#20B2AA", "#5F9EA0", "#B0C4DE"]
 
 # ==============================================================================
-# 3. MOTOR DE PROCESSAMENTO ULTRA-FLEXÍVEL (MAPEAMENTO AUTOMÁTICO DE ABAS)
+# 3. MOTOR DE PROCESSAMENTO DE DADOS BLINDADO E INDEXADO
 # ==============================================================================
 if uploaded_file is not None:
     try:
         excel_file = pd.ExcelFile(uploaded_file)
         abas_disponiveis = excel_file.sheet_names
         
-        # ESTRATÉGIA INTELIGENTE: Pega por posição caso os nomes não batam perfeitamente
+        # Mapeamento Dinâmico por nomes conhecidos ou fallback por posição física na planilha
         aba_hcid_real = next((op for op in ["HCID_BDD", "HCID", "HCID1", "DADOS"] if op in abas_disponiveis), abas_disponiveis[0])
         
         if len(abas_disponiveis) > 1:
@@ -94,7 +94,7 @@ if uploaded_file is not None:
             df_dados = df_bruto.iloc[linha_cabecalho+1:].copy()
             df_dados.columns = cabecalhos
             
-            # Mapeamento dinâmico de colunas por detecção de texto
+            # Identificação automatizada dos índices das tabelas do Excel
             idx_setor, idx_sub, idx_cat, idx_manha, idx_tarde = 0, 1, 2, 3, 4
             for idx_c, col_nome in enumerate(df_dados.columns):
                 c_norm = normalizar_texto(col_nome)
@@ -110,7 +110,7 @@ if uploaded_file is not None:
                 v_str = "".join(filter(str.isdigit, str(valor)))
                 return int(v_str) if v_str != "" else 0
 
-            # Estruturação limpa das colunas
+            # Criação isolada do DataFrame estruturado por tipo de coluna
             df_limpo = pd.DataFrame()
             df_limpo["SETOR"] = df_dados.iloc[:, idx_setor].astype(str).str.strip().ffill()
             df_limpo["SUB_SETOR"] = df_dados.iloc[:, idx_sub].fillna("GERAL").astype(str).str.strip()
@@ -120,7 +120,7 @@ if uploaded_file is not None:
             df_limpo["TARDE"] = df_dados.iloc[:, idx_tarde].apply(extrair_inteiro)
             df_limpo["TOTAL_VAGAS"] = df_limpo["MANHÃ"] + df_limpo["TARDE"]
             
-            # Remove linhas de lixo ou subtotais
+            # Filtro inteligente de lixo de dados ou linhas de metadados
             linhas_validas = []
             for _, row in df_limpo.iterrows():
                 txt_s = str(row["SETOR"]).upper()
