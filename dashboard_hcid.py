@@ -61,7 +61,7 @@ else:
     cor_sequencia = ["#008080", "#4682B4", "#20B2AA", "#5F9EA0", "#B0C4DE"]
 
 # ==============================================================================
-# 3. MOTOR DE PROCESSAMENTO DE DADOS BLINDADO
+# 3. MOTOR DE PROCESSAMENTO DE DADOS CORRIGIDO E ALINHADO
 # ==============================================================================
 if uploaded_file is not None:
     try:
@@ -77,7 +77,7 @@ if uploaded_file is not None:
             
             df_bruto = pd.read_excel(uploaded_file, sheet_name=sheet_name, header=None)
             
-            # Localiza a linha do cabeçalho estrutural buscando palavras-chave comuns
+            # Localiza a linha do cabeçalho estrutural
             linha_cabecalho = 0
             for idx, row in df_bruto.iterrows():
                 row_str = " ".join([str(x).upper() for x in row.dropna()])
@@ -89,6 +89,7 @@ if uploaded_file is not None:
             df_dados = df_bruto.iloc[linha_cabecalho+1:].copy()
             df_dados.columns = cabecalhos
             
+            # Identificação estrita dos índices das colunas
             idx_setor, idx_sub, idx_cat, idx_manha, idx_tarde = 0, 1, 2, 3, 4
             for idx_c, col_nome in enumerate(df_dados.columns):
                 c_norm = normalizar_texto(col_nome)
@@ -104,15 +105,18 @@ if uploaded_file is not None:
                 v_str = "".join(filter(str.isdigit, str(valor)))
                 return int(v_str) if v_str != "" else 0
 
+            # Construção explícita do DataFrame para garantir alinhamento dos turnos
             df_limpo = pd.DataFrame()
             df_limpo["SETOR"] = df_dados.iloc[:, idx_setor].astype(str).str.strip().ffill()
             df_limpo["SUB_SETOR"] = df_dados.iloc[:, idx_sub].fillna("GERAL").astype(str).str.strip()
             df_limpo["CATEGORIA"] = df_dados.iloc[:, idx_cat].fillna("NÃO ESPECIFICADO").astype(str).str.strip()
             
+            # Extração direta e independente baseada nos índices mapeados acima
             df_limpo["MANHÃ"] = df_dados.iloc[:, idx_manha].apply(extrair_inteiro)
             df_limpo["TARDE"] = df_dados.iloc[:, idx_tarde].apply(extrair_inteiro)
             df_limpo["TOTAL_VAGAS"] = df_limpo["MANHÃ"] + df_limpo["TARDE"]
             
+            # Limpeza de ruídos textuais (Linhas de "Total")
             linhas_validas = []
             for _, row in df_limpo.iterrows():
                 txt_s = str(row["SETOR"]).upper()
@@ -140,10 +144,13 @@ else:
 # ==============================================================================
 tab_hcid, tab_anexos = st.tabs(["🏥 Hospital Geral (HCID)", "🏢 Unidades Anexas"])
 
-def renderizar_painel_etapas(df_alvo, chave_unica):
+def renderizar_painel_etapas(df_alvo, nome_aba_excel, chave_unica):
     if df_alvo.empty:
-        st.warning("Nenhum dado válido ou ativo foi processado para esta unidade.")
+        st.warning(f"Nenhum dado válido ou ativo foi processado para a aba '{nome_aba_excel}'.")
         return
+
+    # Exibe a origem do dado para controle do usuário
+    st.caption(f"📂 Fonte dos dados: Aba **'{nome_aba_excel}'** identificada no Excel.")
 
     # --- TOP CARD METRICS ---
     total_geral = df_alvo["TOTAL_VAGAS"].sum()
@@ -196,7 +203,6 @@ def renderizar_painel_etapas(df_alvo, chave_unica):
         df_melted = df_melted[df_melted["VAGAS"] > 0]
         
         if not df_melted.empty:
-            # CORREÇÃO DA SINTAXE: Parêntese fechado perfeitamente
             df_melted["SUB_E_CAT"] = df_melted["SUB_SETOR"] + " (" + df_melted["CATEGORIA"] + ")"
             
             fig_detalhe = px.bar(
@@ -214,12 +220,3 @@ def renderizar_painel_etapas(df_alvo, chave_unica):
             st.info("Nenhuma vaga ativa encontrada para os parâmetros do setor selecionado.")
 
     st.markdown("---")
-    with st.expander("📄 Ver tabela de dados tratados desta unidade"):
-        st.dataframe(df_alvo[["SETOR", "SUB_SETOR", "CATEGORIA", "MANHÃ", "TARDE", "TOTAL_VAGAS"]], use_container_width=True)
-
-# Renderização finalizada
-with tab_hcid:
-    renderizar_painel_etapas(df_hcid, "hcid")
-
-with tab_anexos:
-    renderizar_painel_etapas(df_anexo, "anexos")
