@@ -47,18 +47,17 @@ st.sidebar.header("⚙️ Painel de Controle")
 uploaded_file = st.sidebar.file_uploader("Carregar Planilha de Estágios (.xlsx):", type=["xlsx"])
 
 # ==============================================================================
-# 3. MOTOR DE PROCESSAMENTO MATRICIAL CORRIGIDO (EXTRAÇÃO PURA)
+# 3. MOTOR DE PROCESSAMENTO MATRICIAL CORRIGIDO
 # ==============================================================================
 if uploaded_file is not None:
     excel_file = pd.ExcelFile(uploaded_file)
     abas_disponiveis = excel_file.sheet_names
-    aba_alvo = "HCID_BDD" if "HCID_BDD" in abas_disponiveis else ("HCID" if "HCID" in abas_disponiveis else abas_disponiveis[0])
+    aba_alvo = "HCID_BDD" if "HCID_BDD" in abas_disponiveis else ("HCID" if "HCID" in abas_disponiveis else abas_disponiveis)
     
-    # Carrega a tabela bruta mantendo a integridade da grade de colunas
+    # Carrega a tabela bruta sem cabeçalho automático
     df_raw = pd.read_excel(uploaded_file, sheet_name=aba_alvo, header=None)
     
-    # Processamento dos cabeçalhos horizontais mesclados (Meses = linha 4, Dias = linha 5, Turnos = linha 6 física)
-    # Transpõe temporariamente para aplicar o preenchimento de mesclagem seguro do Pandas
+    # Processamento horizontal das linhas de cabeçalho mescladas (Meses, Dias e Turnos)
     linha_meses = df_raw.iloc[3].ffill().fillna("").astype(str).tolist()
     linha_dias = df_raw.iloc[4].ffill().fillna("").astype(str).tolist()
     linha_turnos = df_raw.iloc[5].fillna("").astype(str).tolist()
@@ -66,7 +65,7 @@ if uploaded_file is not None:
     # Isola o corpo de dados reais (A partir da Linha 8 física / índice 7)
     df_corpo = df_raw.iloc[7:].copy()
     
-    # Preenchimento em cascata vertical das informações estruturais dos blocos
+    # Preenchimento em cascata vertical das colunas estruturais de texto
     df_corpo.iloc[:, 0] = df_corpo.iloc[:, 0].replace(["nan", "NAN", ""], pd.NA).ffill().fillna("GERAL")
     df_corpo.iloc[:, 1] = df_corpo.iloc[:, 1].replace(["nan", "NAN", ""], pd.NA).ffill().fillna("GERAL")
     df_corpo.iloc[:, 2] = df_corpo.iloc[:, 2].replace(["nan", "NAN", ""], pd.NA).ffill().fillna("NÃO ESPECIFICADO")
@@ -75,18 +74,18 @@ if uploaded_file is not None:
     
     # Varredura matricial com extração direta por posição atômica de célula
     for idx_row in range(len(df_corpo)):
-        # Captura as strings limpas utilizando posicionamento absoluto na linha atual
-        setor = str(df_corpo.iloc[idx_row, 0]).strip().upper()
-        sub_setor = str(df_corpo.iloc[idx_row, 1]).strip().upper()
-        categoria = str(df_corpo.iloc[idx_row, 2]).strip().upper()
+        # Coleta os textos purificados de forma atômica (.iat) sem metadados do Pandas
+        setor = str(df_corpo.iat[idx_row, 0]).strip().upper()
+        sub_setor = str(df_corpo.iat[idx_row, 1]).strip().upper()
+        categoria = str(df_corpo.iat[idx_row, 2]).strip().upper()
         
-        # Filtro rígido para descartar ruídos, cabeçalhos internos ou divisores
+        # Filtro rígido para ignorar linhas de divisórias textuais e somatórios nativos
         if "TOTAL" in setor or "TOTAL" in categoria or categoria == "" or setor == "SETOR" or setor == "GERAL":
             continue
             
-        # Percorre as colunas do calendário a partir da coluna indexada 8 (Início das vagas de Agosto)
+        # CORREGIDO: range configurado com shape[1] para obter a quantidade exata de colunas da tabela
         for col_idx in range(8, df_corpo.shape[1]):
-            vaga_bruta = df_corpo.iloc[idx_row, col_idx]
+            vaga_bruta = df_corpo.iat[idx_row, col_idx]
             qtd_vagas = extrair_numero(vaga_bruta)
             
             if qtd_vagas > 0:
@@ -181,3 +180,4 @@ if uploaded_file is not None:
             
         # --- GRÁFICO CRONOLÓGICO MENSAL SOLICITADO ---
         st.markdown("---")
+        st.markdown("### 📅 Distribuição Mensal Organizada de Vagas Ocupadas por Turno")
