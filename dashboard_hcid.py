@@ -1,15 +1,30 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import unicodedata
 
 # ==============================================================================
-# 1. CONFIGURAÇÃO DA PÁGINA (Interface Dashboard Executivo)
+# 1. CONFIGURAÇÃO DA PÁGINA
 # ==============================================================================
 st.set_page_config(
-    page_title="Painel Geral de Estágios - HCID & ANEXOS",
+    page_title="Painel de Estágios Executivo - HCID",
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+def normalizar_texto(texto):
+    if pd.isna(texto) or not isinstance(texto, str):
+        return ""
+    texto = texto.strip().upper().replace('\n', ' ').replace('\r', ' ')
+    texto = "".join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
+    return " ".join(texto.split())
+
+def extrair_numero(valor):
+    if pd.isna(valor) or str(valor).strip() == "" or str(valor).strip().lower() == "nan":
+        return 0
+    # Isola apenas os números digitados (ignora "por turno", "vagas", etc.)
+    v_str = "".join(filter(str.isdigit, str(valor)))
+    return int(v_str) if v_str != "" else 0
 
 # --- CABEÇALHO SUPERIOR ---
 header_left, header_right = st.columns(2)
@@ -27,182 +42,145 @@ header_right.markdown(
 st.markdown("---")
 
 # ==============================================================================
-# 2. PAINEL DE CONTROLE (SIDEBAR)
+# 2. SIDEBAR
 # ==============================================================================
 st.sidebar.header("⚙️ Painel de Controle")
 uploaded_file = st.sidebar.file_uploader("Carregar Planilha de Estágios (.xlsx):", type=["xlsx"])
 
 # ==============================================================================
-# 3. MOTOR DE PROCESSAMENTO POR COORDENADAS FÍSICAS ESTRITAS
-# ==============================================================================
-def extrair_e_limpar_dados(uploaded_file, sheet_name):
-    if not sheet_name:
-        return pd.DataFrame()
-    
-    df_bruto = pd.read_excel(uploaded_file, sheet_name=sheet_name, header=None)
-    
-    if df_bruto.empty or len(df_bruto) <= 5:
-        return pd.DataFrame()
-        
-    # Isola os dados começando exatamente da linha onde está escrito "Manhã" e "Tarde" (Linha 5 indexada como 4)
-    df_dados = df_bruto.iloc[4:].copy()
-    
-    # MAPEAMENTO ESTREITO POR COORDENADA FÍSICA DE COLUNA (A=0, B=1, C=2, D=3, E=4)
-    idx_setor = 0  # Coluna A
-    idx_sub   = 1  # Coluna B
-    idx_cat   = 2  # Coluna C
-    idx_manha = 3  # Coluna D
-    idx_tarde = 4  # Coluna E
-
-    def extrair_inteiro(valor):
-        if pd.isna(valor) or str(valor).strip() == "" or str(valor).strip().lower() == "nan": 
-            return None  # Retorna None para o ffill propagar as vagas do topo do bloco
-        v_str = "".join(filter(str.isdigit, str(valor)))
-        return int(v_str) if v_str != "" else 0
-
-    df_limpo = pd.DataFrame()
-    
-    # Tratamento estrutural do Setor Principal considerando mesclagem vertical (ffill)
-    df_limpo["SETOR"] = df_dados.iloc[:, idx_setor].astype(str).str.strip()
-    df_limpo["SETOR"] = df_limpo["SETOR"].replace(["nan", "NAN", ""], pd.NA).ffill()
-    
-    # Tratamento de sub-áreas e profissões
-    df_limpo["SUB_SETOR"] = df_dados.iloc[:, idx_sub].fillna("").astype(str).str.strip().replace(["nan", "NAN"], "")
-    df_limpo["CATEGORIA"] = df_dados.iloc[:, idx_cat].fillna("").astype(str).str.strip().replace(["nan", "NAN"], "")
-    
-    # Extração isolada e limpa das colunas físicas D e E
-    df_limpo["MANHÃ"] = df_dados.iloc[:, idx_manha].apply(extrair_inteiro)
-    df_limpo["TARDE"] = df_dados.iloc[:, idx_tarde].apply(extrair_inteiro)
-    
-    # PREENCHIMENTO EM CASCATA: Alimenta as subprofissões com as vagas do cabeçalho do bloco
-    df_limpo["MANHÃ"] = df_limpo["MANHÃ"].ffill().fillna(0).astype(int)
-    df_limpo["TARDE"] = df_limpo["TARDE"].ffill().fillna(0).astype(int)
-    df_limpo["TOTAL_VAGAS"] = df_limpo["MANHÃ"] + df_limpo["TARDE"]
-    
-    # Filtro rígido para expurgar linhas de cabeçalho, lixo ou totalizadores parciais
-    linhas_validas = []
-    for _, row in df_limpo.iterrows():
-        txt_s = str(row["SETOR"]).upper()
-        txt_c = str(row["CATEGORIA"]).upper()
-        if "TOTAL" in txt_s or "TOTAL" in txt_c or txt_c == "" or "SETOR" in txt_s or "CATEGOR" in txt_c or "MANH" in txt_c or "TARD" in txt_s:
-            linhas_validas.append(False)
-        else:
-            linhas_validas.append(True)
-            
-    df_final = df_limpo[linhas_validas].copy()
-    df_final["SUB_SETOR"] = df_final["SUB_SETOR"].apply(lambda x: "GERAL" if x == "" else x)
-    
-    return df_final[df_final["TOTAL_VAGAS"] > 0]
-
-# ==============================================================================
-# 4. FUNÇÃO DE RENDERIZAÇÃO DO DASHBOARD PROGRESSIVO POR ETAPAS
-# ==============================================================================
-def renderizar_painel_etapas(df_alvo, nome_aba_excel, chave_unica):
-    if df_alvo.empty:
-        st.warning(f"Nenhum dado ativo foi localizado na aba '{nome_aba_excel}'. Verifique o formato do arquivo.")
-        return
-
-    st.caption(f"📂 Fonte dos dados ativa: Aba **'{nome_aba_excel}'**")
-
-    # --- TOP CARD METRICS ---
-    total_geral = df_alvo["TOTAL_VAGAS"].sum()
-    total_m = df_alvo["MANHÃ"].sum()
-    total_t = df_alvo["TARDE"].sum()
-    
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Capacidade Total de Vagas", f"{total_geral} Vagas")
-    m2.metric("Turno Manhã (Total)", f"{total_m} M")
-    m3.metric("Turno Tarde (Total)", f"{total_t} T")
-    
-    st.markdown("---")
-    
-    col_esquerda, col_direita = st.columns(2)
-    
-    with col_esquerda:
-        st.markdown("### 📊 Etapa 1: Visão Macro por Setor")
-        st.caption("Volume macro consolidado por área principal.")
-        
-        df_macro = df_alvo.groupby("SETOR")["TOTAL_VAGAS"].sum().reset_index()
-        df_macro = df_macro.sort_values(by="TOTAL_VAGAS", ascending=True)
-        
-        fig_macro = px.bar(
-            df_macro,
-            x="TOTAL_VAGAS",
-            y="SETOR",
-            orientation="h",
-            labels={"TOTAL_VAGAS": "Total de Vagas", "SETOR": "Setor Principal"},
-            color="TOTAL_VAGAS",
-            color_continuous_scale=px.colors.sequential.Tealgrn,
-            text_auto=True
-        )
-        fig_macro.update_layout(showlegend=False, height=450, margin=dict(l=20, r=35, t=10, b=10))
-        fig_macro.update_traces(textposition="outside", cliponaxis=False)
-        st.plotly_chart(fig_macro, use_container_width=True, key=f"macro_{chave_unica}")
-
-    with col_direita:
-        st.markdown("### 🔍 Etapa 2: Detalhar Sub-Setores e Turnos")
-        st.caption("Filtre um setor para abrir o destrinchamento de sub-areas, turnos e profissões.")
-        
-        setores_disponiveis = sorted(df_alvo["SETOR"].unique())
-        setor_selecionado = st.selectbox("Selecione o Setor Principal:", setores_disponiveis, key=f"sel_{chave_unica}")
-        
-        df_filtrado = df_alvo[df_alvo["SETOR"] == setor_selecionado].copy()
-        
-        df_melted = df_filtrado.melt(
-            id_vars=["SUB_SETOR", "CATEGORIA"],
-            value_vars=["MANHÃ", "TARDE"],
-            var_name="TURNO",
-            value_name="VAGAS"
-        )
-        df_melted = df_melted[df_melted["VAGAS"] > 0]
-        
-        if not df_melted.empty:
-            df_melted["SUB_E_CAT"] = df_melted["SUB_SETOR"] + " (" + df_melted["CATEGORIA"] + ")"
-            
-            fig_detalhe = px.bar(
-                df_melted,
-                x="VAGAS",
-                y="SUB_E_CAT",
-                color="TURNO",
-                orientation="h",
-                labels={"VAGAS": "Quantidade de Vagas", "SUB_E_CAT": "Sub-Setor (Profissão)"},
-                color_discrete_map={"MANHÃ": "#008080", "TARDE": "#FF7F50"},
-                text_auto=True 
-            )
-            fig_detalhe.update_layout(barmode="stack", height=450, margin=dict(l=20, r=35, t=10, b=10))
-            fig_detalhe.update_traces(textposition="inside", insidetextanchor="middle")
-            st.plotly_chart(fig_detalhe, use_container_width=True, key=f"detalhe_{chave_unica}")
-        else:
-            st.info("Nenhuma vaga ativa encontrada para os parâmetros do setor selecionado.")
-
-    st.markdown("---")
-    with st.expander("📄 Ver tabela de dados tratados desta unidade"):
-        st.dataframe(df_alvo[["SETOR", "SUB_SETOR", "CATEGORIA", "MANHÃ", "TARDE", "TOTAL_VAGAS"]], use_container_width=True)
-
-# ==============================================================================
-# 5. EXECUÇÃO DO FLUXO PRINCIPAL (LINHA SEGUIDA TOTALMENTE INDEPENDENTE)
+# 3. PROCESSADOR INTELIGENTE DE MATRIZ DE CALENDÁRIO
 # ==============================================================================
 if uploaded_file is not None:
-    excel_file = pd.ExcelFile(uploaded_file)
-    abas_disponiveis = excel_file.sheet_names
-    
-    # Identifica as abas disponíveis de maneira direta
-    aba_hcid_real = "HCID_BDD" if "HCID_BDD" in abas_disponiveis else abas_disponiveis
-    aba_anexo_real = "ANEXO" if "ANEXO" in abas_disponiveis else ("ANEXO2" if "ANEXO2" in abas_disponiveis else None)
-    
-    df_hcid = extrair_e_limpar_dados(uploaded_file, aba_hcid_real)
-    
-    # Monta as abas visuais do painel principal
-    tab_hcid, tab_anexos = st.tabs(["🏥 Hospital Geral (HCID)", "🏢 Unidades Anexas"])
-    
-    with tab_hcid:
-        renderizar_painel_etapas(df_hcid, aba_hcid_real, "hcid")
+    try:
+        excel_file = pd.ExcelFile(uploaded_file)
+        abas_disponiveis = excel_file.sheet_names
+        aba_alvo = "HCID_BDD" if "HCID_BDD" in abas_disponiveis else ("HCID" if "HCID" in abas_disponiveis else abas_disponiveis[0])
         
-    with tab_anexos:
-        if aba_anexo_real is not None:
-            df_anexo = extrair_e_limpar_dados(uploaded_file, aba_anexo_real)
-            renderizar_painel_etapas(df_anexo, aba_anexo_real, "anexos")
-        else:
-            st.info("Sua planilha possui apenas 1 aba de dados ativos. Se tiver anexos, adicione a segunda aba ao arquivo Excel com o nome ANEXO.")
-else:
-    st.info("💡 Por favor, arraste ou carregue sua planilha Excel para estruturar os painéis automaticamente.")
+        # Carrega a planilha sem cabeçalho automático
+        df_raw = pd.read_excel(uploaded_file, sheet_name=aba_alvo, header=None)
+        
+        # Identifica as linhas estruturais do cabeçalho complexo
+        linha_meses = df_raw.iloc[2].fillna(method='ffill').fillna("").astype(str).tolist() # Linha 3 do Excel
+        linha_dias = df_raw.iloc[3].fillna(method='ffill').fillna("").astype(str).tolist()  # Linha 4 do Excel
+        linha_turnos = df_raw.iloc[4].fillna("").astype(str).tolist()                       # Linha 5 do Excel
+        
+        # Corpo dos dados (Linha 8 física em diante)
+        df_corpo = df_raw.iloc[7:].copy()
+        
+        # Preenchimento em cascata (ffill) para células de setores mescladas verticalmente
+        df_corpo[0] = df_corpo[0].astype(str).str.strip().replace(["nan", "NAN", ""], pd.NA).ffill()
+        df_corpo[1] = df_corpo[1].fillna("GERAL").astype(str).str.strip().replace(["nan", "NAN", ""], "GERAL")
+        df_corpo[2] = df_corpo[2].fillna("").astype(str).str.strip().replace(["nan", "NAN"], "")
+        
+        # Lista para consolidar todas as vagas encontradas na matriz para o formato longo (Melted)
+        registros_vagas = []
+        
+        for idx_row, row in df_corpo.iterrows():
+            setor = row[0]
+            sub_setor = row[1]
+            categoria = row[2]
+            
+            # Ignora linhas de cabeçalho residual ou totais da planilha
+            if "TOTAL" in str(setor).upper() or "TOTAL" in str(categoria).upper() or categoria == "":
+                continue
+                
+            # Varre as colunas de dados a partir da coluna de índice 3 (Coluna D do Excel)
+            for col_idx in range(3, len(row)):
+                vaga_bruta = row[col_idx]
+                qtd_vagas = extrair_numero(vaga_bruta)
+                
+                if qtd_vagas > 0:
+                    mes = str(linha_meses[col_idx]).strip().upper()
+                    dia = str(linha_dias[col_idx]).strip().upper()
+                    turno = str(linha_turnos[col_idx]).strip().upper()
+                    
+                    # Filtro de segurança para validar se a coluna realmente pertence ao calendário
+                    if any(m in mes for m in ["AGO", "SET", "OUT", "NOV", "DEZ"]) or "VAGAS" in mes:
+                        # Limpa nomes padrões caso caia em colunas genéricas de cabeçalho pai
+                        if "VAGAS" in mes or mes == "": mes = "AGOSTO" 
+                        if "MANH" not in turno and "TARD" not in turno: turno = "MANHÃ" if "MANH" in dia else "TARDE"
+                        
+                        registros_vagas.append({
+                            "SETOR": setor,
+                            "SUB_SETOR": sub_setor,
+                            "CATEGORIA": categoria,
+                            "MÊS": mes,
+                            "DIA_SEMANA": dia if any(d in dia for d in ["SEG", "TER", "QUA", "QUI", "SEX"]) else "SEGUNDA",
+                            "TURNO": "MANHÃ" if "MANH" in turno else "TARDE",
+                            "VAGAS": qtd_vagas
+                        })
+                        
+        df_master = pd.DataFrame(registros_vagas)
+        
+        if df_master.empty:
+            st.error("Nenhum dado numérico de vaga foi localizado na matriz do calendário. Verifique o arquivo.")
+            st.stop()
+            
+        # ==============================================================================
+        # 4. EXIBIÇÃO DAS CAIXAS DE TEXTO (METRICAS / CARDS PROPOSTOS)
+# ==============================================================================
+        st.markdown("### 📋 Resumo Executivo de Capacidade (HCID)")
+        
+        # Cálculos macro unificados
+        total_vagas_geral = df_master["VAGAS"].sum()
+        total_setores = df_master["SETOR"].nunique()
+        total_manha = df_master[df_master["TURNO"] == "MANHÃ"]["VAGAS"].sum()
+        total_tarde = df_master[df_master["TURNO"] == "TARDE"]["VAGAS"].sum()
+        
+        # Primeira linha de caixas de texto (Métricas Principais)
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Total de Vagas de Estágio Geral", f"{total_vagas_geral} Vagas")
+        c2.metric("Setores para Campo de Estágio", f"{total_setores} Setores Ativos")
+        c3.metric("Total Turno Manhã (Consolidado)", f"{total_manha} M")
+        c4.metric("Total Turno Tarde (Consolidado)", f"{total_tarde} T")
+        
+        # Segunda linha de caixas de texto (Média Diária Proposta)
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("##### 🗓️ Distribuição Diária de Estagiários")
+        
+        # Agrupamento para descobrir a média de estagiários por dia da semana
+        df_dia_turno = df_master.groupby(["DIA_SEMANA", "TURNO"])["VAGAS"].sum().reset_index()
+        
+        c_dia_m, c_dia_t = st.columns(2)
+        
+        # Cria um seletor interativo para não amontoar os dias da semana
+        dia_selecionado = c_dia_m.selectbox("Selecione o Dia da Semana para Auditar:", sorted(df_master["DIA_SEMANA"].unique()))
+        
+        vagas_dia_m = df_master[(df_master["DIA_SEMANA"] == dia_selecionado) & (df_master["TURNO"] == "MANHÃ")]["VAGAS"].sum()
+        vagas_dia_t = df_master[(df_master["DIA_SEMANA"] == dia_selecionado) & (df_master["TURNO"] == "TARDE")]["VAGAS"].sum()
+        
+        cc1, cc2 = st.columns(2)
+        cc1.info(f"🟢 **Total de Estagiários na {dia_selecionado} (Turno Manhã):** {vagas_dia_m} alunos em campo.")
+        cc2.warning(f"🟠 **Total de Estagiários na {dia_selecionado} (Turno Tarde):** {vagas_dia_t} alunos em campo.")
+
+        st.markdown("---")
+        
+        # ==============================================================================
+        # 5. RENDERIZAÇÃO DOS GRÁFICOS SOLICITADOS
+        # ==============================================================================
+        col_g1, col_g2 = st.columns(2)
+        
+        with col_g1:
+            st.markdown("### 🏢 Setores Disponibilizados para Realização de Estágio no HCID")
+            df_g1 = df_master.groupby("SETOR")["VAGAS"].sum().reset_index().sort_values(by="VAGAS", ascending=True)
+            fig1 = px.bar(
+                df_g1, x="VAGAS", y="SETOR", orientation="h",
+                color="VAGAS", color_continuous_scale=px.colors.sequential.Tealgrn, text_auto=True
+            )
+            fig1.update_layout(showlegend=False, height=400, margin=dict(l=20, r=35, t=10, b=10))
+            fig1.update_traces(textposition="outside", cliponaxis=False)
+            st.plotly_chart(fig1, use_container_width=True)
+
+        with col_g2:
+            st.markdown("### 👩‍⚕️ Categorias Profissionais Contempladas no Estágio por Setor no HCID")
+            setor_filtro_g2 = st.selectbox("Escolha o Setor para Analisar as Profissões:", sorted(df_master["SETOR"].unique()))
+            df_g2 = df_master[df_master["SETOR"] == setor_filtro_g2].groupby("CATEGORIA")["VAGAS"].sum().reset_index().sort_values(by="VAGAS", ascending=True)
+            
+            fig2 = px.bar(
+                df_g2, x="VAGAS", y="CATEGORIA", orientation="h",
+                color="VAGAS", color_continuous_scale=px.colors.sequential.Bluered, text_auto=True
+            )
+            fig2.update_layout(showlegend=False, height=335, margin=dict(l=20, r=35, t=10, b=10))
+            fig2.update_traces(textposition="outside", cliponaxis=False)
+            st.plotly_chart(fig2, use_container_width=True)
+
