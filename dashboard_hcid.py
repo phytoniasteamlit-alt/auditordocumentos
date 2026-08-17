@@ -63,26 +63,24 @@ else:
 
 tipo_grafico_5 = st.sidebar.radio("Estilo dos Gráficos de Setor:", options=["Barras Verticais", "Barras Horizontais"], index=1)
 
-# Lógica robusta de leitura de planilhas para aceitar HCID_BDD de forma inteligente
+# Lógica robusta e inteligente para encontrar as colunas de forma automática
 if uploaded_file is not None:
     try:
         excel_file = pd.ExcelFile(uploaded_file)
         abas_disponiveis = excel_file.sheet_names
         
-        # Ordem de prioridade inteligente para achar a aba do HCID com dados
+        # Localiza de forma flexível qual aba contém os dados do HCID
         aba_hcid_real = None
-        for opcao in ["HCID_BDD", "HCID", "HCID1"]:
+        for opcao in ["HCID_BDD", "HCID", "HCID1", "DADOS"]:
             if opcao in abas_disponiveis:
                 aba_hcid_real = opcao
                 break
-        
-        # Se não achar nenhuma das opções conhecidas, pega a primeira aba que tiver no arquivo
         if not aba_hcid_real:
             aba_hcid_real = abas_disponiveis[0]
                 
-        # Ordem de prioridade inteligente para achar a aba do ANEXO
+        # Localiza de forma flexível a aba de ANEXO
         aba_anexo_real = None
-        for opcao in ["ANEXO", "ANEXO2"]:
+        for opcao in ["ANEXO", "ANEXO2", "ANEXOS"]:
             if opcao in abas_disponiveis:
                 aba_anexo_real = opcao
                 break
@@ -92,35 +90,60 @@ if uploaded_file is not None:
         if aba_anexo_real and aba_anexo_real in abas_disponiveis:
             df_anexo = pd.read_excel(uploaded_file, sheet_name=aba_anexo_real)
         else:
-            # Se não houver a aba de anexos ainda, cria uma tabela vazia com a mesma estrutura para não dar erro
             df_anexo = pd.DataFrame(columns=df_hcid.columns)
-        
-        # Padronização e limpeza forçada de cabeçalhos
-        for df_aba in [df_hcid, df_anexo]:
-            if not df_aba.empty:
+            
+        # Função interna de varredura inteligente para mapear as colunas de forma definitiva
+        def processar_mapeamento_inteligente(df_aba):
+            if df_aba.empty:
+                return df_aba, "SETOR", "SUB_SETOR", "CATEGORIA PROFISSIONAL", "TURNO", "VAGAS"
+            
+            # Limpa espaços em branco dos títulos das colunas
+            df_aba.columns = [str(c).strip() for c in df_aba.columns]
+            
+            c_setor, c_sub, c_cat, c_turno, c_vagas = None, None, None, None, None
+            
+            # 1. Encontra a coluna de Vagas localizando qual delas é numérica de verdade
+            for col in df_aba.columns:
+                v_num = pd.to_numeric(df_aba[col], errors='coerce').dropna()
+                if len(v_num) > 0 and v_num.sum() > len(v_num): 
+                    c_vagas = col
+                    break
+            
+            # 2. Se a busca numérica falhar, procura por aproximação de texto
+            if not c_vagas:
                 for col in df_aba.columns:
-                    df_aba.rename(columns={col: str(col).strip().upper()}, inplace=True)
-                for col in df_aba.columns:
-                    if df_aba[col].dtype == "object":
-                        df_aba[col] = df_aba[col].astype(str).str.strip()
+                    if "VAGA" in col.upper() or "TOTAL" in col.upper() or "QTD" in col.upper():
+                        c_vagas = col
+                        break
+            
+            # 3. Mapeia o resto das colunas de texto por termos aproximados
+            for col in df_aba.columns:
+                if col == c_vagas:
+                    continue
+                col_upper = col.upper()
+                if "SUB" in col_upper: c_sub = col
+                elif "SETOR" in col_upper or "CAMPO" in col_upper: c_setor = col
+                elif "PROF" in col_upper or "CAT" in col_upper: c_cat = col
+                elif "TURN" in col_upper: c_turno = col
+            
+            # Define nomes padrão de segurança caso a planilha venha sem algum título
+            c_setor = c_setor if c_setor else (df_aba.columns[0] if len(df_aba.columns) > 0 else "SETOR")
+            c_sub = c_sub if c_sub else (df_aba.columns[1] if len(df_aba.columns) > 1 else "SUB_SETOR")
+            c_cat = c_cat if c_cat else (df_aba.columns[2] if len(df_aba.columns) > 2 else "CATEGORIA PROFISSIONAL")
+            c_turno = c_turno if c_turno else (df_aba.columns[3] if len(df_aba.columns) > 3 else "TURNO")
+            c_vagas = c_vagas if c_vagas else df_aba.columns[-1]
+            
+            # Limpa os textos internos das células
+            for col in [c_setor, c_sub, c_cat, c_turno]:
+                if col in df_aba.columns and df_aba[col].dtype == "object":
+                    df_aba[col] = df_aba[col].astype(str).str.strip()
                     
-        # Mapeamento dinâmico de colunas para blindar erros de digitação
-        def descobrir_colunas(df_tratar):
-            c_setor, c_sub, c_cat, c_turno, c_vagas = "SETOR", "SUB_SETOR", "CATEGORIA PROFISSIONAL", "TURNO", "VAGAS"
-            for col in df_tratar.columns:
-                if "SUB" in col: c_sub = col
-                elif "SETOR" in col or "CAMPO" in col: c_setor = col
-                elif "PROF" in col or "CAT" in col: c_cat = col
-                elif "TURN" in col: c_turno = col
-                elif "VAGA" in col or "TOTAL" in col or "QTD" in col: c_vagas = col
-            return c_setor, c_sub, c_cat, c_turno, c_vagas
+            # Converte as vagas para números inteiros limpos
+            df_aba[c_vagas] = pd.to_numeric(df_aba[c_vagas], errors='coerce').fillna(0).astype(int)
+            return df_aba, c_setor, c_sub, c_cat, c_turno, c_vagas
 
-        hc_setor, hc_sub, hc_cat, hc_turno, hc_vagas = descobrir_colunas(df_hcid)
-        ax_setor, ax_sub, ax_cat, ax_turno, ax_vagas = descobrir_colunas(df_anexo)
-        
-        df_hcid[hc_vagas] = pd.to_numeric(df_hcid[hc_vagas], errors='coerce').fillna(0).astype(int)
-        if not df_anexo.empty:
-            df_anexo[ax_vagas] = pd.to_numeric(df_anexo[ax_vagas], errors='coerce').fillna(0).astype(int)
+        df_hcid, hc_setor, hc_sub, hc_cat, hc_turno, hc_vagas = processar_mapeamento_inteligente(df_hcid)
+        df_anexo, ax_setor, ax_sub, ax_cat, ax_turno, ax_vagas = processar_mapeamento_inteligente(df_anexo)
         
     except Exception as e:
         st.error(f"Erro crítico no mapeamento das colunas da planilha. Detalhes: {e}")
@@ -179,7 +202,7 @@ r3_c1, r3_c2, r3_c3 = st.columns(3)
 with r3_c1:
     st.subheader("5. Total de Vagas por Sub-Setor no HCID")
     df_g5 = df_hcid_filtrado.groupby(hc_sub)[hc_vagas].sum().reset_index()
-    fig5 = px.bar(df_g5, x="VAGAS", y=hc_sub, orientation="h", color_discrete_sequence=cor_sequencia)
+    fig5 = px.bar(df_g5, x=hc_vagas, y=hc_sub, orientation="h", color_discrete_sequence=cor_sequencia)
     fig5.update_layout(height=450)
     st.plotly_chart(fig5, use_container_width=True)
 
@@ -192,26 +215,3 @@ with r3_c2:
     st.plotly_chart(fig6, use_container_width=True)
 
 with r3_c3:
-    st.subheader("7. Total de Estagiários por Turno por Setor Geral no HCID")
-    df_g7 = df_hcid_filtrado.groupby([hc_setor, hc_turno])[hc_vagas].sum().reset_index()
-    fig7 = px.bar(df_g7, x=hc_setor, y=hc_vagas, color=hc_turno, barmode="group", color_discrete_sequence=px.colors.qualitative.Safe)
-    fig7.update_layout(height=450, xaxis_tickangle=-45)
-    st.plotly_chart(fig7, use_container_width=True)
-
-# ==============================================================================
-# 4. BLOCO 2: GRÁFICOS DO ANEXO
-# ==============================================================================
-st.markdown("<br><br>---", unsafe_allow_html=True)
-st.markdown("<h2 style='color: #d62728;'>🏢 Indicadores Exclusivos - ANEXO</h2>", unsafe_allow_html=True)
-st.markdown("---")
-
-if not df_anexo.empty and ax_cat in df_anexo.columns:
-    categorias_anexo = sorted(df_anexo[ax_cat].dropna().unique().tolist())
-    filtro_cat_anexo = st.sidebar.multiselect("Filtrar Profissões (Anexo):", options=categorias_anexo, default=categorias_anexo)
-    df_anexo_filtrado = df_anexo[df_anexo[ax_cat].isin(filtro_cat_anexo)]
-else:
-    df_anexo_filtrado = df_anexo
-
-ax_r1_c1, ax_r1_col2 = st.columns(2)
-with ax_r1_c1:
-    st.subheader("1. Total de Vagas de Estágio no Anexo")
