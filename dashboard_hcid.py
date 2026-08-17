@@ -14,7 +14,6 @@ st.set_page_config(
 def extrair_numero(valor):
     if pd.isna(valor) or str(valor).strip() == "" or str(valor).strip().lower() == "nan":
         return 0
-    # Remove textos como "por turno" e captura exclusivamente os dígitos numéricos
     v_str = "".join(filter(str.isdigit, str(valor)))
     return int(v_str) if v_str != "" else 0
 
@@ -66,72 +65,98 @@ else:
 is_vert = estilo_grafico == "Barras Verticais"
 
 # ==============================================================================
-# 3. MOTOR DE PROCESSAMENTO LINEAR FOCADO NAS COLUNAS FIXAS D E E
+# 3. MOTOR AMBIDESTRO PROTEGIDO CONTRA SINTAXES DIVERGENTES DE ABAS
 # ==============================================================================
-def processar_vagas_estaticas(uploaded_file, numero_posicao_aba):
+def extrair_dados_seguros(uploaded_file, numero_posicao_aba):
     try:
-        # Lê a tabela pulando as linhas iniciais de título (Começa estritamente nos dados)
-        df_raw = pd.read_excel(uploaded_file, sheet_name=numero_posicao_aba, header=None, skiprows=7)
-        if df_raw.empty:
+        df_raw = pd.read_excel(uploaded_file, sheet_name=numero_posicao_aba, header=None)
+        if df_raw.empty or len(df_raw) <= 7:
             return pd.DataFrame()
             
-        # Mapeamento estrito por posições de colunas físicas (A=0, B=1, C=2, D=3, E=4)
-        df_processado = pd.DataFrame()
-        df_processado["SETOR_RAW"] = df_raw.iloc[:, 0].astype(str).str.strip().ffill()
-        df_processado["SUB_SETOR"] = df_raw.iloc[:, 1].fillna("").astype(str).str.strip()
-        df_processado["CATEGORIA"] = df_raw.iloc[:, 2].fillna("").astype(str).str.strip()
+        # Determina os cabeçalhos de turnos para proteção horizontal
+        linha_turnos = pd.Series(df_raw.iloc[5, :]).ffill().fillna("").astype(str).tolist()
         
-        # Extração direta das colunas fixas D e E de vagas por turno
-        df_processado["MANHÃ"] = df_raw.iloc[:, 3].apply(extrair_numero)
-        df_processado["TARDE"] = df_raw.iloc[:, 4].apply(extrair_numero)
-        df_processado["TOTAL_VAGAS"] = df_processado["MANHÃ"] + df_processado["TARDE"]
+        # Isola o corpo de dados reais (Linha 8 física / índice 7)
+        df_corpo = df_raw.iloc[7:].copy().reset_index(drop=True)
         
-        # Filtro rígido para descartar ruídos e linhas de totalizadores nativos da planilha
-        linhas_validas = []
-        for _, row in df_processado.iterrows():
-            txt_s = str(row["SETOR_RAW"]).upper()
-            txt_c = str(row["CATEGORIA"]).upper()
-            if "TOTAL" in txt_s or "TOTAL" in txt_c or txt_s == "NAN" or (txt_s == "" and txt_c == ""):
-                linhas_validas.append(False)
-            else:
-                linhas_validas.append(True)
+        # Correção vertical em cascata para herdar células mescladas de setores
+        setores_col = df_corpo.iloc[:, 0].astype(str).str.strip().replace(["nan", "NAN", ""], None).ffill().fillna("GERAL")
+        sub_setores_col = df_corpo.iloc[:, 1].astype(str).str.strip().replace(["nan", "NAN", ""], None).ffill().fillna("GERAL")
+        categorias_col = df_corpo.iloc[:, 2].astype(str).str.strip().replace(["nan", "NAN", ""], None).ffill().fillna("NÃO ESPECIFICADO")
+        
+        registros_vagas = []
+        
+        # LÓGICA DE CAPTURA INTELIGENTE POR TIPO DE ABA
+        if numero_posicao_aba == 0:
+            # ABA 1 (HCID_BDD): Lê estritamente as colunas D e E fixas de forma limpa
+            vagas_m_padrao = df_corpo.iloc[:, 3].astype(str).str.strip().replace(["nan", "NAN", ""], None).ffill().fillna("0")
+            vagas_t_padrao = df_corpo.iloc[:, 4].astype(str).str.strip().replace(["nan", "NAN", ""], None).ffill().fillna("0")
+            
+            for idx_row in range(len(df_corpo)):
+                q_m = extrair_numero(vagas_m_padrao.iloc[idx_row])
+                q_t = extrair_numero(vagas_t_padrao.iloc[idx_row])
                 
-        df_final = df_processado[linhas_validas].copy()
-        
-        # Correção crucial: Se a categoria estiver vazia mas tiver vagas, injeta texto padrão para não sumir o setor
-        df_final["CATEGORIA"] = df_final["CATEGORIA"].apply(lambda x: "NÃO ESPECIFICADO" if x == "" else x)
-        df_final["SUB_SETOR"] = df_final["SUB_SETOR"].apply(lambda x: "GERAL" if x == "" else x)
-        
-        return df_final[df_final["TOTAL_VAGAS"] > 0]
+                if q_m > 0:
+                    registros_vagas.append({"SETOR": str(setores_col.iloc[idx_row]).upper(), "SUB_SETOR": str(sub_setores_col.iloc[idx_row]).upper(), "CATEGORIA": str(categorias_col.iloc[idx_row]).upper(), "TURNO": "MANHÃ", "VAGAS": q_m})
+                if q_t > 0:
+                    registros_vagas.append({"SETOR": str(setores_col.iloc[idx_row]).upper(), "SUB_SETOR": str(sub_setores_col.iloc[idx_row]).upper(), "CATEGORIA": str(categorias_col.iloc[idx_row]).upper(), "TURNO": "TARDE", "VAGAS": q_t})
+                    
+        else:
+            # ABA 2 (ANEXO): Varre a matriz de forma ampla tratando as colunas com dados em branco
+            num_colunas_total = len(df_raw.columns)
+            for idx_row in range(len(df_corpo)):
+                setor_a = str(setores_col.iloc[idx_row]).upper()
+                cat_a = str(categorias_col.iloc[idx_row]).upper()
+                
+                if "TOTAL" in setor_a or "TOTAL" in cat_a or cat_a == "" or setor_a == "SETOR":
+                    continue
+                    
+                # Varre a linha horizontalmente pulando as primeiras colunas estruturais
+                for col_idx in range(8, num_colunas_total):
+                    vaga_bruta = df_corpo.iloc[idx_row, col_idx]
+                    qtd_vagas = extrair_numero(vaga_bruta)
+                    
+                    # Ignora células em branco. Elas reaparecerão no gráfico automaticamente ao serem preenchidas
+                    if qtd_vagas > 0:
+                        turno_atual = str(linha_turnos[col_idx]).strip().upper()
+                        final_turno = "MANHÃ" if "MANH" in turno_atual else "TARDE"
+                        
+                        registros_vagas.append({
+                            "SETOR": setor_a,
+                            "SUB_SETOR": str(sub_setores_col.iloc[idx_row]).upper(),
+                            "CATEGORIA": cat_a,
+                            "TURNO": final_turno,
+                            "VAGAS": qtd_vagas
+                        })
+                        
+        return pd.DataFrame(registros_vagas)
     except:
         return pd.DataFrame()
 
 # ==============================================================================
-# 4. EXECUÇÃO DO PROCESSAMENTO EM QUADROS TOTALMENTE ISOLADOS POR ABAS
+# 4. AMBIENTE DE NAVEGAÇÃO POR ABAS CONSOLIDADAS MANTIDO ISOLADO
 # ==============================================================================
 if uploaded_file is not None:
     excel_file = pd.ExcelFile(uploaded_file)
     abas_planilha = excel_file.sheet_names
     
-    # Processamento estritamente isolado por posições (0 = HCID, 1 = Anexos)
-    df_hcid = processar_vagas_estaticas(uploaded_file, 0)
-    df_anexos = processar_vagas_estaticas(uploaded_file, 1) if len(abas_planilha) > 1 else pd.DataFrame()
+    # Processamento assíncrono blindado contra quebras estruturais
+    df_hcid = extrair_dados_seguros(uploaded_file, 0)
+    df_anexos = extrair_dados_seguros(uploaded_file, 1) if len(abas_planilha) > 1 else pd.DataFrame()
 
-    # Criação das abas de navegação limpas no topo da tela do Streamlit
     tab_hcid, tab_anexos = st.tabs(["🏥 Hospital Geral (HCID)", "🏢 Unidades Anexas"])
 
     # --------------------------------==========================================
     # CONTEÚDO EXCLUSIVO DA GUIA 1: SOMENTE HCID
     # --------------------------------==========================================
     with tab_hcid:
-        st.markdown("<div style='background-color: #1a2a3a; padding: 12px; border-radius: 5px; margin-bottom: 20px;'><h2 style='margin:0; font-size:1.4rem; color:#fff;'>🏥 QUADRO DE INDICADORES - SOMENTE HCID</h2></div>", unsafe_allow_html=True)
+        st.markdown("<div style='background-color: #1a2a3a; padding: 12px; border-radius: 5px; margin-bottom: 20px;'><h2 style='margin:0; font-size:1.4rem; color:#fff;'>📊 QUADRO DE INDICADORES - SOMENTE HCID</h2></div>", unsafe_allow_html=True)
         
         if not df_hcid.empty:
-            # Caixas de Texto com a precisão exata da planilha (158 Vagas / 21 Setores)
-            t_vagas_h = df_hcid["TOTAL_VAGAS"].sum()
-            t_setores_h = df_hcid["SETOR_RAW"].nunique()
-            t_m_h = df_hcid["MANHÃ"].sum()
-            t_t_h = df_hcid["TARDE"].sum()
+            t_vagas_h = df_hcid["VAGAS"].sum()
+            t_setores_h = df_hcid["SETOR"].nunique()
+            t_m_h = df_hcid[df_hcid["TURNO"] == "MANHÃ"]["VAGAS"].sum()
+            t_t_h = df_hcid[df_hcid["TURNO"] == "TARDE"]["VAGAS"].sum()
             
             c1, c2, c3, c4 = st.columns(4)
             c1.metric("📑 Total de vagas de estágio geral HCID", f"{t_vagas_h} Vagas")
@@ -144,29 +169,13 @@ if uploaded_file is not None:
             
             with col1_h:
                 st.markdown("##### 1️⃣ Total de vagas e de estágio no HCID")
-                df_g1_h = df_hcid.groupby("SETOR_RAW")["TOTAL_VAGAS"].sum().reset_index()
-                f1_h = px.bar(df_g1_h, x="SETOR_RAW" if is_vert else "TOTAL_VAGAS", y="TOTAL_VAGAS" if is_vert else "SETOR_RAW", orientation="v" if is_vert else "h", text_auto=True, color_discrete_sequence=seq_cores)
+                df_g1_h = df_hcid.groupby("SETOR")["VAGAS"].sum().reset_index()
+                f1_h = px.bar(df_g1_h, x="SETOR" if is_vert else "VAGAS", y="VAGAS" if is_vert else "SETOR", orientation="v" if is_vert else "h", text_auto=True, color_discrete_sequence=seq_cores)
                 f1_h.update_layout(height=320, margin=dict(l=10,r=15,t=10,b=10), xaxis_title="Setor" if is_vert else "Vagas", yaxis_title="Vagas" if is_vert else "Setor")
                 f1_h.update_traces(textposition="outside", cliponaxis=False)
                 st.plotly_chart(f1_h, use_container_width=True)
                 
                 st.markdown("##### 3️⃣ Setores disponibilizados para realização de estágio no HCID")
-                df_g3_h = df_hcid.groupby("SETOR_RAW")["TOTAL_VAGAS"].sum().reset_index().sort_values(by="TOTAL_VAGAS", ascending=True)
-                f3_h = px.bar(df_g3_h, x="SETOR_RAW" if is_vert else "TOTAL_VAGAS", y="TOTAL_VAGAS" if is_vert else "SETOR_RAW", orientation="v" if is_vert else "h", text_auto=True, color="TOTAL_VAGAS", color_continuous_scale=px.colors.sequential.Tealgrn)
+                df_g3_h = df_hcid.groupby("SETOR")["VAGAS"].sum().reset_index().sort_values(by="VAGAS", ascending=True)
+                f3_h = px.bar(df_g3_h, x="SETOR" if is_vert else "VAGAS", y="VAGAS" if is_vert else "SETOR", orientation="v" if is_vert else "h", text_auto=True, color="VAGAS", color_continuous_scale=px.colors.sequential.Tealgrn)
                 f3_h.update_layout(height=320, coloraxis_showscale=False, margin=dict(l=10,r=15,t=10,b=10), xaxis_title="Setor" if is_vert else "Vagas", yaxis_title="Vagas" if is_vert else "Setor")
-                f3_h.update_traces(textposition="outside", cliponaxis=False)
-                st.plotly_chart(f3_h, use_container_width=True)
-
-                st.markdown("##### 5️⃣ Total de vagas de estágio disponibilizados por setor no HCID")
-                f5_h = px.bar(df_g3_h, x="SETOR_RAW" if is_vert else "TOTAL_VAGAS", y="TOTAL_VAGAS" if is_vert else "SETOR_RAW", orientation="v" if is_vert else "h", text_auto=True, color_discrete_sequence=seq_cores)
-                f5_h.update_layout(height=320, margin=dict(l=10,r=15,t=10,b=10), xaxis_title="Setor" if is_vert else "Vagas", yaxis_title="Vagas" if is_vert else "Setor")
-                f5_h.update_traces(textposition="outside", cliponaxis=False)
-                st.plotly_chart(f5_h, use_container_width=True)
-
-                st.markdown("##### 7️⃣ Total de estagiários por turno por dia no HCID")
-                df_melt_h = df_hcid.groupby("SETOR_RAW")[["MANHÃ", "TARDE"]].sum().reset_index().melt(id_vars="SETOR_RAW", var_name="TURNO", value_name="VAGAS")
-                f7_h = px.bar(df_melt_h, x="SETOR_RAW" if is_vert else "VAGAS", y="VAGAS" if is_vert else "SETOR_RAW", color="TURNO", barmode="group", orientation="v" if is_vert else "h", text_auto=True, color_discrete_map={"MANHÃ": "#008080", "TARDE": "#FF7F50"})
-                f7_h.update_layout(height=320, margin=dict(l=10,r=15,t=10,b=10), xaxis_title="Setor" if is_vert else "Vagas", yaxis_title="Vagas" if is_vert else "Setor")
-                f7_h.update_traces(textposition="outside", cliponaxis=False)
-                st.plotly_chart(f7_h, use_container_width=True)
-
