@@ -61,13 +61,12 @@ else:
 
 tipo_grafico_5 = st.sidebar.radio("Estilo dos Gráficos de Setor:", options=["Barras Verticais", "Barras Horizontais"], index=1)
 
-# Lógica robusta de leitura inteligente de abas e colunas
 if uploaded_file is not None:
     try:
         excel_file = pd.ExcelFile(uploaded_file)
         abas_disponiveis = excel_file.sheet_names
         
-        # Localiza de forma flexível qual aba contém os dados do HCID
+        # Identificação inteligente e isolada da aba do HCID
         aba_hcid_real = None
         for opcao in ["HCID_BDD", "HCID", "HCID1", "DADOS"]:
             if opcao in abas_disponiveis:
@@ -76,7 +75,7 @@ if uploaded_file is not None:
         if not aba_hcid_real:
             aba_hcid_real = abas_disponiveis[0]
                 
-        # Localiza de forma flexível a aba de ANEXO
+        # Identificação inteligente e isolada da aba de ANEXO
         aba_anexo_real = None
         for opcao in ["ANEXO", "ANEXO2", "ANEXOS"]:
             if opcao in abas_disponiveis:
@@ -85,6 +84,7 @@ if uploaded_file is not None:
                 
         df_hcid = pd.read_excel(uploaded_file, sheet_name=aba_hcid_real)
         
+        # Se o anexo não foi criado ou está vazio, monta a estrutura fantasma para blindar o código
         if aba_anexo_real and aba_anexo_real in abas_disponiveis:
             df_anexo = pd.read_excel(uploaded_file, sheet_name=aba_anexo_real)
             if df_anexo.dropna(how="all").empty:
@@ -92,7 +92,6 @@ if uploaded_file is not None:
         else:
             df_anexo = pd.DataFrame(columns=["SETOR", "SUB_SETOR", "CATEGORIA PROFISSIONAL", "TURNO", "VAGAS"])
             
-        # Função interna de varredura inteligente corrigida contra erros de tipo 'Index'
         def processar_mapeamento_inteligente(df_aba):
             if df_aba.empty:
                 df_vazia = pd.DataFrame(columns=["SETOR", "SUB_SETOR", "CATEGORIA PROFISSIONAL", "TURNO", "VAGAS"])
@@ -101,21 +100,18 @@ if uploaded_file is not None:
             df_aba.columns = [str(c).strip() for c in df_aba.columns]
             c_setor, c_sub, c_cat, c_turno, c_vagas = None, None, None, None, None
             
-            # 1. Encontra a coluna de Vagas localizando qual delas é numérica de verdade
             for col in df_aba.columns:
                 v_num = pd.to_numeric(df_aba[col], errors='coerce').dropna()
                 if len(v_num) > 0 and v_num.sum() > len(v_num): 
                     c_vagas = col
                     break
             
-            # 2. Se a busca numérica falhar, procura por texto
             if not c_vagas:
                 for col in df_aba.columns:
                     if "VAGA" in col.upper() or "TOTAL" in col.upper() or "QTD" in col.upper():
                         c_vagas = col
                         break
             
-            # 3. Mapeia o resto das colunas por termos aproximados
             for col in df_aba.columns:
                 if col == c_vagas:
                     continue
@@ -125,14 +121,12 @@ if uploaded_file is not None:
                 elif "PROF" in col_upper or "CAT" in col_upper: c_cat = col
                 elif "TURN" in col_upper: c_turno = col
             
-            # Garante que as variáveis contenham strings puras em vez de listas de índices do pandas
             c_setor = str(c_setor) if c_setor else "SETOR"
             c_sub = str(c_sub) if c_sub else "SUB_SETOR"
             c_cat = str(c_cat) if c_cat else "CATEGORIA PROFISSIONAL"
             c_turno = str(c_turno) if c_turno else "TURNO"
             c_vagas = str(c_vagas) if c_vagas else "VAGAS"
             
-            # Força a criação das colunas caso faltem na tabela carregada
             for col_nome in [c_setor, c_sub, c_cat, c_turno, c_vagas]:
                 if col_nome not in df_aba.columns:
                     df_aba[col_nome] = "NÃO INFORMADO" if col_nome != c_vagas else 0
@@ -147,7 +141,7 @@ if uploaded_file is not None:
         df_hcid, hc_setor, hc_sub, hc_cat, hc_turno, hc_vagas = processar_mapeamento_inteligente(df_hcid)
         df_anexo, ax_setor, ax_sub, ax_cat, ax_turno, ax_vagas = processar_mapeamento_inteligente(df_anexo)
         
-        # Cria a engenharia clean de Setor - Sub-setor separada por tabela de forma segura
+        # Cria a engenharia clean de Setor - Sub-setor unificada de forma isolada por aba
         for d_f, s_t, s_b in [(df_hcid, hc_setor, hc_sub), (df_anexo, ax_setor, ax_sub)]:
             if not d_f.empty:
                 d_f["LOCAL_COMBINADO"] = d_f.apply(
@@ -208,3 +202,16 @@ if not df_hcid_filtrado.empty:
     df_g4[hc_vagas] = df_g4[hc_vagas].round(1)
     ori_4 = "h" if tipo_grafico_5 == "Barras Horizontais" else "v"
     x_v4, y_v4 = (hc_vagas, "LOCAL_COMBINADO") if ori_4 == "h" else ("LOCAL_COMBINADO", hc_vagas)
+    fig4 = px.bar(df_g4, x=x_v4, y=y_v4, color=hc_cat, orientation=ori_4, barmode="stack", color_discrete_sequence=cor_sequencia, title="4. Vagas por Turno por Categoria Profissional e Campo de Estágio no HCID")
+    fig4.update_layout(height=650, legend=dict(title_text="Profissão"))
+    r2_c2.plotly_chart(fig4, use_container_width=True)
+else:
+    r2_c2.info("Nenhum dado do HCID selecionado nos filtros laterais.")
+
+st.markdown("---")
+
+r3_c1, r3_c2, r3_c3 = st.columns(3)
+
+# Gráfico 5
+if not df_hcid_filtrado.empty:
+    df_g5 = df_hcid_filtrado.groupby(hc_sub)[hc_vagas].mean().reset_index()
