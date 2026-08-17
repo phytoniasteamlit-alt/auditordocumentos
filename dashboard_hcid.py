@@ -21,9 +21,7 @@ def normalizar_texto(texto):
 
 # --- CABEÇALHO SUPERIOR ---
 header_left, header_right = st.columns(2)
-
 header_left.markdown("<h1 style='margin: 0; padding: 0; font-size: 2.2rem;'>📊 Painel de Indicadores de Estágio</h1>", unsafe_allow_html=True)
-
 header_right.markdown(
     """
     <div style="text-align: right; line-height: 1.3; padding-bottom: 10px;">
@@ -34,123 +32,75 @@ header_right.markdown(
     """, 
     unsafe_allow_html=True
 )
-
 st.markdown("---")
 
 # ==============================================================================
-# 2. PAINEL DE CONTROLE (SIDEBAR) & CONFIGURAÇÃO VISUAL
+# 2. PAINEL DE CONTROLE (SIDEBAR)
 # ==============================================================================
 st.sidebar.header("⚙️ Painel de Controle")
 uploaded_file = st.sidebar.file_uploader("Carregar Planilha de Estágios (.xlsx):", type=["xlsx"])
 
-st.sidebar.markdown("---")
-st.sidebar.subheader("🎨 Customização Visual")
-paleta_selecionada = st.sidebar.selectbox(
-    "Tema de Cores Geral:",
-    options=["Padrão Hospitalar", "Tons Pastéis", "Vibrante", "Esmeralda"],
-    index=0
-)
-
-if paleta_selecionada == "Tons Pastéis":
-    cor_sequencia = px.colors.qualitative.Pastel
-elif paleta_selecionada == "Vibrante":
-    cor_sequencia = px.colors.qualitative.Prism
-elif paleta_selecionada == "Esmeralda":
-    cor_sequencia = px.colors.sequential.Mint
-else:
-    cor_sequencia = ["#008080", "#4682B4", "#20B2AA", "#5F9EA0", "#B0C4DE"]
-
 # ==============================================================================
-# 3. MOTOR DE PROCESSAMENTO DE DADOS BLINDADO E INDEXADO
+# 3. FUNÇÃO DE TRATAMENTO DE DADOS (ISOLADA)
 # ==============================================================================
-if uploaded_file is not None:
-    try:
-        excel_file = pd.ExcelFile(uploaded_file)
-        abas_disponiveis = excel_file.sheet_names
-        
-        # Mapeamento Dinâmico por nomes conhecidos ou fallback por posição física na planilha
-        aba_hcid_real = next((op for op in ["HCID_BDD", "HCID", "HCID1", "DADOS"] if op in abas_disponiveis), abas_disponiveis[0])
-        
-        if len(abas_disponiveis) > 1:
-            aba_anexo_real = next((op for op in ["ANEXO", "ANEXO2", "ANEXOS"] if op in abas_disponiveis), abas_disponiveis[1])
+def extrair_e_limpar_dados(uploaded_file, sheet_name):
+    if not sheet_name:
+        return pd.DataFrame()
+    
+    df_bruto = pd.read_excel(uploaded_file, sheet_name=sheet_name, header=None)
+    
+    linha_cabecalho = 0
+    for idx, row in df_bruto.iterrows():
+        row_str = " ".join([str(x).upper() for x in row.dropna()])
+        if "CATEGOR" in row_str or "PROFISS" in row_str or "SETOR" in row_str:
+            linha_cabecalho = idx
+            break
+    
+    cabecalhos = [str(c).strip().replace('\n', ' ') for c in df_bruto.iloc[linha_cabecalho]]
+    df_dados = df_bruto.iloc[linha_cabecalho+1:].copy()
+    df_dados.columns = cabecalhos
+    
+    idx_setor, idx_sub, idx_cat, idx_manha, idx_tarde = 0, 1, 2, 3, 4
+    for idx_c, col_nome in enumerate(df_dados.columns):
+        c_norm = normalizar_texto(col_nome)
+        if "SUB" in c_norm: idx_sub = idx_c
+        elif "SETOR" in c_norm or "CAMPO" in c_norm: idx_setor = idx_c
+        elif "PROF" in c_norm or "CAT" in c_norm: idx_cat = idx_c
+        elif "MANH" in c_norm: idx_manha = idx_c
+        elif "TARD" in c_norm: idx_tarde = idx_c
+
+    def extrair_inteiro(valor):
+        if pd.isna(valor) or str(valor).strip() == "" or str(valor).strip().lower() == "nan": 
+            return 0
+        v_str = "".join(filter(str.isdigit, str(valor)))
+        return int(v_str) if v_str != "" else 0
+
+    df_limpo = pd.DataFrame()
+    df_limpo["SETOR"] = df_dados.iloc[:, idx_setor].astype(str).str.strip().ffill()
+    df_limpo["SUB_SETOR"] = df_dados.iloc[:, idx_sub].fillna("GERAL").astype(str).str.strip()
+    df_limpo["CATEGORIA"] = df_dados.iloc[:, idx_cat].fillna("NÃO ESPECIFICADO").astype(str).str.strip()
+    df_limpo["MANHÃ"] = df_dados.iloc[:, idx_manha].apply(extrair_inteiro)
+    df_limpo["TARDE"] = df_dados.iloc[:, idx_tarde].apply(extrair_inteiro)
+    df_limpo["TOTAL_VAGAS"] = df_limpo["MANHÃ"] + df_limpo["TARDE"]
+    
+    linhas_validas = []
+    for _, row in df_limpo.iterrows():
+        txt_s = str(row["SETOR"]).upper()
+        txt_c = str(row["CATEGORIA"]).upper()
+        if "TOTAL" in txt_s or "TOTAL" in txt_c or txt_s == "NAN" or txt_c == "NAN":
+            linhas_validas.append(False)
         else:
-            aba_anexo_real = None
-        
-        def extrair_e_limpar_dados(sheet_name):
-            if not sheet_name:
-                return pd.DataFrame()
-            
-            df_bruto = pd.read_excel(uploaded_file, sheet_name=sheet_name, header=None)
-            
-            # Localiza a linha do cabeçalho estrutural
-            linha_cabecalho = 0
-            for idx, row in df_bruto.iterrows():
-                row_str = " ".join([str(x).upper() for x in row.dropna()])
-                if "CATEGOR" in row_str or "PROFISS" in row_str or "SETOR" in row_str:
-                    linha_cabecalho = idx
-                    break
-            
-            cabecalhos = [str(c).strip().replace('\n', ' ') for c in df_bruto.iloc[linha_cabecalho]]
-            df_dados = df_bruto.iloc[linha_cabecalho+1:].copy()
-            df_dados.columns = cabecalhos
-            
-            # Identificação automatizada dos índices das tabelas do Excel
-            idx_setor, idx_sub, idx_cat, idx_manha, idx_tarde = 0, 1, 2, 3, 4
-            for idx_c, col_nome in enumerate(df_dados.columns):
-                c_norm = normalizar_texto(col_nome)
-                if "SUB" in c_norm: idx_sub = idx_c
-                elif "SETOR" in c_norm or "CAMPO" in c_norm: idx_setor = idx_c
-                elif "PROF" in c_norm or "CAT" in c_norm: idx_cat = idx_c
-                elif "MANH" in c_norm: idx_manha = idx_c
-                elif "TARD" in c_norm: idx_tarde = idx_c
-
-            def extrair_inteiro(valor):
-                if pd.isna(valor) or str(valor).strip() == "" or str(valor).strip().lower() == "nan": 
-                    return 0
-                v_str = "".join(filter(str.isdigit, str(valor)))
-                return int(v_str) if v_str != "" else 0
-
-            # Criação isolada do DataFrame estruturado por tipo de coluna
-            df_limpo = pd.DataFrame()
-            df_limpo["SETOR"] = df_dados.iloc[:, idx_setor].astype(str).str.strip().ffill()
-            df_limpo["SUB_SETOR"] = df_dados.iloc[:, idx_sub].fillna("GERAL").astype(str).str.strip()
-            df_limpo["CATEGORIA"] = df_dados.iloc[:, idx_cat].fillna("NÃO ESPECIFICADO").astype(str).str.strip()
-            
-            df_limpo["MANHÃ"] = df_dados.iloc[:, idx_manha].apply(extrair_inteiro)
-            df_limpo["TARDE"] = df_dados.iloc[:, idx_tarde].apply(extrair_inteiro)
-            df_limpo["TOTAL_VAGAS"] = df_limpo["MANHÃ"] + df_limpo["TARDE"]
-            
-            # Filtro inteligente de lixo de dados ou linhas de metadados
-            linhas_validas = []
-            for _, row in df_limpo.iterrows():
-                txt_s = str(row["SETOR"]).upper()
-                txt_c = str(row["CATEGORIA"]).upper()
-                if "TOTAL" in txt_s or "TOTAL" in txt_c or txt_s == "NAN" or txt_c == "NAN":
-                    linhas_validas.append(False)
-                else:
-                    linhas_validas.append(True)
-            
-            df_final = df_limpo[linhas_validas].copy()
-            return df_final[df_final["TOTAL_VAGAS"] > 0]
-
-        df_hcid = extrair_e_limpar_dados(aba_hcid_real)
-        df_anexo = extrair_e_limpar_dados(aba_anexo_real) if aba_anexo_real else pd.DataFrame()
-        
-    except Exception as e:
-        st.error(f"Erro inesperado durante a leitura dos dados: {e}")
-        st.stop()
-else:
-    st.info("💡 Por favor, arraste ou carregue sua planilha Excel para estruturar os painéis automaticamente.")
-    st.stop()
+            linhas_validas.append(True)
+    
+    df_final = df_limpo[linhas_validas].copy()
+    return df_final[df_final["TOTAL_VAGAS"] > 0]
 
 # ==============================================================================
-# 4. ARQUITETURA VISUAL DO DASHBOARD PROGRESSIVO POR ETAPAS
+# 4. FUNÇÃO DE RENDERIZAÇÃO VISUAL (EVITA DUPLICAÇÃO DE CÓDIGO)
 # ==============================================================================
-tab_hcid, tab_anexos = st.tabs(["🏥 Hospital Geral (HCID)", "🏢 Unidades Anexas"])
-
 def renderizar_painel_etapas(df_alvo, nome_aba_excel, chave_unica):
     if df_alvo.empty:
-        st.warning(f"Nenhum dado válido ou ativo foi processado na aba '{nome_aba_excel}'. Verifique a estrutura das colunas.")
+        st.warning(f"Nenhum dado válido ou ativo foi processado na aba '{nome_aba_excel}'. Verifique as colunas da planilha.")
         return
 
     st.caption(f"📂 Lendo dados da Aba: **'{nome_aba_excel}'**")
@@ -220,3 +170,41 @@ def renderizar_painel_etapas(df_alvo, nome_aba_excel, chave_unica):
             fig_detalhe.update_layout(barmode="stack", height=400, margin=dict(l=20, r=20, t=10, b=10))
             st.plotly_chart(fig_detalhe, use_container_width=True, key=f"detalhe_{chave_unica}")
         else:
+            st.info("Nenhuma vaga ativa encontrada para os parâmetros do setor selecionado.")
+
+    st.markdown("---")
+    with st.expander("📄 Ver tabela de dados tratados desta unidade"):
+        st.dataframe(df_alvo[["SETOR", "SUB_SETOR", "CATEGORIA", "MANHÃ", "TARDE", "TOTAL_VAGAS"]], use_container_width=True)
+
+# ==============================================================================
+# 5. EXECUÇÃO DO FLUXO PRINCIPAL
+# ==============================================================================
+if uploaded_file is not None:
+    excel_file = pd.ExcelFile(uploaded_file)
+    abas_disponiveis = excel_file.sheet_names
+    
+    # Identifica as abas dinamicamente ou por posição
+    aba_hcid_real = next((op for op in ["HCID_BDD", "HCID", "HCID1", "DADOS"] if op in abas_disponiveis), abas_disponiveis[0])
+    aba_anexo_real = next((op for op in ["ANEXO", "ANEXO2", "ANEXOS"] if op in abas_disponiveis), None)
+    if aba_anexo_real is None and len(abas_disponiveis) > 1:
+        aba_anexo_real = abas_disponiveis[1]
+        
+    df_hcid = extrair_e_limpar_dados(uploaded_file, aba_hcid_real)
+    
+    df_anexo = pd.DataFrame()
+    if aba_anexo_real:
+        df_anexo = extrair_e_limpar_dados(uploaded_file, aba_anexo_real)
+
+    # Cria as abas de navegação visual
+    tab_hcid, tab_anexos = st.tabs(["🏥 Hospital Geral (HCID)", "🏢 Unidades Anexas"])
+    
+    with tab_hcid:
+        renderizar_painel_etapas(df_hcid, aba_hcid_real, "hcid")
+        
+    with tab_anexos:
+        if aba_anexo_real:
+            renderizar_painel_etapas(df_anexo, aba_anexo_real, "anexos")
+        else:
+            st.info("Sua planilha possui apenas 1 aba de dados ativos. Se possuir anexos, adicione-os na aba seguinte do arquivo Excel.")
+else:
+    st.info("💡 Por favor, arraste ou carregue sua planilha Excel para estruturar os painéis automaticamente.")
