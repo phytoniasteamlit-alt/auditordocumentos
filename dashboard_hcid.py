@@ -47,7 +47,7 @@ st.sidebar.header("⚙️ Painel de Controle")
 uploaded_file = st.sidebar.file_uploader("Carregar Planilha de Estágios (.xlsx):", type=["xlsx"])
 
 # ==============================================================================
-# 3. MOTOR DE PROCESSAMENTO ATUALIZADO PARA PANDAS NOVO
+# 3. MOTOR DE PROCESSAMENTO ATUALIZADO PARA PANDAS MODERNO
 # ==============================================================================
 if uploaded_file is not None:
     excel_file = pd.ExcelFile(uploaded_file)
@@ -57,7 +57,7 @@ if uploaded_file is not None:
     # Carrega a tabela bruta sem cabeçalho automático
     df_raw = pd.read_excel(uploaded_file, sheet_name=aba_alvo, header=None)
     
-    # CORREÇÃO PANDAS MODERNO: Usa .ffill(axis=1) para propagar os cabeçalhos mesclados na horizontal
+    # CORREÇÃO PANDAS NOVO: Aplica .ffill(axis=1) para preencher os meses mesclados para o lado direito
     linha_meses = df_raw.iloc[3].ffill().fillna("").astype(str).tolist()
     linha_dias = df_raw.iloc[4].ffill().fillna("").astype(str).tolist()
     linha_turnos = df_raw.iloc[5].fillna("").astype(str).tolist()
@@ -65,7 +65,7 @@ if uploaded_file is not None:
     # Isola o corpo de dados reais (A partir da Linha 8 física / índice 7)
     df_corpo = df_raw.iloc[7:].copy()
     
-    # Preenchimento em cascata vertical das informações estruturais dos setores
+    # CORREÇÃO PANDAS NOVO: Aplica .ffill(axis=0) para preencher as células mescladas para baixo
     df_corpo.iloc[:, 0] = df_corpo.iloc[:, 0].replace(["nan", "NAN", ""], pd.NA).ffill().fillna("GERAL")
     df_corpo.iloc[:, 1] = df_corpo.iloc[:, 1].replace(["nan", "NAN", ""], pd.NA).ffill().fillna("GERAL")
     df_corpo.iloc[:, 2] = df_corpo.iloc[:, 2].replace(["nan", "NAN", ""], pd.NA).ffill().fillna("NÃO ESPECIFICADO")
@@ -74,9 +74,9 @@ if uploaded_file is not None:
     
     # Varredura matricial convertendo a planilha em banco de dados linear
     for _, row in df_corpo.iterrows():
-        setor = str(row[0]).strip().upper()
-        sub_setor = str(row[1]).strip().upper()
-        categoria = str(row[2]).strip().upper()
+        setor = str(row.iloc[0]).strip().upper()
+        sub_setor = str(row.iloc[1]).strip().upper()
+        categoria = str(row.iloc[2]).strip().upper()
         
         # Filtro rígido para descartar cabeçalhos duplicados, linhas de lixo ou subtotais
         if "TOTAL" in setor or "TOTAL" in categoria or categoria == "" or setor == "SETOR" or setor == "GERAL":
@@ -84,7 +84,7 @@ if uploaded_file is not None:
             
         # Percorre as colunas de calendário a partir da coluna indexada 8 (Onde começam as vagas de Agosto)
         for col_idx in range(8, len(row)):
-            vaga_bruta = row[col_idx]
+            vaga_bruta = row.iloc[col_idx]
             qtd_vagas = extrair_numero(vaga_bruta)
             
             if qtd_vagas > 0:
@@ -125,14 +125,14 @@ if uploaded_file is not None:
         
         # Primeira linha de Caixas de Texto (Métricas de Vagas Globais)
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("total de vagas de estagio geral hcid", f"{total_vagas_geral} Vagas")
-        c2.metric("total de setores disponibilizados p/ campo de estágio no hcid", f"{total_setores} Setores")
-        c3.metric("total de vagas de estagio do hcid por turno manhã", f"{total_m_geral} M")
-        c4.metric("total de vagas de estagio do hcid tarde", f"{total_t_geral} T")
+        c1.metric("Total de vagas de estágio geral HCID", f"{total_vagas_geral} Vagas")
+        c2.metric("Total de setores disponibilizados p/ campo de estágio no HCID", f"{total_setores} Setores")
+        c3.metric("Total de vagas de estágio do HCID por turno manhã", f"{total_m_geral} M")
+        c4.metric("Total de vagas de estágio do HCID tarde", f"{total_t_geral} T")
         
         # Segunda linha de Caixas de Texto (Auditoria de Alunos por Dia de Semana)
         st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown("##### 🗓️ total de estagiário por dia")
+        st.markdown("##### 🗓️ Total de estagiários por dia")
         
         col_seletor, _ = st.columns(2)
         dias_disponiveis = sorted(df_master["DIA_SEMANA"].unique())
@@ -142,13 +142,13 @@ if uploaded_file is not None:
         vagas_dia_t = df_master[(df_master["DIA_SEMANA"] == dia_selecionado) & (df_master["TURNO"] == "TARDE")]["VAGAS"].sum()
         
         cc1, cc2 = st.columns(2)
-        cc1.info(f"🟢 **total de estagiário por dia turno manha ({dia_selecionado}):** {vagas_dia_m} alunos em campo.")
-        cc2.warning(f"🟠 **total de estagiário por dia turno tarde ({dia_selecionado}):** {vagas_dia_t} alunos em campo.")
+        cc1.info(f"🟢 **Total de estagiários por dia turno manhã ({dia_selecionado}):** {vagas_dia_m} alunos em campo.")
+        cc2.warning(f"🟠 **Total de estagiários por dia turno tarde ({dia_selecionado}):** {vagas_dia_t} alunos em campo.")
         
         st.markdown("---")
         
         # ==============================================================================
-        # 5. RENDERIZAÇÃO DOS GRÁFICOS INTERATIVOS
+        # 5. RENDERIZAÇÃO DOS GRÁFICOS INTERATIVOS SOLICITADOS
         # ==============================================================================
         col_g1, col_g2 = st.columns(2)
         
@@ -180,5 +180,3 @@ if uploaded_file is not None:
         # --- GRÁFICO CRONOLÓGICO POR MÊS SOLICITADO ---
         st.markdown("---")
         st.markdown("### 📅 Distribuição Mensal Organizada de Vagas Ocupadas por Turno")
-        st.caption("Gráfico que separa a volumetria por mês, discriminando a quantidade por turno (Manhã/Tarde) e indicando os setores ocupados.")
-        
