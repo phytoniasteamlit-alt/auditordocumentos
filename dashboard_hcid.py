@@ -15,9 +15,9 @@ st.set_page_config(
 def normalizar_texto(texto):
     if pd.isna(texto) or not isinstance(texto, str):
         return ""
-    texto = texto.strip().upper()
+    texto = texto.strip().upper().replace('\n', ' ').replace('\r', ' ')
     texto = "".join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
-    return texto
+    return " ".join(texto.split())
 
 # --- CABEÇALHO SUPERIOR ---
 header_left, header_right = st.columns(2)
@@ -100,21 +100,21 @@ if uploaded_file is not None:
             df_aba = df_bruto.iloc[linha_cabecalho+1:].copy()
             df_aba.columns = cabecalhos_originais
             
-            # Identificação das colunas dinamicamente por texto para evitar erros de deslocamento
+            # Identificação das colunas dinamicamente por texto purificado
             col_setor, col_sub, col_cat = None, None, None
             col_manha, col_tarde = None, None
             
             for idx_c, col_nome in enumerate(df_aba.columns):
-                c_upper = col_nome.upper()
-                if "SUB" in c_upper:
+                c_norm = normalizar_texto(col_nome)
+                if "SUB" in c_norm:
                     col_sub = idx_c
-                elif "SETOR" in c_upper or "CAMPO" in c_upper:
+                elif "SETOR" in c_norm or "CAMPO" in c_norm:
                     col_setor = idx_c
-                elif "PROF" in c_upper or "CAT" in c_upper:
+                elif "PROF" in c_norm or "CAT" in c_norm:
                     col_cat = idx_c
-                elif "MANH" in c_upper:
+                elif "MANH" in c_norm:
                     col_manha = idx_c
-                elif "TARD" in c_upper:
+                elif "TARD" in c_norm:
                     col_tarde = idx_c
 
             # Fallbacks baseados em posições caso o texto mude drasticamente
