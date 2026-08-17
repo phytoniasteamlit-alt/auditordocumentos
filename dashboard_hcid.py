@@ -1,199 +1,207 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import unicodedata
 
-# 1. Configuração da página profissional (Layout Expandido)
+# ==============================================================================
+# 1. CONFIGURAÇÃO DA PÁGINA (Modo Amplo)
+# ==============================================================================
 st.set_page_config(
-    page_title="Painel de Indicadores Hospitalares",
+    page_title="Painel de Estágios - HCID & ANEXO",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# 2. Assinatura do Programador Fixada no Canto Inferior Esquerdo
-st.markdown(
-    """
-    <style>
-    .footer {
-        position: fixed;
-        left: 15px;
-        bottom: 15px;
-        font-size: 14px;
-        font-weight: bold;
-        color: #888888;
-        z-index: 9999;
-        background-color: rgba(14, 17, 23, 0.9);
-        padding: 5px 10px;
-        border-radius: 5px;
-    }
-    </style>
-    <div class="footer">👨‍💻 Ezequias S. Santos Naqh / Nsp</div>
-    """,
-    unsafe_allow_html=True
-)
+def normalizar_texto(texto):
+    if pd.isna(texto) or not isinstance(texto, str):
+        return ""
+    texto = texto.strip().upper()
+    texto = "".join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
+    return texto
 
-# 3. Menu Lateral de Controle
-with st.sidebar:
-    st.markdown("## ⚙️ Painel de Controle")
-    st.write("Carregar Escala Hospitalar Completa (.xlsx):")
-    uploaded_file = st.file_uploader("Upload", type=["xlsx"], label_visibility="collapsed")
-    
-    st.markdown("---")
-    st.markdown("### 🎨 Personalização Visual")
-    cor_tema = st.selectbox("Paleta de Cores Pastéis:", ["Azul Soft", "Candy Menta", "Sunset Pastel"])
-    
-    # Definição das paletas de tons pastéis personalizadas
-    if cor_tema == "Azul Soft":
-        paleta_pasteis = ["#A0C4FF", "#BDB2FF", "#FFC6FF", "#CAFFBF", "#FDFFB6", "#FFADAD"]
-    elif cor_tema == "Candy Menta":
-        paleta_pasteis = ["#98D8C8", "#F3B0C3", "#FFD8B3", "#C1C6FC", "#F4F7BB", "#E2C2FF"]
-    else:
-        paleta_pasteis = ["#FFB7B2", "#FFDAC1", "#E2F0CB", "#B5EAD7", "#C7CEEA", "#FFC6FF"]
+# --- CABEÇALHO SUPERIOR ---
+header_left, header_right = st.columns(2)
 
-# 4. Cabeçalho Principal Customizado (NEP, NEPEX e Setor)
-col_titulo, col_info = st.columns([1.2, 1.8])
-with col_titulo:
-    st.markdown("# 📊 Painel de Indicadores")
+with header_left:
+    st.markdown("<h1 style='margin: 0; padding: 0; font-size: 2.2rem;'>📊 Painel de Indicadores de Estágio</h1>", unsafe_allow_html=True)
 
-with col_info:
+with header_right:
     st.markdown(
         """
-        <div style="text-align: right; padding-top: 5px; border-left: 2px solid #333; padding-left: 20px;">
-            <span style="font-size: 22px; font-weight: bold;">🏥 Hospital da Cidade</span><br>
-            <span style="font-size: 16px; font-weight: bold; color: #4EA8DE;">👩‍💼 Coord: Verônica Azevedo</span><br>
-            <span style="font-size: 14px; color: #aaaaaa;">📋 Coordenadora do NEP e do NEPEX</span><br>
-            <span style="font-size: 13px; color: #888888;">🔬 Setor de Ensino e Pesquisa</span>
+        <div style="text-align: right; line-height: 1.2; padding-bottom: 10px;">
+            <span style="font-size: 16px; font-weight: bold;">🏥 Hospital da Cidade</span><br>
+            <span style="font-size: 14px; color: #888;">👩‍💼 Coord: Verônica Azevedo</span>
         </div>
-        """,
+        """, 
         unsafe_allow_html=True
     )
 
 st.markdown("---")
 
-# =========================================================================
-# ⚙️ PROCESSADOR INTELIGENTE DE MATRIZ HOSPITALAR (MÁGICA DO PYTHON)
-# =========================================================================
-def processar_escala_complexa(df_raw):
-    # Preenche verticalmente as colunas de identificação (Setor e Categoria) para baixo
-    df_raw.iloc[:, 0] = df_raw.iloc[:, 0].ffill()
-    df_raw.iloc[:, 1] = df_raw.iloc[:, 1].ffill()
-    df_raw.iloc[:, 2] = df_raw.iloc[:, 2].ffill()
-    
-    # SOLUÇÃO COMPLETA CONTRA INDEXERROR: 
-    # Transpõe temporariamente as primeiras linhas para fazer o ffill horizontal de meses e dias de forma segura
-    header_part = df_raw.iloc[0:7, :].T
-    header_part.iloc[:, 4] = header_part.iloc[:, 4].ffill()
-    header_part.iloc[:, 5] = header_part.iloc[:, 5].ffill()
-    header_corrigido = header_part.T
-    
-    dados_estruturados = []
-    
-    # Percorre as linhas de dados da planilha a partir da Linha 8 (índice 7)
-    for idx_linha in range(7, len(df_raw)):
-        linha_atual = df_raw.iloc[idx_linha]
-        
-        setor_macro = str(linha_atual.iloc[0]).strip()
-        sub_setor = str(linha_atual.iloc[1]).strip()
-        categoria = str(linha_atual.iloc[2]).strip()
-        
-        if sub_setor and sub_setor != "None" and sub_setor != "nan" and sub_setor != setor_macro:
-            setor_final = f"{setor_macro} - {sub_setor}"
-        else:
-            setor_final = setor_macro
-            
-        if any(termo in setor_final.lower() for termo in ["total", "quantitativo", "hospital", "setor"]):
-            continue
-            
-        # Percorre as colunas de calendário a partir da Coluna I (índice 8)
-        for idx_col in range(8, len(df_raw.columns)):
-            if idx_col >= len(linha_atual):
-                continue
-                
-            valor_vaga = linha_atual.iloc[idx_col]
-            
-            if pd.notna(valor_vaga) and (isinstance(valor_vaga, (int, float)) or str(valor_vaga).isdigit()):
-                qtd_vagas = int(valor_vaga)
-                if qtd_vagas <= 0:
-                    continue
-                    
-                mes = str(header_corrigido.iloc[4, idx_col]).strip().upper()
-                dia = str(header_corrigido.iloc[5, idx_col]).strip().capitalize()
-                turno = str(header_corrigido.iloc[6, idx_col]).strip()
-                
-                if mes == "NONE" or "nan" in mes.lower() or not mes: continue
-                if dia == "None" or "nan" in dia.lower() or not dia: continue
-                
-                if "manh" in turno.lower(): turno = "Manhã"
-                elif "tard" in turno.lower(): turno = "Tarde"
-                elif "noit" in turno.lower(): turno = "Noite"
-                else: continue
-                
-                dados_estruturados.append({
-                    "Setor": setor_final,
-                    "Categoria Profissional": categoria,
-                    "Mês": mes,
-                    "Dia da Semana": dia,
-                    "Turno": turno,
-                    "Vagas Ocupadas": qtd_vagas
-                })
-                
-    return pd.DataFrame(dados_estruturados)
+# ==============================================================================
+# 2. PAINEL DE CONTROLE (SIDEBAR) & CARREGAMENTO DAS ABAS
+# ==============================================================================
+st.sidebar.header("⚙️ Painel de Controle")
+uploaded_file = st.sidebar.file_uploader("Carregar Planilha de Estágios (.xlsx):", type=["xlsx"])
 
-# 5. Renderização e Execução do Upload
+st.sidebar.markdown("---")
+st.sidebar.subheader("🎨 Customização Visual")
+paleta_selecionada = st.sidebar.selectbox(
+    "Tema de Cores Geral:",
+    options=["Padrão Hospitalar", "Tons Pastéis", "Vibrante", "Esmeralda"],
+    index=2
+)
+
+if paleta_selecionada == "Tons Pastéis":
+    cor_sequencia = px.colors.qualitative.Pastel
+elif paleta_selecionada == "Vibrante":
+    cor_sequencia = px.colors.qualitative.Prism
+elif paleta_selecionada == "Esmeralda":
+    cor_sequencia = px.colors.sequential.Mint
+else:
+    cor_sequencia = px.colors.qualitative.Safe
+
+tipo_grafico_5 = st.sidebar.radio("Estilo dos Gráficos de Setor:", options=["Barras Verticais", "Barras Horizontais"], index=1)
+
 if uploaded_file is not None:
     try:
-        aba_hcid, aba_anexo = st.tabs(["🏢 UNIDADE HCID", "📑 UNIDADE ANEXO"])
+        df_hcid = pd.read_excel(uploaded_file, sheet_name="HCID")
+        df_anexo = pd.read_excel(uploaded_file, sheet_name="ANEXO")
         
-        # --- BLOCO VISUAL: HCID ---
-        with aba_hcid:
-            df_raw_hcid = pd.read_excel(uploaded_file, sheet_name="HCID", header=None)
-            df_filtro_hcid = processar_escala_complexa(df_raw_hcid)
-            
-            if not df_filtro_hcid.empty:
-                meses_hcid = [m for m in df_filtro_hcid["Mês"].unique() if m and m != "NAN"]
-                mes_sel_hcid = st.multiselect("Selecione os Meses para Análise (HCID):", meses_hcid, default=meses_hcid)
-                df_final_hcid = df_filtro_hcid[df_filtro_hcid["Mês"].isin(mes_sel_hcid)]
-                
-                # Regra Matemática de Vagas Máximas por Setor
-                df_vagas_reais_hcid = df_final_hcid.groupby(["Mês", "Setor", "Categoria Profissional"], as_index=False)["Vagas Ocupadas"].max()
-                df_vagas_por_mes_hcid = df_vagas_reais_hcid.groupby("Mês", as_index=False)["Vagas Ocupadas"].sum()
-                
-                # G1: Total de Vagas de Estágio no HCID por Mês
-                fig1 = px.bar(df_vagas_por_mes_hcid, x="Mês", y="Vagas Ocupadas", title="1. Total de Vagas de Estágio no HCID (Capacidade Real)", color_discrete_sequence=[paleta_pasteis], text_auto=True)
-                st.plotly_chart(fig1, use_container_width=True)
-                
-                # G2: Total de setores disponibilizados
-                df_g2 = df_final_hcid.groupby("Setor", as_index=False)["Vagas Ocupadas"].count().rename(columns={"Vagas Ocupadas": "Ocorrências"})
-                fig2 = px.bar(df_g2, x="Setor", y="Ocorrências", title="2. Total de Setores Disponibilizados para Campo de Estágio no HCID (Frequência de Dias)", color_discrete_sequence=[paleta_pasteis], text_auto=True)
-                st.plotly_chart(fig2, use_container_width=True)
-                
-                # G3: Vagas acumuladas por setor
-                df_g3 = df_vagas_reais_hcid.groupby("Setor", as_index=False)["Vagas Ocupadas"].sum()
-                fig3 = px.bar(df_g3, x="Setor", y="Vagas Ocupadas", title="3. Setores Disponibilizados para a Realização de Estágio no HCID (Vagas por Campo)", color_discrete_sequence=[paleta_pasteis], text_auto=True)
-                st.plotly_chart(fig3, use_container_width=True)
-                
-                # G4: Categorias profissionais
-                fig4 = px.bar(df_final_hcid, x="Setor", y="Vagas Ocupadas", color="Categoria Profissional", title="4. Categorias Profissionais Contempladas no Estágio por Setor no HCID", barmode="group", color_discrete_sequence=paleta_pasteis)
-                st.plotly_chart(fig4, use_container_width=True)
-                
-                # G5: Total de vagas por setor (Horizontal Pastel)
-                fig5 = px.bar(df_g3, x="Vagas Ocupadas", y="Setor", orientation="h", title="5. Total de Vagas de Estágio Disponibilizadas por Setor no HCID", color_discrete_sequence=[paleta_pasteis], text_auto=True)
-                st.plotly_chart(fig5, use_container_width=True)
-                
-                # G6: Vagas por turno (Pizza)
-                fig6 = px.pie(df_final_hcid, names="Turno", values="Vagas Ocupadas", title="6. Total de Vagas de Estágio do HCID por Turno", color_discrete_sequence=paleta_pasteis)
-                st.plotly_chart(fig6, use_container_width=True)
-                
-                # G7: Total por dia e turno
-                fig7 = px.bar(df_final_hcid, x="Dia da Semana", y="Vagas Ocupadas", color="Turno", title="7. Total de Estagiários por Turno, por Dia, no HCID", barmode="group", color_discrete_sequence=paleta_pasteis, text_auto=True)
-                st.plotly_chart(fig7, use_container_width=True)
-            else:
-                st.warning("Nenhum dado numérico de vagas encontrado na escala da aba HCID.")
+        for df_aba in [df_hcid, df_anexo]:
+            for col in df_aba.columns:
+                df_aba.rename(columns={col: col.strip().upper()}, inplace=True)
+            for col in df_aba.columns:
+                if df_aba[col].dtype == "object":
+                    df_aba[col] = df_aba[col].astype(str).str.strip()
+                    
+        df_hcid["VAGAS"] = pd.to_numeric(df_hcid["VAGAS"], errors='coerce').fillna(0).astype(int)
+        df_anexo["VAGAS"] = pd.to_numeric(df_anexo["VAGAS"], errors='coerce').fillna(0).astype(int)
+        
+    except Exception as e:
+        st.error(f"Erro ao processar as abas 'HCID' ou 'ANEXO'. Verifique se o arquivo final contém apenas esses dois nomes de aba. Erro: {e}")
+        st.stop()
+else:
+    st.info("💡 Por favor, use o menu lateral para carregar a sua planilha Excel estruturada na vertical.")
+    st.stop()
 
-        # --- BLOCO VISUAL: ANEXO ---
-        with aba_anexo:
-            df_raw_anexo = pd.read_excel(uploaded_file, sheet_name="ANEXO", header=None)
-            df_filtro_anexo = processar_escala_complexa(df_raw_anexo)
-            
-            if not df_filtro_anexo.empty:
-                meses_anexo = [m for m in df_filtro_anexo["Mês"].unique() if m and m != "NAN"]
-                mes_sel_anexo = st.multiselect("Selecione os Meses para Análise (Anexo):", meses_anexo, default=meses_anexo)
+# ==============================================================================
+# 3. BLOCO 1: GRÁFICOS DO HCID
+# ==============================================================================
+st.markdown("<h2 style='color: #2ca02c;'>🏢 Indicadores Exclusivos - HCID</h2>", unsafe_allow_html=True)
+st.markdown("---")
+
+categorias_hcid = sorted(df_hcid["CATEGORIA PROFISSIONAL"].unique().tolist())
+filtro_cat_hcid = st.sidebar.multiselect("Filtrar Profissões (HCID):", options=categorias_hcid, default=categorias_hcid)
+df_hcid_filtrado = df_hcid[df_hcid["CATEGORIA PROFISSIONAL"].isin(filtro_cat_hcid)]
+
+r1_c1, r1_col2 = st.columns(2)
+with r1_c1:
+    st.subheader("1. Total de Vagas de Estágio no HCID")
+    st.metric(label="Vagas Totais Disponibilizadas", value=df_hcid_filtrado["VAGAS"].sum())
+
+with r1_col2:
+    st.subheader("2. Total de Setores Disponibilizados p/ Estágio no HCID")
+    st.metric(label="Setores com Campos Ativos", value=df_hcid_filtrado["SETOR"].nunique())
+
+st.markdown("---")
+
+r2_c1, r2_c2 = st.columns(2)
+with r2_c1:
+    st.subheader("3. Setores Disponibilizados para Realização de Estágio no HCID")
+    df_g3 = df_hcid_filtrado.groupby("SETOR")["VAGAS"].sum().reset_index()
+    ori_3 = "h" if tipo_grafico_5 == "Barras Horizontais" else "v"
+    x_v, y_v = ("VAGAS", "SETOR") if ori_3 == "h" else ("SETOR", "VAGAS")
+    fig3 = px.bar(df_g3, x=x_v, y=y_v, text="VAGAS", orientation=ori_3, color="SETOR", color_discrete_sequence=cor_sequencia)
+    fig3.update_traces(textposition="outside", textfont=dict(size=14))
+    fig3.update_layout(showlegend=False, height=500)
+    st.plotly_chart(fig3, use_container_width=True)
+
+with r2_c2:
+    st.subheader("4. Categorias Profissionais Contempladas no Estágio por Setor no HCID")
+    df_g4 = df_hcid_filtrado.groupby(["SETOR", "CATEGORIA PROFISSIONAL"])["VAGAS"].sum().reset_index()
+    ori_4 = "h" if tipo_grafico_5 == "Barras Horizontais" else "v"
+    x_v4, y_v4 = ("VAGAS", "SETOR") if ori_4 == "h" else ("SETOR", "VAGAS")
+    fig4 = px.bar(df_g4, x=x_v4, y=y_v4, color="CATEGORIA PROFISSIONAL", orientation=ori_4, barmode="stack", color_discrete_sequence=cor_sequencia)
+    fig4.update_layout(height=500)
+    st.plotly_chart(fig4, use_container_width=True)
+
+st.markdown("---")
+
+r3_c1, r3_c2, r3_c3 = st.columns(3)
+with r3_c1:
+    st.subheader("5. Total de Vagas por Sub-Setor no HCID")
+    df_g5 = df_hcid_filtrado.groupby("SUB_SETOR")["VAGAS"].sum().reset_index()
+    fig5 = px.bar(df_g5, x="VAGAS", y="SUB_SETOR", orientation="h", color_discrete_sequence=cor_sequencia)
+    fig5.update_layout(height=450)
+    st.plotly_chart(fig5, use_container_width=True)
+
+with r3_c2:
+    st.subheader("6. Total de Vagas do HCID por Turno")
+    df_g6 = df_hcid_filtrado.groupby("TURNO")["VAGAS"].sum().reset_index()
+    fig6 = px.bar(df_g6, x="TURNO", y="VAGAS", text="VAGAS", color="TURNO", color_discrete_sequence=px.colors.qualitative.Pastel)
+    fig6.update_traces(textposition="outside", textfont=dict(size=15))
+    fig6.update_layout(showlegend=False, height=450)
+    st.plotly_chart(fig6, use_container_width=True)
+
+with r3_c3:
+    st.subheader("7. Total de Estagiários por Turno por Setor Geral no HCID")
+    df_g7 = df_hcid_filtrado.groupby(["SETOR", "TURNO"])["VAGAS"].sum().reset_index()
+    fig7 = px.bar(df_g7, x="SETOR", y="VAGAS", color="TURNO", barmode="group", color_discrete_sequence=px.colors.qualitative.Safe)
+    fig7.update_layout(height=450, xaxis_tickangle=-45)
+    st.plotly_chart(fig7, use_container_width=True)
+
+# ==============================================================================
+# 4. BLOCO 2: GRÁFICOS DO ANEXO
+# ==============================================================================
+st.markdown("<br><br>---", unsafe_allow_html=True)
+st.markdown("<h2 style='color: #d62728;'>🏢 Indicadores Exclusivos - ANEXO</h2>", unsafe_allow_html=True)
+st.markdown("---")
+
+categorias_anexo = sorted(df_anexo["CATEGORIA PROFISSIONAL"].unique().tolist()) if not df_anexo.empty else []
+filtro_cat_anexo = st.sidebar.multiselect("Filtrar Profissões (Anexo):", options=categorias_anexo, default=categorias_anexo)
+df_anexo_filtrado = df_anexo[df_anexo["CATEGORIA PROFISSIONAL"].isin(filtro_cat_anexo)] if not df_anexo.empty else df_anexo
+
+ax_r1_c1, ax_r1_col2 = st.columns(2)
+with ax_r1_c1:
+    st.subheader("1. Total de Vagas de Estágio no Anexo")
+    st.metric(label="Vagas Totais (Anexo)", value=df_anexo_filtrado["VAGAS"].sum() if not df_anexo_filtrado.empty else 0)
+
+with ax_r1_col2:
+    st.subheader("2. Total de Setores Disponibilizados por Campo de Estágio no Anexo")
+    st.metric(label="Setores Ativos (Anexo)", value=df_anexo_filtrado["SETOR"].nunique() if not df_anexo_filtrado.empty else 0)
+
+st.markdown("---")
+
+ax_r2_c1, ax_r2_c2 = st.columns(2)
+with ax_r2_c1:
+    st.subheader("3. Setores Disponibilizados para Realização de Estágio no Anexo")
+    if not df_anexo_filtrado.empty:
+        df_ax3 = df_anexo_filtrado.groupby("SETOR")["VAGAS"].sum().reset_index()
+        fig_ax3 = px.bar(df_ax3, x=x_v, y=y_v, text="VAGAS", orientation=ori_3, color="SETOR", color_discrete_sequence=cor_sequencia)
+        fig_ax3.update_traces(textposition="outside", textfont=dict(size=14))
+        fig_ax3.update_layout(showlegend=False, height=500)
+        st.plotly_chart(fig_ax3, use_container_width=True)
+
+with ax_r2_c2:
+    st.subheader("4. Categorias Profissionais Contempladas no Estágio por Setor no Anexo")
+    if not df_anexo_filtrado.empty:
+        df_ax4 = df_anexo_filtrado.groupby(["SETOR", "CATEGORIA PROFISSIONAL"])["VAGAS"].sum().reset_index()
+        fig_ax4 = px.bar(df_ax4, x=x_v4, y=y_v4, color="CATEGORIA PROFISSIONAL", orientation=ori_4, barmode="stack", color_discrete_sequence=cor_sequencia)
+        fig_ax4.update_layout(height=500)
+        st.plotly_chart(fig_ax4, use_container_width=True)
+
+# ==============================================================================
+# 5. RODAPÉ - ASSINATURA DO PROGRAMADOR
+# ==============================================================================
+st.markdown("<br><br><br>", unsafe_allow_html=True)
+col_assinatura, _ = st.columns(2)
+with col_assinatura:
+    st.markdown(
+        """
+        <div style="padding: 10px; border-top: 1px solid #ddd; color: #555; font-size: 0.9rem;">
+            👨‍💻 <b>Programador:</b> Ezequias S. Santos Naqh / Nsp
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
