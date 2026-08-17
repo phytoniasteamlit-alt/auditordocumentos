@@ -57,12 +57,12 @@ if uploaded_file is not None:
     # Carrega a tabela mapeando as colunas de forma estrita desde o topo
     df_raw = pd.read_excel(uploaded_file, sheet_name=aba_alvo, header=None)
     
-    # Armazena os cabeçalhos das linhas de calendário (Meses, Dias e Turnos)
-    linha_meses = df_raw.iloc.ffill().fillna("").astype(str).tolist()
-    linha_dias = df_raw.iloc.ffill().fillna("").astype(str).tolist()
-    linha_turnos = df_raw.iloc.fillna("").astype(str).tolist()
+    # CORREÇÃO CRÍTICA: Aplica o ffill horizontal diretamente nas séries extraídas das linhas 3, 4 e 5 físicas
+    linha_meses = pd.Series(df_raw.iloc[3, :]).ffill().fillna("").astype(str).tolist()
+    linha_dias = pd.Series(df_raw.iloc[4, :]).ffill().fillna("").astype(str).tolist()
+    linha_turnos = pd.Series(df_raw.iloc[5, :]).fillna("").astype(str).tolist()
     
-    # Define o início do corpo de dados real
+    # Define o início do corpo de dados real (Linha 8 física / índice 7)
     df_corpo = df_raw.iloc[7:].copy().reset_index(drop=True)
     
     # Preenchimento em cascata estrutural (Setor, Sub-setor, Categoria) para células vazias
@@ -181,5 +181,3 @@ if uploaded_file is not None:
                 color="VAGAS", color_continuous_scale=px.colors.sequential.Bluered, text_auto=True
             )
             fig2.update_layout(showlegend=False, height=335, margin=dict(l=20, r=35, t=10, b=10))
-            fig2.update_traces(textposition="outside", cliponaxis=False)
-            st.plotly_chart(fig2, use_container_width=True)
