@@ -61,15 +61,20 @@ else:
     cor_sequencia = ["#008080", "#4682B4", "#20B2AA", "#5F9EA0", "#B0C4DE"]
 
 # ==============================================================================
-# 3. MOTOR DE PROCESSAMENTO DE DADOS CORRIGIDO E ALINHADO
+# 3. MOTOR DE PROCESSAMENTO ULTRA-FLEXÍVEL (MAPEAMENTO AUTOMÁTICO DE ABAS)
 # ==============================================================================
 if uploaded_file is not None:
     try:
         excel_file = pd.ExcelFile(uploaded_file)
         abas_disponiveis = excel_file.sheet_names
         
-        aba_hcid_real = next((op for op in ["HCID_BDD", "HCID", "HCID1", "DADOS"] if op in abas_disponiveis), None)
-        aba_anexo_real = next((op for op in ["ANEXO", "ANEXO2", "ANEXOS"] if op in abas_disponiveis), None)
+        # ESTRATÉGIA INTELIGENTE: Pega por posição caso os nomes não batam perfeitamente
+        aba_hcid_real = next((op for op in ["HCID_BDD", "HCID", "HCID1", "DADOS"] if op in abas_disponiveis), abas_disponiveis[0])
+        
+        if len(abas_disponiveis) > 1:
+            aba_anexo_real = next((op for op in ["ANEXO", "ANEXO2", "ANEXOS"] if op in abas_disponiveis), abas_disponiveis[1])
+        else:
+            aba_anexo_real = None
         
         def extrair_e_limpar_dados(sheet_name):
             if not sheet_name:
@@ -89,7 +94,7 @@ if uploaded_file is not None:
             df_dados = df_bruto.iloc[linha_cabecalho+1:].copy()
             df_dados.columns = cabecalhos
             
-            # Identificação estrita dos índices das colunas
+            # Mapeamento dinâmico de colunas por detecção de texto
             idx_setor, idx_sub, idx_cat, idx_manha, idx_tarde = 0, 1, 2, 3, 4
             for idx_c, col_nome in enumerate(df_dados.columns):
                 c_norm = normalizar_texto(col_nome)
@@ -105,18 +110,17 @@ if uploaded_file is not None:
                 v_str = "".join(filter(str.isdigit, str(valor)))
                 return int(v_str) if v_str != "" else 0
 
-            # Construção explícita do DataFrame para garantir alinhamento dos turnos
+            # Estruturação limpa das colunas
             df_limpo = pd.DataFrame()
             df_limpo["SETOR"] = df_dados.iloc[:, idx_setor].astype(str).str.strip().ffill()
             df_limpo["SUB_SETOR"] = df_dados.iloc[:, idx_sub].fillna("GERAL").astype(str).str.strip()
             df_limpo["CATEGORIA"] = df_dados.iloc[:, idx_cat].fillna("NÃO ESPECIFICADO").astype(str).str.strip()
             
-            # Extração direta e independente baseada nos índices mapeados acima
             df_limpo["MANHÃ"] = df_dados.iloc[:, idx_manha].apply(extrair_inteiro)
             df_limpo["TARDE"] = df_dados.iloc[:, idx_tarde].apply(extrair_inteiro)
             df_limpo["TOTAL_VAGAS"] = df_limpo["MANHÃ"] + df_limpo["TARDE"]
             
-            # Limpeza de ruídos textuais (Linhas de "Total")
+            # Remove linhas de lixo ou subtotais
             linhas_validas = []
             for _, row in df_limpo.iterrows():
                 txt_s = str(row["SETOR"]).upper()
@@ -130,7 +134,7 @@ if uploaded_file is not None:
             return df_final[df_final["TOTAL_VAGAS"] > 0]
 
         df_hcid = extrair_e_limpar_dados(aba_hcid_real)
-        df_anexo = extrair_e_limpar_dados(aba_anexo_real)
+        df_anexo = extrair_e_limpar_dados(aba_anexo_real) if aba_anexo_real else pd.DataFrame()
         
     except Exception as e:
         st.error(f"Erro inesperado durante a leitura dos dados: {e}")
@@ -146,11 +150,10 @@ tab_hcid, tab_anexos = st.tabs(["🏥 Hospital Geral (HCID)", "🏢 Unidades Ane
 
 def renderizar_painel_etapas(df_alvo, nome_aba_excel, chave_unica):
     if df_alvo.empty:
-        st.warning(f"Nenhum dado válido ou ativo foi processado para a aba '{nome_aba_excel}'.")
+        st.warning(f"Nenhum dado válido ou ativo foi processado na aba '{nome_aba_excel}'. Verifique a estrutura das colunas.")
         return
 
-    # Exibe a origem do dado para controle do usuário
-    st.caption(f"📂 Fonte dos dados: Aba **'{nome_aba_excel}'** identificada no Excel.")
+    st.caption(f"📂 Lendo dados da Aba: **'{nome_aba_excel}'**")
 
     # --- TOP CARD METRICS ---
     total_geral = df_alvo["TOTAL_VAGAS"].sum()
@@ -187,7 +190,7 @@ def renderizar_painel_etapas(df_alvo, nome_aba_excel, chave_unica):
 
     with col_direita:
         st.markdown("### 🔍 Etapa 2: Detalhar Sub-Setores e Turnos")
-        st.caption("Filtre um setor para abrir o destrinchamento de sub-áreas e distribuição temporal de turnos.")
+        st.caption("Filtre um setor para abrir o destrinchamento de sub-áreas e turnos.")
         
         setores_disponiveis = sorted(df_alvo["SETOR"].unique())
         setor_selecionado = st.selectbox("Selecione o Setor Principal:", setores_disponiveis, key=f"sel_{chave_unica}")
@@ -217,6 +220,3 @@ def renderizar_painel_etapas(df_alvo, nome_aba_excel, chave_unica):
             fig_detalhe.update_layout(barmode="stack", height=400, margin=dict(l=20, r=20, t=10, b=10))
             st.plotly_chart(fig_detalhe, use_container_width=True, key=f"detalhe_{chave_unica}")
         else:
-            st.info("Nenhuma vaga ativa encontrada para os parâmetros do setor selecionado.")
-
-    st.markdown("---")
