@@ -132,6 +132,14 @@ if uploaded_file is not None:
         df_hcid, hc_setor, hc_sub, hc_cat, hc_turno, hc_vagas = processar_mapeamento_inteligente(df_hcid)
         df_anexo, ax_setor, ax_sub, ax_cat, ax_turno, ax_vagas = processar_mapeamento_inteligente(df_anexo)
         
+        # --- ENGENHARIA DE DADOS INTELIGENTE: Cria a coluna combinada limpa para os gráficos ---
+        for d_f, s_t, s_b in [(df_hcid, hc_setor, hc_sub), (df_anexo, ax_setor, ax_sub)]:
+            if not d_f.empty:
+                d_f["LOCAL_COMBINADO"] = d_f.apply(
+                    lambda r: f"{r[s_t]}" if str(r[s_t]).upper() == str(r[s_b]).upper() else f"{r[s_t]} - {r[s_b]}",
+                    axis=1
+                )
+        
     except Exception as e:
         st.error(f"Erro crítico no mapeamento das colunas da planilha. Detalhes: {e}")
         st.stop()
@@ -153,38 +161,37 @@ else:
     df_hcid_filtrado = df_hcid
 
 r1_c1, r1_col2 = st.columns(2)
-# Exibe a capacidade instantânea máxima por turno na métrica geral
-r1_c1.metric(label="Vagas de Estágio por Turno no HCID", value=int(df_hcid_filtrado.groupby([hc_setor, hc_turno])[hc_vagas].sum().max()))
-r1_col2.metric(label="Setores com Campos Ativos no HCID", value=df_hcid_filtrado[hc_setor].nunique())
+r1_c1.metric(label="Vagas de Estágio por Turno no HCID", value=df_hcid_filtrado.groupby(["LOCAL_COMBINADO", hc_turno])[hc_vagas].sum().max())
+r1_col2.metric(label="Áreas de Estágio Ativas no HCID", value=df_hcid_filtrado["LOCAL_COMBINADO"].nunique())
 
 st.markdown("---")
 
 r2_c1, r2_c2 = st.columns(2)
 
-# Gráfico 3 (Ajustado para Média para trazer o valor nominal de 4 ou 1 vaga por turno)
-df_g3 = df_hcid_filtrado.groupby(hc_setor)[hc_vagas].mean().reset_index()
+# Gráfico 3 (Ajustado com o LOCAL_COMBINADO para exibir 4 ou 1 vaga individual por turno)
+df_g3 = df_hcid_filtrado.groupby("LOCAL_COMBINADO")[hc_vagas].mean().reset_index()
 df_g3[hc_vagas] = df_g3[hc_vagas].round(1)
 ori_3 = "h" if tipo_grafico_5 == "Barras Horizontais" else "v"
-x_v, y_v = (hc_vagas, hc_setor) if ori_3 == "h" else (hc_setor, hc_vagas)
-fig3 = px.bar(df_g3, x=x_v, y=y_v, text=hc_vagas, orientation=ori_3, color=hc_setor, color_discrete_sequence=cor_sequencia, title="3. Vagas Disponibilizadas por Turno / Setor no HCID")
+x_v, y_v = (hc_vagas, "LOCAL_COMBINADO") if ori_3 == "h" else ("LOCAL_COMBINADO", hc_vagas)
+fig3 = px.bar(df_g3, x=x_v, y=y_v, text=hc_vagas, orientation=ori_3, color="LOCAL_COMBINADO", color_discrete_sequence=cor_sequencia, title="3. Vagas Disponibilizadas por Turno / Campo de Estágio no HCID")
 fig3.update_traces(textposition="outside", textfont=dict(size=14))
-fig3.update_layout(showlegend=False, height=550)
+fig3.update_layout(showlegend=False, height=650)
 r2_c1.plotly_chart(fig3, use_container_width=True)
 
-# Gráfico 4 (Ajustado para Média)
-df_g4 = df_hcid_filtrado.groupby([hc_setor, hc_cat])[hc_vagas].mean().reset_index()
+# Gráfico 4 (Ajustado com o LOCAL_COMBINADO para separar por área e mostrar as 4 vagas exatas)
+df_g4 = df_hcid_filtrado.groupby(["LOCAL_COMBINADO", hc_cat])[hc_vagas].mean().reset_index()
 df_g4[hc_vagas] = df_g4[hc_vagas].round(1)
 ori_4 = "h" if tipo_grafico_5 == "Barras Horizontais" else "v"
-x_v4, y_v4 = (hc_vagas, hc_setor) if ori_4 == "h" else (hc_setor, hc_vagas)
-fig4 = px.bar(df_g4, x=x_v4, y=y_v4, color=hc_cat, orientation=ori_4, barmode="stack", color_discrete_sequence=cor_sequencia, title="4. Vagas de Estágio por Turno por Categoria Profissional e Setor no HCID")
-fig4.update_layout(height=550, legend=dict(title_text="Profissão"))
+x_v4, y_v4 = (hc_vagas, "LOCAL_COMBINADO") if ori_4 == "h" else ("LOCAL_COMBINADO", hc_vagas)
+fig4 = px.bar(df_g4, x=x_v4, y=y_v4, color=hc_cat, orientation=ori_4, barmode="stack", color_discrete_sequence=cor_sequencia, title="4. Vagas por Turno por Categoria Profissional e Campo de Estágio no HCID")
+fig4.update_layout(height=650, legend=dict(title_text="Profissão"))
 r2_c2.plotly_chart(fig4, use_container_width=True)
 
 st.markdown("---")
 
 r3_c1, r3_c2, r3_c3 = st.columns(3)
 
-# Gráfico 5 (Ajustado para Média)
+# Gráfico 5
 df_g5 = df_hcid_filtrado.groupby(hc_sub)[hc_vagas].mean().reset_index()
 df_g5[hc_vagas] = df_g5[hc_vagas].round(1)
 fig5 = px.bar(df_g5, x="VAGAS", y=hc_sub, text="VAGAS", orientation="h", color_discrete_sequence=cor_sequencia, title="5. Vagas por Turno por Sub-Setor no HCID")
@@ -192,7 +199,7 @@ fig5.update_traces(textposition="outside", textfont=dict(size=13))
 fig5.update_layout(height=450)
 r3_c1.plotly_chart(fig5, use_container_width=True)
 
-# Gráfico 6 (Ajustado para Média)
+# Gráfico 6
 df_g6 = df_hcid_filtrado.groupby(hc_turno)[hc_vagas].mean().reset_index()
 df_g6[hc_vagas] = df_g6[hc_vagas].round(1)
 fig6 = px.bar(df_g6, x=hc_turno, y=hc_vagas, text=hc_vagas, color=hc_turno, color_discrete_sequence=px.colors.qualitative.Pastel, title="6. Capacidade Média Nominal do HCID por Turno")
@@ -200,12 +207,6 @@ fig6.update_traces(textposition="outside", textfont=dict(size=15))
 fig6.update_layout(showlegend=False, height=450)
 r3_c2.plotly_chart(fig6, use_container_width=True)
 
-# Gráfico 7 (Ajustado para Média)
-df_g7 = df_hcid_filtrado.groupby([hc_setor, hc_turno])[hc_vagas].mean().reset_index()
+# Gráfico 7
+df_g7 = df_hcid_filtrado.groupby(["LOCAL_COMBINADO", hc_turno])[hc_vagas].mean().reset_index()
 df_g7[hc_vagas] = df_g7[hc_vagas].round(1)
-fig7 = px.bar(df_g7, x=hc_setor, y=hc_vagas, color=hc_turno, barmode="group", color_discrete_sequence=px.colors.qualitative.Safe, title="7. Vagas por Turno e por Setor Geral no HCID")
-fig7.update_layout(height=450, xaxis_tickangle=-45)
-r3_c3.plotly_chart(fig7, use_container_width=True)
-
-# ==============================================================================
-# 4. BLOCO 2: GRÁFICOS DO ANEXO
