@@ -47,7 +47,7 @@ st.sidebar.header("⚙️ Painel de Controle")
 uploaded_file = st.sidebar.file_uploader("Carregar Planilha de Estágios (.xlsx):", type=["xlsx"])
 
 # ==============================================================================
-# 3. MOTOR DE PROCESSAMENTO MATRICIAL CORRIGIDO (LEITURA HORIZONTAL COMPLETA)
+# 3. MOTOR DE PROCESSAMENTO MATRICIAL (ANTI-MESCLAGEM EXCEL)
 # ==============================================================================
 if uploaded_file is not None:
     excel_file = pd.ExcelFile(uploaded_file)
@@ -57,37 +57,51 @@ if uploaded_file is not None:
     # Carrega a tabela bruta sem cabeçalho automático
     df_raw = pd.read_excel(uploaded_file, sheet_name=aba_alvo, header=None)
     
-    # Processamento horizontal das linhas de cabeçalho mescladas (Meses, Dias e Turnos)
-    # Garante o preenchimento de strings para a direita na horizontal antes de extrair a lista
-    linha_meses = df_raw.iloc[3].ffill().fillna("").astype(str).tolist()
-    linha_dias = df_raw.iloc[4].ffill().fillna("").astype(str).tolist()
-    linha_turnos = df_raw.iloc[5].fillna("").astype(str).tolist()
+    # TRATAMENTO DE MESCLAGEM HORIZONTAL:
+    # Transpõe as linhas de cabeçalho para aplicar o ffill() vertical do Pandas e depois volta ao normal
+    # Linha indexada 3 = Meses, Linha indexada 4 = Dias da Semana, Linha indexada 5 = Turnos
+    linha_meses = pd.Series(df_raw.iloc[3, :]).replace(["nan", "NAN", ""], pd.NA).ffill().fillna("").tolist()
+    linha_dias = pd.Series(df_raw.iloc[4, :]).replace(["nan", "NAN", ""], pd.NA).ffill().fillna("").tolist()
+    linha_turnos = pd.Series(df_raw.iloc[5, :]).fillna("").tolist()
     
     # Isola o corpo de dados reais (A partir da Linha 8 física / índice 7)
-    df_corpo = df_raw.iloc[7:].copy()
+    df_corpo = df_raw.iloc[7:].copy().reset_index(drop=True)
     
-    # Preenchimento em cascata vertical das colunas estruturais de texto (Setor, Sub-setor, Categoria)
+    # TRATAMENTO DE MESCLAGEM VERTICAL:
+    # Preenche em cascata as colunas textuais da esquerda que foram quebradas por células mescladas
     df_corpo.iloc[:, 0] = df_corpo.iloc[:, 0].replace(["nan", "NAN", ""], pd.NA).ffill().fillna("GERAL")
     df_corpo.iloc[:, 1] = df_corpo.iloc[:, 1].replace(["nan", "NAN", ""], pd.NA).ffill().fillna("GERAL")
     df_corpo.iloc[:, 2] = df_corpo.iloc[:, 2].replace(["nan", "NAN", ""], pd.NA).ffill().fillna("NÃO ESPECIFICADO")
     
-    registros_vagas = []
+    # TRATAMENTO EXTRA DE CASCATA PARA VAGAS POR TURNO MESCLADAS (Colunas D e E / índices 3 e 4)
+    df_corpo.iloc[:, 3] = df_corpo.iloc[:, 3].replace(["nan", "NAN", ""], pd.NA).ffill().fillna("0")
+    df_corpo.iloc[:, 4] = df_corpo.iloc[:, 4].replace(["nan", "NAN", ""], pd.NA).ffill().fillna("0")
     
-    # Varredura matricial com extração direta por posição atômica de célula
+    registros_vagas = []
+    num_colunas_total = len(df_raw.columns)
+    
+    # Varredura matricial com extração protegida contra deslocamento
     for idx_row in range(len(df_corpo)):
-        # Coleta os textos purificados de forma atômica utilizando o índice absoluto do corpo processado
         setor = str(df_corpo.iloc[idx_row, 0]).strip().upper()
         sub_setor = str(df_corpo.iloc[idx_row, 1]).strip().upper()
         categoria = str(df_corpo.iloc[idx_row, 2]).strip().upper()
         
-        # Filtro rígido para ignorar linhas de divisórias textuais e somatórios nativos
+        # Filtro rígido para descartar ruídos textuais e somatórios duplicados nativos do Excel
         if "TOTAL" in setor or "TOTAL" in categoria or categoria == "" or setor == "SETOR" or setor == "GERAL":
             continue
             
-        # CORRIGIDO DEFINITIVAMENTE: shape[1] força a varredura horizontal completa por todas as colunas do calendário
-        for col_idx in range(8, df_corpo.shape[1]):
+        # Percorre horizontalmente as colunas de agendamento (A partir da coluna de índice 8)
+        for col_idx in range(8, num_colunas_total):
             vaga_bruta = df_corpo.iloc[idx_row, col_idx]
             qtd_vagas = extrair_numero(vaga_bruta)
+            
+            # Se a célula diária estiver zerada, tenta herdar a vaga padrão do bloco fixado nas colunas D e E
+            if qtd_vagas == 0:
+                turno_atual = str(linha_turnos[col_idx]).strip().upper()
+                vaga_padrao_celula = df_corpo.iloc[idx_row, 3] if "MANH" in turno_atual else df_corpo.iloc[idx_row, 4]
+                # Valida se a linha do calendário possui preenchimento ativo naquele dia específico
+                if pd.notna(vaga_bruta) and str(vaga_bruta).strip() != "" and str(vaga_bruta).strip().lower() != "nan":
+                    qtd_vagas = extrair_numero(vaga_padrao_celula)
             
             if qtd_vagas > 0:
                 mes_name = str(linha_meses[col_idx]).strip().upper()
@@ -164,20 +178,3 @@ if uploaded_file is not None:
             )
             fig1.update_layout(showlegend=False, height=400, margin=dict(l=20, r=35, t=10, b=10))
             fig1.update_traces(textposition="outside", cliponaxis=False)
-            st.plotly_chart(fig1, use_container_width=True)
-            
-        with col_g2:
-            st.markdown("### 👩‍⚕️ Categorias profissionais contemplados no estagio por setor no hcid")
-            setor_selecionado_g2 = st.selectbox("Escolha o Setor para Filtrar as Profissões:", sorted(df_master["SETOR"].unique()))
-            df_g2 = df_master[df_master["SETOR"] == setor_selecionado_g2].groupby("CATEGORIA")["VAGAS"].sum().reset_index().sort_values(by="VAGAS", ascending=True)
-            
-            fig2 = px.bar(
-                df_g2, x="VAGAS", y="CATEGORIA", orientation="h",
-                color="VAGAS", color_continuous_scale=px.colors.sequential.Bluered, text_auto=True
-            )
-            fig2.update_layout(showlegend=False, height=335, margin=dict(l=20, r=35, t=10, b=10))
-            fig2.update_traces(textposition="outside", cliponaxis=False)
-            st.plotly_chart(fig2, use_container_width=True)
-            
-        # --- GRÁFICO CRONOLÓGICO MENSAL SOLICITADO ---
-        st.markdown("---")
