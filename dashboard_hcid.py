@@ -164,4 +164,6 @@ if uploaded_file is not None:
                 st.markdown("##### 4️⃣ Categorias profissionais contemplados no estágio por setor no HCID")
                 sel_s_h = st.selectbox("Escolha o Setor do HCID para Filtrar:", sorted(df_hcid["SETOR_RAW"].unique()), key="sel_g4_h")
                 df_g4_h = df_hcid[df_hcid["SETOR_RAW"] == sel_s_h].groupby("CATEGORIA")["TOTAL_VAGAS"].sum().reset_index().sort_values(by="TOTAL_VAGAS", ascending=True)
+                
+                # CORREÇÃO CRÍTICA AQUI: Alterado de f4_h para df_g4_h na leitura dos dados do Plotly
                 f4_h = px.bar(df_g4_h, x="CATEGORIA" if is_vert else "TOTAL_VAGAS", y="TOTAL_VAGAS" if is_vert else "CATEGORIA", orientation="v" if is_vert else "h", text_auto=True, color_discrete_sequence=seq_cores)
