@@ -14,6 +14,7 @@ st.set_page_config(
 def extrair_numero(valor):
     if pd.isna(valor) or str(valor).strip() == "" or str(valor).strip().lower() == "nan":
         return 0
+    # Isola estritamente os dígitos numéricos das células (Ignora "por turno", textinhos, etc.)
     v_str = "".join(filter(str.isdigit, str(valor)))
     return int(v_str) if v_str != "" else 0
 
@@ -65,30 +66,27 @@ else:
 is_vert = estilo_grafico == "Barras Verticais"
 
 # ==============================================================================
-# 3. MOTOR INTELIGENTE DE TRATAMENTO ISOLADO POR CARACTERÍSTICA DE ABA
+# 3. MOTOR DE PROCESSAMENTO PADRÃO COMPATÍVEL COM AS DUAS ABAS
 # ==============================================================================
-def extrair_dados_dinamicos(uploaded_file, numero_posicao_aba):
+def extrair_dados_estaticos_por_posicao(uploaded_file, numero_posicao_aba):
     try:
-        # Lê a aba bruta ignorando as linhas de meta-títulos iniciais
+        # Lê a tabela pulando as 7 linhas de meta-títulos (Padrão idêntico para ambas as abas)
         df_raw = pd.read_excel(uploaded_file, sheet_name=numero_posicao_aba, header=None, skiprows=7)
         if df_raw.empty:
             return pd.DataFrame()
             
         df_processado = pd.DataFrame()
+        # Tratamento de mesclagem vertical (.ffill) para herdar setores vazios
         df_processado["SETOR_RAW"] = df_raw.iloc[:, 0].astype(str).str.strip().ffill()
         df_processado["SUB_SETOR"] = df_raw.iloc[:, 1].fillna("").astype(str).str.strip()
         df_processado["CATEGORIA"] = df_raw.iloc[:, 2].fillna("").astype(str).str.strip()
         
-        # AJUSTE DA ABA ANEXOS: Mapeia as vagas reais baseando-se nos cabeçalhos da tabela do anexo
-        idx_m, idx_t = 3, 4
-        if numero_posicao_aba == 1:
-            # Caso a estrutura física da segunda aba desloque as vagas devido aos preceptores
-            idx_m, idx_t = 3, 4
-            
-        df_processado["MANHÃ"] = df_raw.iloc[:, idx_m].apply(extrair_numero)
-        df_processado["TARDE"] = df_raw.iloc[:, idx_t].apply(extrair_numero)
+        # Leitura estática e direta das colunas de turno D e E
+        df_processado["MANHÃ"] = df_raw.iloc[:, 3].apply(extrair_numero)
+        df_processado["TARDE"] = df_raw.iloc[:, 4].apply(extrair_numero)
         df_processado["TOTAL_VAGAS"] = df_processado["MANHÃ"] + df_processado["TARDE"]
         
+        # Filtro rigoroso contra linhas pretas vazias de TOTAL nativas da planilha
         linhas_validas = []
         for _, row in df_processado.iterrows():
             txt_s = str(row["SETOR_RAW"]).upper()
@@ -107,21 +105,21 @@ def extrair_dados_dinamicos(uploaded_file, numero_posicao_aba):
         return pd.DataFrame()
 
 # ==============================================================================
-# 4. AMBIENTE DE NAVEGAÇÃO POR ABAS CONSOLIDADAS MANTIDO
+# 4. AMBIENTE DE SEPARAÇÃO ESTREITA POR GUIA DE NAVEGAÇÃO
 # ==============================================================================
 if uploaded_file is not None:
     excel_file = pd.ExcelFile(uploaded_file)
     abas_planilha = excel_file.sheet_names
     
-    # Processa as matrizes de forma isolada sem vazamento de memória
-    df_hcid = extrair_dados_dinamicos(uploaded_file, 0)
-    df_anexos = extrair_dados_dinamicos(uploaded_file, 1) if len(abas_planilha) > 1 else pd.DataFrame()
+    # Executa o processamento linear em caminhos 100% isolados por índice de aba
+    df_hcid = extrair_dados_estaticos_por_posicao(uploaded_file, 0)
+    df_anexos = extrair_dados_estaticos_por_posicao(uploaded_file, 1) if len(abas_planilha) > 1 else pd.DataFrame()
 
-    # Define os botões de guias do Streamlit
+    # Criação das guias limpas no topo da tela do Streamlit
     tab_hcid, tab_anexos = st.tabs(["🏥 Hospital Geral (HCID)", "🏢 Unidades Anexas"])
 
     # --------------------------------==========================================
-    # CONTEÚDO DA GUIA 1: HCID
+    # CONTEÚDO EXCLUSIVO DA GUIA 1: SOMENTE HCID
     # --------------------------------==========================================
     with tab_hcid:
         st.markdown("<div style='background-color: #1a2a3a; padding: 12px; border-radius: 5px; margin-bottom: 20px;'><h2 style='margin:0; font-size:1.4rem; color:#fff;'>📊 QUADRO DE INDICADORES - SOMENTE HCID</h2></div>", unsafe_allow_html=True)
@@ -135,8 +133,8 @@ if uploaded_file is not None:
             c1, c2, c3, c4 = st.columns(4)
             c1.metric("📑 Total de vagas de estágio geral HCID", f"{t_vagas_h} Vagas")
             c2.metric("🏥 Total de setores disponibilizados no HCID", f"{t_setores_h} Setores")
-            c3.metric("☀️ Total de vagas do turno manhã", f"{t_m_h} M")
-            c4.metric("🌙 Total de vagas do turno tarde", f"{t_t_h} T")
+            c3.metric("☀️ Total de vagas de estágio do HCID por turno manhã", f"{t_m_h} M")
+            c4.metric("🌙 Total de vagas de estágio do HCID tarde", f"{t_t_h} T")
             
             st.markdown("<br>", unsafe_allow_html=True)
             col1_h, col2_h = st.columns(2)
@@ -171,4 +169,3 @@ if uploaded_file is not None:
 
             with col2_h:
                 st.markdown("##### 2️⃣ Total de setores disponibilizados p/ campo de estágio no HCID")
-                df_g2_h = pd.DataFrame([{"Mapeamento": "Setores Ativos", "Quantidade": t_setores_h}])
