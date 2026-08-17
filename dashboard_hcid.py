@@ -61,7 +61,7 @@ else:
     cor_sequencia = ["#008080", "#4682B4", "#20B2AA", "#5F9EA0", "#B0C4DE"]
 
 # ==============================================================================
-# 3. MOTOR DE PROCESSAMENTO BLINDADO (EVITA ERROS DE SÉRIES AMBÍGUAS)
+# 3. MOTOR DE PROCESSAMENTO DE DADOS BLINDADO
 # ==============================================================================
 if uploaded_file is not None:
     try:
@@ -75,7 +75,6 @@ if uploaded_file is not None:
             if not sheet_name:
                 return pd.DataFrame()
             
-            # Carrega a aba bruta
             df_bruto = pd.read_excel(uploaded_file, sheet_name=sheet_name, header=None)
             
             # Localiza a linha do cabeçalho estrutural buscando palavras-chave comuns
@@ -86,12 +85,10 @@ if uploaded_file is not None:
                     linha_cabecalho = idx
                     break
             
-            # Define os cabeçalhos encontrados e isola os dados
             cabecalhos = [str(c).strip().replace('\n', ' ') for c in df_bruto.iloc[linha_cabecalho]]
             df_dados = df_bruto.iloc[linha_cabecalho+1:].copy()
             df_dados.columns = cabecalhos
             
-            # Mapeamento estrito por varredura simples (evita conflitos lógicos do pandas)
             idx_setor, idx_sub, idx_cat, idx_manha, idx_tarde = 0, 1, 2, 3, 4
             for idx_c, col_nome in enumerate(df_dados.columns):
                 c_norm = normalizar_texto(col_nome)
@@ -101,14 +98,12 @@ if uploaded_file is not None:
                 elif "MANH" in c_norm: idx_manha = idx_c
                 elif "TARD" in c_norm: idx_tarde = idx_c
 
-            # Limpeza das células de vagas para extrair apenas os números inteiros
             def extrair_inteiro(valor):
                 if pd.isna(valor) or str(valor).strip() == "" or str(valor).strip().lower() == "nan": 
                     return 0
                 v_str = "".join(filter(str.isdigit, str(valor)))
                 return int(v_str) if v_str != "" else 0
 
-            # Criação do DataFrame unificado e higienizado
             df_limpo = pd.DataFrame()
             df_limpo["SETOR"] = df_dados.iloc[:, idx_setor].astype(str).str.strip().ffill()
             df_limpo["SUB_SETOR"] = df_dados.iloc[:, idx_sub].fillna("GERAL").astype(str).str.strip()
@@ -118,7 +113,6 @@ if uploaded_file is not None:
             df_limpo["TARDE"] = df_dados.iloc[:, idx_tarde].apply(extrair_inteiro)
             df_limpo["TOTAL_VAGAS"] = df_limpo["MANHÃ"] + df_limpo["TARDE"]
             
-            # Filtro básico: remove ruídos textuais gerados por linhas de "Total" da planilha original
             linhas_validas = []
             for _, row in df_limpo.iterrows():
                 txt_s = str(row["SETOR"]).upper()
@@ -142,7 +136,7 @@ else:
     st.stop()
 
 # ==============================================================================
-# 4. ARQUITETURA VISUAL DO DASHBOARD PROGRESSIVO (DADOS DESTREINCHADOS)
+# 4. ARQUITETURA VISUAL DO DASHBOARD PROGRESSIVO POR ETAPAS
 # ==============================================================================
 tab_hcid, tab_anexos = st.tabs(["🏥 Hospital Geral (HCID)", "🏢 Unidades Anexas"])
 
@@ -151,25 +145,24 @@ def renderizar_painel_etapas(df_alvo, chave_unica):
         st.warning("Nenhum dado válido ou ativo foi processado para esta unidade.")
         return
 
-    # --- ETAPA 1: MÉTRICAS MACRO ---
+    # --- TOP CARD METRICS ---
     total_geral = df_alvo["TOTAL_VAGAS"].sum()
     total_m = df_alvo["MANHÃ"].sum()
     total_t = df_alvo["TARDE"].sum()
     
     m1, m2, m3 = st.columns(3)
     m1.metric("Capacidade Total de Vagas", f"{total_geral} Vagas")
-    m2.metric("Disponíveis no Turno Manhã", f"{total_m} M")
-    m3.metric("Disponíveis no Turno Tarde", f"{total_t} T")
+    m2.metric("Turno Manhã (Total)", f"{total_m} M")
+    m3.metric("Turno Tarde (Total)", f"{total_t} T")
     
     st.markdown("---")
     
-    col_esquerda, col_direita = st.columns([2, 3])
+    col_esquerda, col_direita = st.columns(2)
     
     with col_esquerda:
         st.markdown("### 📊 Etapa 1: Visão Macro por Setor")
-        st.caption("Veja abaixo a distribuição do volume total de vagas concentrado em cada grande setor do hospital.")
+        st.caption("Volume macro consolidado por área principal.")
         
-        # Agrupamento macro por setor para o gráfico principal
         df_macro = df_alvo.groupby("SETOR")["TOTAL_VAGAS"].sum().reset_index()
         df_macro = df_macro.sort_values(by="TOTAL_VAGAS", ascending=True)
         
@@ -182,35 +175,51 @@ def renderizar_painel_etapas(df_alvo, chave_unica):
             color="TOTAL_VAGAS",
             color_continuous_scale=px.colors.sequential.Tealgrn
         )
-        fig_macro.update_layout(showlegend=False, height=380, margin=dict(l=20, r=20, t=10, b=10))
+        fig_macro.update_layout(showlegend=False, height=400, margin=dict(l=20, r=20, t=10, b=10))
         st.plotly_chart(fig_macro, use_container_width=True, key=f"macro_{chave_unica}")
 
     with col_direita:
-        st.markdown("### 🔍 Etapa 2: Investigar Sub-Setores e Turnos")
-        st.caption("Selecione um setor específico abaixo para abrir o detalhamento das sub-áreas sem amontoar as informações.")
+        st.markdown("### 🔍 Etapa 2: Detalhar Sub-Setores e Turnos")
+        st.caption("Filtre um setor para abrir o destrinchamento de sub-áreas e distribuição temporal de turnos.")
         
-        # Seletor interativo para isolar o setor desejado
         setores_disponiveis = sorted(df_alvo["SETOR"].unique())
-        setor_selecionado = st.selectbox("Escolha o Setor para Filtrar:", setores_disponiveis, key=f"sel_{chave_unica}")
+        setor_selecionado = st.selectbox("Selecione o Setor Principal:", setores_disponiveis, key=f"sel_{chave_unica}")
         
-        # Filtra o DataFrame original com base na escolha do usuário
         df_filtrado = df_alvo[df_alvo["SETOR"] == setor_selecionado].copy()
         
-        # Prepara a tabela transformando os turnos de colunas para linhas (formato ideal para barras empilhadas)
         df_melted = df_filtrado.melt(
             id_vars=["SUB_SETOR", "CATEGORIA"],
             value_vars=["MANHÃ", "TARDE"],
             var_name="TURNO",
             value_name="VAGAS"
         )
-        df_melted = df_melted[df_melted["VAGAS"] > 0] # Remove turnos zerados para limpar o visual
+        df_melted = df_melted[df_melted["VAGAS"] > 0]
         
         if not df_melted.empty:
-            # Gráfico de barras empilhadas mostrando Sub-setor e Categoria separadas por Cor de Turno
-            df_melted["SUB_E_CAT"] = df_melted["SUB_SETOR"] + " - " + df_melted["CATEGORIA"]
+            # CORREÇÃO DA SINTAXE: Parêntese fechado perfeitamente
+            df_melted["SUB_E_CAT"] = df_melted["SUB_SETOR"] + " (" + df_melted["CATEGORIA"] + ")"
             
             fig_detalhe = px.bar(
                 df_melted,
                 x="VAGAS",
                 y="SUB_E_CAT",
                 color="TURNO",
+                orientation="h",
+                labels={"VAGAS": "Quantidade de Vagas", "SUB_E_CAT": "Sub-Setor (Profissão)"},
+                color_discrete_map={"MANHÃ": "#008080", "TARDE": "#FF7F50"}
+            )
+            fig_detalhe.update_layout(barmode="stack", height=400, margin=dict(l=20, r=20, t=10, b=10))
+            st.plotly_chart(fig_detalhe, use_container_width=True, key=f"detalhe_{chave_unica}")
+        else:
+            st.info("Nenhuma vaga ativa encontrada para os parâmetros do setor selecionado.")
+
+    st.markdown("---")
+    with st.expander("📄 Ver tabela de dados tratados desta unidade"):
+        st.dataframe(df_alvo[["SETOR", "SUB_SETOR", "CATEGORIA", "MANHÃ", "TARDE", "TOTAL_VAGAS"]], use_container_width=True)
+
+# Renderização finalizada
+with tab_hcid:
+    renderizar_painel_etapas(df_hcid, "hcid")
+
+with tab_anexos:
+    renderizar_painel_etapas(df_anexo, "anexos")
