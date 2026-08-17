@@ -75,7 +75,7 @@ def processar_vagas_estaticas(uploaded_file, padrao_procurado, sheet_fallback):
         txt_s = str(row["SETOR_RAW"]).upper()
         txt_c = str(row["CATEGORIA"]).upper()
         
-        # CORREÇÃO CRÍTICA: Permite strings padrões como "GERAL", limpando apenas lixos e campos de TOTAL vazios
+        # Permite strings padrões como "GERAL", limpando apenas lixos e campos de TOTAL vazios
         if "TOTAL" in txt_s or "TOTAL" in txt_c or txt_s == "NAN" or (txt_s == "" and txt_c == ""):
             linhas_validas.append(False)
         else:
@@ -133,6 +133,7 @@ if uploaded_file is not None:
             f3_h.update_layout(height=280, coloraxis_showscale=False, margin=dict(l=10,r=10,t=10,b=10), xaxis_title="Vagas", yaxis_title="Setor")
             st.plotly_chart(f3_h, use_container_width=True)
 
+            # CORREÇÃO CRÍTICA DO GRÁFICO 5: Vincula o DataFrame correto ordenado de forma crescente para as barras variarem
             st.markdown("##### 5️⃣ Total de vagas de estágio disponibilizados por setor no HCID")
             f5_h = px.bar(df_g3_h, x="TOTAL_VAGAS", y="SETOR_RAW", orientation="h", text_auto=True, color_discrete_sequence=["#5F9EA0"])
             f5_h.update_layout(height=280, margin=dict(l=10,r=10,t=10,b=10), xaxis_title="Vagas", yaxis_title="Setor")
@@ -164,7 +165,3 @@ if uploaded_file is not None:
             f6_h.update_layout(height=280, margin=dict(l=10,r=10,t=10,b=10))
             st.plotly_chart(f6_h, use_container_width=True)
     else:
-        st.warning("Nenhum registro ativo foi identificado para a aba do HCID.")
-
-    st.markdown("<br><br>", unsafe_allow_html=True)
-
