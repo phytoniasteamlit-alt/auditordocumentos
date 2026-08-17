@@ -41,21 +41,18 @@ uploaded_file = st.sidebar.file_uploader("Carregar Planilha de Estágios (.xlsx)
 st.sidebar.markdown("---")
 st.sidebar.subheader("🎨 Customização Interativa")
 
-# Seleção de paletas de cores dinâmica para os gráficos
 paleta_selecionada = st.sidebar.selectbox(
     "Tema de Cores dos Gráficos:",
     options=["Padrão Hospitalar", "Tons Pastéis", "Vibrante", "Esmeralda"],
     index=0
 )
 
-# Seletor global para alternar dinamicamente a orientação de todos os gráficos de barras
 estilo_grafico = st.sidebar.radio(
     "Orientação das Barras:",
     options=["Barras Verticais", "Barras Horizontais"],
-    index=0
+    index=1  # Padrão horizontal que você usa bastante, mas totalmente ajustável
 )
 
-# Definição das variáveis de estilização baseadas na escolha da sidebar
 if paleta_selecionada == "Tons Pastéis":
     seq_cores = px.colors.qualitative.Pastel
 elif paleta_selecionada == "Vibrante":
@@ -71,33 +68,36 @@ is_vert = estilo_grafico == "Barras Verticais"
 # 3. MOTOR DE PROCESSAMENTO POR ÍNDICE FÍSICO DE ABA
 # ==============================================================================
 def extrair_dados_aba_especifica(uploaded_file, numero_posicao_aba):
-    df_raw = pd.read_excel(uploaded_file, sheet_name=numero_posicao_aba, header=None, skiprows=7)
-    if df_raw.empty:
-        return pd.DataFrame()
-        
-    df_processado = pd.DataFrame()
-    df_processado["SETOR_RAW"] = df_raw.iloc[:, 0].astype(str).str.strip().ffill()
-    df_processado["SUB_SETOR"] = df_raw.iloc[:, 1].fillna("").astype(str).str.strip()
-    df_processado["CATEGORIA"] = df_raw.iloc[:, 2].fillna("").astype(str).str.strip()
-    
-    df_processado["MANHÃ"] = df_raw.iloc[:, 3].apply(extrair_numero)
-    df_processado["TARDE"] = df_raw.iloc[:, 4].apply(extrair_numero)
-    df_processado["TOTAL_VAGAS"] = df_processado["MANHÃ"] + df_processado["TARDE"]
-    
-    linhas_validas = []
-    for _, row in df_processado.iterrows():
-        txt_s = str(row["SETOR_RAW"]).upper()
-        txt_c = str(row["CATEGORIA"]).upper()
-        if "TOTAL" in txt_s or "TOTAL" in txt_c or txt_s == "NAN" or (txt_s == "" and txt_c == ""):
-            linhas_validas.append(False)
-        else:
-            linhas_validas.append(True)
+    try:
+        df_raw = pd.read_excel(uploaded_file, sheet_name=numero_posicao_aba, header=None, skiprows=7)
+        if df_raw.empty:
+            return pd.DataFrame()
             
-    df_final = df_processado[linhas_validas].copy()
-    df_final["CATEGORIA"] = df_final["CATEGORIA"].apply(lambda x: "NÃO ESPECIFICADO" if x == "" else x)
-    df_final["SUB_SETOR"] = df_final["SUB_SETOR"].apply(lambda x: "GERAL" if x == "" else x)
-    
-    return df_final[df_final["TOTAL_VAGAS"] > 0]
+        df_processado = pd.DataFrame()
+        df_processado["SETOR_RAW"] = df_raw.iloc[:, 0].astype(str).str.strip().ffill()
+        df_processado["SUB_SETOR"] = df_raw.iloc[:, 1].fillna("").astype(str).str.strip()
+        df_processado["CATEGORIA"] = df_raw.iloc[:, 2].fillna("").astype(str).str.strip()
+        
+        df_processado["MANHÃ"] = df_raw.iloc[:, 3].apply(extrair_numero)
+        df_processado["TARDE"] = df_raw.iloc[:, 4].apply(extrair_numero)
+        df_processado["TOTAL_VAGAS"] = df_processado["MANHÃ"] + df_processado["TARDE"]
+        
+        linhas_validas = []
+        for _, row in df_processado.iterrows():
+            txt_s = str(row["SETOR_RAW"]).upper()
+            txt_c = str(row["CATEGORIA"]).upper()
+            if "TOTAL" in txt_s or "TOTAL" in txt_c or txt_s == "NAN" or (txt_s == "" and txt_c == ""):
+                linhas_validas.append(False)
+            else:
+                linhas_validas.append(True)
+                
+        df_final = df_processado[linhas_validas].copy()
+        df_final["CATEGORIA"] = df_final["CATEGORIA"].apply(lambda x: "NÃO ESPECIFICADO" if x == "" else x)
+        df_final["SUB_SETOR"] = df_final["SUB_SETOR"].apply(lambda x: "GERAL" if x == "" else x)
+        
+        return df_final[df_final["TOTAL_VAGAS"] > 0]
+    except:
+        return pd.DataFrame()
 
 # ==============================================================================
 # 4. EXECUÇÃO DO PROCESSAMENTO EM QUADROS VERTICAIS TOTALMENTE ISOLADOS
@@ -123,12 +123,12 @@ if uploaded_file is not None:
         t_m_h = df_hcid["MANHÃ"].sum()
         t_t_h = df_hcid["TARDE"].sum()
         
-        # Caixas de Texto dispostas horizontalmente de forma limpa no topo
+        # Caixas de Texto com emojis profissionais integrados ao lado dos números
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Total de vagas de estágio geral HCID", f"{t_vagas_h} Vagas")
-        c2.metric("Total de setores disponibilizados no HCID", f"{t_setores_h} Setores")
-        c3.metric("Total de vagas de estágio do HCID por turno manhã", f"{t_m_h} M")
-        c4.metric("Total de vagas de estágio do HCID tarde", f"{t_t_h} T")
+        c1.metric("📑 Total de vagas de estágio geral HCID", f"{t_vagas_h} Vagas")
+        c2.metric("🏥 Total de setores disponibilizados no HCID", f"{t_setores_h} Setores")
+        c3.metric("☀️ Total de vagas do turno manhã", f"{t_m_h} M")
+        c4.metric("🌙 Total de vagas do turno tarde", f"{t_t_h} T")
         
         st.markdown("<br>", unsafe_allow_html=True)
         col1_h, col2_h = st.columns(2)
@@ -144,8 +144,8 @@ if uploaded_file is not None:
                 text_auto=True, 
                 color_discrete_sequence=seq_cores
             )
-            f1_h.update_layout(height=320, margin=dict(l=10,r=10,t=10,b=10), xaxis_title="Setor" if is_vert else "Vagas", yaxis_title="Vagas" if is_vert else "Setor")
-            if is_vert: f1_h.update_traces(textposition="outside", cliponaxis=False)
+            f1_h.update_layout(height=320, margin=dict(l=10,r=15,t=10,b=10), xaxis_title="Setor" if is_vert else "Vagas", yaxis_title="Vagas" if is_vert else "Setor")
+            f1_h.update_traces(textposition="outside" if is_vert else "outside", cliponaxis=False)
             st.plotly_chart(f1_h, use_container_width=True)
             
             st.markdown("##### 3️⃣ Setores disponibilizados para realização de estágio no HCID")
@@ -159,8 +159,8 @@ if uploaded_file is not None:
                 color="TOTAL_VAGAS", 
                 color_continuous_scale=px.colors.sequential.Tealgrn
             )
-            f3_h.update_layout(height=320, coloraxis_showscale=False, margin=dict(l=10,r=10,t=10,b=10), xaxis_title="Setor" if is_vert else "Vagas", yaxis_title="Vagas" if is_vert else "Setor")
-            if is_vert: f3_h.update_traces(textposition="outside", cliponaxis=False)
+            f3_h.update_layout(height=320, coloraxis_showscale=False, margin=dict(l=10,r=15,t=10,b=10), xaxis_title="Setor" if is_vert else "Vagas", yaxis_title="Vagas" if is_vert else "Setor")
+            f3_h.update_traces(textposition="outside" if is_vert else "outside", cliponaxis=False)
             st.plotly_chart(f3_h, use_container_width=True)
 
             st.markdown("##### 5️⃣ Total de vagas de estágio disponibilizados por setor no HCID")
@@ -172,8 +172,8 @@ if uploaded_file is not None:
                 text_auto=True, 
                 color_discrete_sequence=seq_cores
             )
-            f5_h.update_layout(height=320, margin=dict(l=10,r=10,t=10,b=10), xaxis_title="Setor" if is_vert else "Vagas", yaxis_title="Vagas" if is_vert else "Setor")
-            if is_vert: f5_h.update_traces(textposition="outside", cliponaxis=False)
+            f5_h.update_layout(height=320, margin=dict(l=10,r=15,t=10,b=10), xaxis_title="Setor" if is_vert else "Vagas", yaxis_title="Vagas" if is_vert else "Setor")
+            f5_h.update_traces(textposition="outside" if is_vert else "outside", cliponaxis=False)
             st.plotly_chart(f5_h, use_container_width=True)
 
             st.markdown("##### 7️⃣ Total de estagiários por turno por dia no HCID")
@@ -188,8 +188,8 @@ if uploaded_file is not None:
                 text_auto=True, 
                 color_discrete_map={"MANHÃ": "#008080", "TARDE": "#FF7F50"}
             )
-            f7_h.update_layout(height=320, margin=dict(l=10,r=10,t=10,b=10), xaxis_title="Setor" if is_vert else "Vagas", yaxis_title="Vagas" if is_vert else "Setor")
-            if is_vert: f7_h.update_traces(textposition="outside", cliponaxis=False)
+            f7_h.update_layout(height=320, margin=dict(l=10,r=15,t=10,b=10), xaxis_title="Setor" if is_vert else "Vagas", yaxis_title="Vagas" if is_vert else "Setor")
+            f7_h.update_traces(textposition="outside" if is_vert else "outside", cliponaxis=False)
             st.plotly_chart(f7_h, use_container_width=True)
 
         with col2_h:
