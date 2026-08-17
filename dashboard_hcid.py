@@ -69,7 +69,7 @@ else:
 sub_or = "h" if estilo_grafico == "Barras Horizontais" else "v"
 
 # ==============================================================================
-# 3. MOTOR DE PROCESSAMENTO DE DADOS EXECUTIVO E TOTALMENTE CORRIGIDO
+# 3. MOTOR DE PROCESSAMENTO DE DADOS TOTALMENTE REESTRUTURADO E BLINDADO
 # ==============================================================================
 if uploaded_file is not None:
     try:
@@ -106,7 +106,7 @@ if uploaded_file is not None:
             df_aba = df_bruto.iloc[linha_cabecalho+1:].copy()
             df_aba.columns = cabecalhos_originais
             
-            # Busca textual dinâmica dos índices das colunas
+            # Busca de índices por correspondência textual aproximada
             idx_setor, idx_sub, idx_cat = 0, 1, 2
             idx_manha, idx_tarde = 3, 4
             
@@ -118,42 +118,56 @@ if uploaded_file is not None:
                 elif "MANH" in c_norm: idx_manha = idx_c
                 elif "TARD" in c_norm: col_tarde = idx_c
 
-            # Estrutura base de processamento convertendo estritamente para texto
+            # Força a conversão das colunas base do Excel para tipos String limpos
             df_final = pd.DataFrame()
             df_final["SETOR_RAW"] = df_aba.iloc[:, idx_setor].astype(str).str.strip().ffill()
             df_final["SUB_SETOR_RAW"] = df_aba.iloc[:, idx_sub].fillna("").astype(str).str.strip()
             df_final["CATEGORIA_RAW"] = df_aba.iloc[:, idx_cat].fillna("").astype(str).str.strip()
             
-            # --- NOVA LÓGICA DE FILTRAGEM BLINDADA (Sem operadores ambíguos) ---
-            df_final = df_final[df_final["CATEGORIA_RAW"] != ""]
+            # --- PROTEÇÃO ABSOLUTA CONTRA AMBIGUIDADE (Filtro por loops nativos) ---
+            # Remove linhas em branco que ficaram perdidas no Excel
+            df_final = df_final[(df_final["CATEGORIA_RAW"] != "") & (df_final["CATEGORIA_RAW"] != "nan")]
             
-            # Filtra e elimina linhas escritas 'TOTAL', 'QUANTITATIVO' ou cabeçalhos repetidos de forma 100% segura
-            df_final = df_final[df_final["SETOR_RAW"].str.upper().str.contains("TOTAL|QUANTITATIVO|HOSPITAL", na=False) == False]
-            df_final = df_final[df_final["CATEGORIA_RAW"].str.upper().str.contains("TOTAL|QUANTITATIVO|HOSPITAL|CATEGOR|PROFISS", na=False) == False]
+            # Nova filtragem sem utilizar strings dinâmicas no Pandas (Resolve o erro vermelho)
+            linhas_validas = []
+            for idx_r, row_f in df_final.iterrows():
+                setor_upper = str(row_f["SETOR_RAW"]).upper()
+                cat_upper = str(row_f["CATEGORIA_RAW"]).upper()
+                
+                # Ignora linhas que contenham ruídos do Excel como subtotais ou títulos duplicados
+                if "TOTAL" in setor_upper or "QUANTITATIVO" in setor_upper or "HOSPITAL" in setor_upper:
+                    linhas_validas.append(False)
+                elif "TOTAL" in cat_upper or "CATEGOR" in cat_upper or "PROFISS" in cat_upper:
+                    linhas_validas.append(False)
+                else:
+                    linhas_validas.append(True)
+                    
+            df_final = df_final[linhas_validas].copy()
             
             # Limpeza das expressões textuais das vagas ('4 por turno' -> 4)
             def limpar_vagas(valor):
-                if pd.isna(valor) or str(valor).strip() == "": 
-                    return None  # Retorna None para aplicar o ffill inteligente nas sub-especialidades de baixo
+                if pd.isna(valor) or str(valor).strip() == "" or str(valor).strip().lower() == "nan": 
+                    return None  # Retorna None para aplicar o ffill do setor pai nas sub-especialidades
                 v_str = "".join(filter(str.isdigit, str(valor)))
                 return int(v_str) if v_str != "" else 0
             
-            # Captura inicial das vagas
+            # Vincula e limpa os turnos coletando as vagas originais do Excel
             df_final["VAGAS_MANHA"] = df_aba.loc[df_final.index, df_aba.columns[idx_manha]].apply(limpar_vagas)
             df_final["VAGAS_TARDE"] = df_aba.loc[df_final.index, df_aba.columns[idx_tarde]].apply(limpar_vagas)
             
-            # Preenchimento automático inteligente (ffill) para alocar as vagas do setor pai nas sub-linhas vazias
+            # Preenchimento em cascata para herdar as vagas se a linha de baixo estiver em branco
             df_final["VAGAS_MANHA"] = df_final["VAGAS_MANHA"].ffill().fillna(0).astype(int)
             df_final["VAGAS_TARDE"] = df_final["VAGAS_TARDE"].ffill().fillna(0).astype(int)
             df_final["VAGAS_TOTAL"] = df_final["VAGAS_MANHA"] + df_final["VAGAS_TARDE"]
             
-            # Construção elegante do eixo de subsetores combinados
+            # Construção elegante do identificador combinado setor ➔ subsetor
             df_final["LOCAL_COMBINADO"] = df_final.apply(
                 lambda r: f"{r['SETOR_RAW']} ➔ {r['SUB_SETOR_RAW']}" if (r['SUB_SETOR_RAW'] != "" and r['SETOR_RAW'].upper() != r['SUB_SETOR_RAW'].upper()) else f"{r['SETOR_RAW']}",
                 axis=1
             )
             df_final["LOCAL_E_PROF"] = df_final["LOCAL_COMBINADO"] + " (" + df_final["CATEGORIA_RAW"] + ")"
             
+            # Divide os dataframes entre ativos (com vagas) e inativos (vagas zeradas)
             df_ativas = df_final[df_final["VAGAS_TOTAL"] > 0].copy()
             df_inativas = df_final[df_final["VAGAS_TOTAL"] == 0].copy()
             
@@ -163,7 +177,7 @@ if uploaded_file is not None:
         df_anexo, df_anexo_zero, ax_setor, ax_sub, ax_cat = extrair_e_limpar_dados(aba_anexo_real)
         
     except Exception as e:
-        st.error(f"Erro no processamento dinâmico da planilha: {e}")
+        st.error(f"Erro inesperado durante a leitura dos dados: {e}")
         st.stop()
 else:
     st.info("💡 Por favor, arraste ou carregue sua planilha Excel para estruturar os painéis automaticamente.")
@@ -192,15 +206,3 @@ def gerar_texto_distribuicao(df_filtrado):
             t_sub = df_sub["VAGAS_TARDE"].sum()
             profissoes = ", ".join(df_sub["CATEGORIA_RAW"].unique())
             
-            nome_sub = f"na ala/área **{sub}**" if sub != "" else "na área geral"
-            sub_detalhes.append(
-                f"destas, **{total_sub} estão alocadas** {nome_sub} (composta por: {profissoes}), sendo **{m_sub} no turno da manhã** e **{t_sub} no turno da tarde**"
-            )
-            
-        texto_setor += " Deste montante, " + "; ".join(sub_detalhes) + "."
-        textos.append(texto_setor)
-    return textos
-
-# ==============================================================================
-# 4. QUADRO I - HCID (ORGANIZAÇÃO EM ABAS INTERNAS)
-# ==============================================================================
