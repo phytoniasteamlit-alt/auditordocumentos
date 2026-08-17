@@ -167,6 +167,8 @@ else:
 # ==============================================================================
 def gerar_texto_distribuicao(df_filtrado):
     textos = []
+    if df_filtrado.empty:
+        return textos
     setores_unicos = df_filtrado["SETOR_RAW"].unique()
     for s in setores_unicos:
         df_s = df_filtrado[df_filtrado["SETOR_RAW"] == s]
@@ -175,7 +177,6 @@ def gerar_texto_distribuicao(df_filtrado):
         texto_setor = f"📌 **Setor {s}**: Disponibiliza um total de **{total_s} vagas** para campo de estágio. "
         sub_detalhes = []
         
-        # Agrupa por sub-setor dentro daquele setor para detalhar as subdivisões
         sub_unicos = df_s["SUB_SETOR_RAW"].unique()
         for sub in sub_unicos:
             df_sub = df_s[df_s["SUB_SETOR_RAW"] == sub]
@@ -206,7 +207,6 @@ if not df_hcid.empty:
     m1.metric(label="📊 1. Total de Vagas de Estágio no HCID (Soma Geral)", value=f"{t_vagas_hcid} Vagas")
     m2.metric(label="📍 2. Total de Setores Disponibilizados p/ Campo no HCID", value=t_setores_hcid)
     
-    # CRIAÇÃO DAS ABAS EXECUTIVAS PARA EVITAR POLUIÇÃO VISUAL
     tab_graficos, tab_sumario, tab_inativos = st.tabs(["📈 Painel Geral de Gráficos", "📝 Sumário de Distribuição Detalhado", "🔍 Áreas Mapeadas Sem Vagas Ativas"])
     
     with tab_graficos:
