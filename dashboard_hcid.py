@@ -201,7 +201,7 @@ def renderizar_painel_etapas(df_alvo, nome_aba_excel, chave_unica):
         st.dataframe(df_alvo[["SETOR", "SUB_SETOR", "CATEGORIA", "MANHÃ", "TARDE", "TOTAL_VAGAS"]], use_container_width=True)
 
 # ==============================================================================
-# 5. EXECUÇÃO DO FLUXO PRINCIPAL (LINHA SEGUIDA SEM RISCOS DE INDENTAÇÃO)
+# 5. EXECUÇÃO DO FLUXO PRINCIPAL (LINHA RETA TOTALMENTE BLINDADA)
 # ==============================================================================
 if uploaded_file is not None:
     excel_file = pd.ExcelFile(uploaded_file)
@@ -210,4 +210,4 @@ if uploaded_file is not None:
     # Identifica o nome da aba principal do hospital geral
     aba_hcid_real = "HCID_BDD" if "HCID_BDD" in abas_disponiveis else abas_disponiveis[0]
     
-    # Identifica o nome da aba de anexos de forma direta em linha única
+    # Identifica a aba de anexos usando lógica condicional em uma única linha (impede erros de indentação)
