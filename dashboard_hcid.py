@@ -39,13 +39,11 @@ def extrair_e_limpar_dados(uploaded_file, sheet_name):
     if not sheet_name:
         return pd.DataFrame()
     
-    # Lê a planilha bruta sem pular linhas para preservar o alinhamento das colunas A, B, C, D, E
     df_bruto = pd.read_excel(uploaded_file, sheet_name=sheet_name, header=None)
     
     if df_bruto.empty or len(df_bruto) <= 5:
         return pd.DataFrame()
         
-    # Pula as linhas de títulos e a linha mesclada superior (Linhas 1 a 4 do Excel)
     # Isola os dados começando exatamente da linha onde está escrito "Manhã" e "Tarde" (Linha 5 indexada como 4)
     df_dados = df_bruto.iloc[4:].copy()
     
@@ -59,7 +57,6 @@ def extrair_e_limpar_dados(uploaded_file, sheet_name):
     def extrair_inteiro(valor):
         if pd.isna(valor) or str(valor).strip() == "" or str(valor).strip().lower() == "nan": 
             return None  # Retorna None para o ffill propagar as vagas do topo do bloco
-        # Remove os textos complementares ("por turno") e extrai apenas os numéricos
         v_str = "".join(filter(str.isdigit, str(valor)))
         return int(v_str) if v_str != "" else 0
 
@@ -183,7 +180,7 @@ def renderizar_painel_etapas(df_alvo, nome_aba_excel, chave_unica):
         st.dataframe(df_alvo[["SETOR", "SUB_SETOR", "CATEGORIA", "MANHÃ", "TARDE", "TOTAL_VAGAS"]], use_container_width=True)
 
 # ==============================================================================
-# 5. EXECUÇÃO DO FLUXO PRINCIPAL (LINHA SEGUIDA TOTALMENTE ALINHADA)
+# 5. EXECUÇÃO DO FLUXO PRINCIPAL (LINHA SEGUIDA TOTALMENTE INDEPENDENTE)
 # ==============================================================================
 if uploaded_file is not None:
     excel_file = pd.ExcelFile(uploaded_file)
@@ -191,8 +188,6 @@ if uploaded_file is not None:
     
     # Identifica as abas disponíveis de maneira direta
     aba_hcid_real = "HCID_BDD" if "HCID_BDD" in abas_disponiveis else abas_disponiveis
-    
-    # Procura um nome de anexo conhecido
     aba_anexo_real = "ANEXO" if "ANEXO" in abas_disponiveis else ("ANEXO2" if "ANEXO2" in abas_disponiveis else None)
     
     df_hcid = extrair_e_limpar_dados(uploaded_file, aba_hcid_real)
@@ -204,9 +199,10 @@ if uploaded_file is not None:
         renderizar_painel_etapas(df_hcid, aba_hcid_real, "hcid")
         
     with tab_anexos:
-        if aba_anexo_real:
+        if aba_anexo_real is not None:
             df_anexo = extrair_e_limpar_dados(uploaded_file, aba_anexo_real)
             renderizar_painel_etapas(df_anexo, aba_anexo_real, "anexos")
-        if not aba_anexo_real:
+        else:
             st.info("Sua planilha possui apenas 1 aba de dados ativos. Se tiver anexos, adicione a segunda aba ao arquivo Excel com o nome ANEXO.")
 else:
+    st.info("💡 Por favor, arraste ou carregue sua planilha Excel para estruturar os painéis automaticamente.")
