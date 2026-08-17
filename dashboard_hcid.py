@@ -69,7 +69,7 @@ else:
 sub_or = "h" if estilo_grafico == "Barras Horizontais" else "v"
 
 # ==============================================================================
-# 3. MOTOR DE PROCESSAMENTO DE DADOS CORRIGIDO E BLINDADO
+# 3. MOTOR DE PROCESSAMENTO DE DADOS EXECUTIVO E TOTALMENTE CORRIGIDO
 # ==============================================================================
 if uploaded_file is not None:
     try:
@@ -118,43 +118,42 @@ if uploaded_file is not None:
                 elif "MANH" in c_norm: idx_manha = idx_c
                 elif "TARD" in c_norm: col_tarde = idx_c
 
-            # Estrutura base de preenchimento de dados
+            # Estrutura base de processamento convertendo estritamente para texto
             df_final = pd.DataFrame()
             df_final["SETOR_RAW"] = df_aba.iloc[:, idx_setor].astype(str).str.strip().ffill()
             df_final["SUB_SETOR_RAW"] = df_aba.iloc[:, idx_sub].fillna("").astype(str).str.strip()
             df_final["CATEGORIA_RAW"] = df_aba.iloc[:, idx_cat].fillna("").astype(str).str.strip()
             
-            # --- CORREÇÃO DEFINITIVA DOS FILTROS (Sem comandos ambíguos) ---
+            # --- NOVA LÓGICA DE FILTRAGEM BLINDADA (Sem operadores ambíguos) ---
             df_final = df_final[df_final["CATEGORIA_RAW"] != ""]
             
-            # Remove linhas de cabeçalhos repetidos ou totais estruturais do Excel de forma segura
-            df_final = df_final[~df_final["SETOR_RAW"].str.upper().str.contains("TOTAL|QUANTITATIVO|HOSPITAL", na=False)]
-            df_final = df_final[~df_final["CATEGORIA_RAW"].str.upper().str.contains("TOTAL|QUANTITATIVO|HOSPITAL|CATEGOR|PROFISS", na=False)]
+            # Filtra e elimina linhas escritas 'TOTAL', 'QUANTITATIVO' ou cabeçalhos repetidos de forma 100% segura
+            df_final = df_final[df_final["SETOR_RAW"].str.upper().str.contains("TOTAL|QUANTITATIVO|HOSPITAL", na=False) == False]
+            df_final = df_final[df_final["CATEGORIA_RAW"].str.upper().str.contains("TOTAL|QUANTITATIVO|HOSPITAL|CATEGOR|PROFISS", na=False) == False]
             
             # Limpeza das expressões textuais das vagas ('4 por turno' -> 4)
             def limpar_vagas(valor):
                 if pd.isna(valor) or str(valor).strip() == "": 
-                    return None  # Retorna None para herdar a vaga do setor pai via ffill
+                    return None  # Retorna None para aplicar o ffill inteligente nas sub-especialidades de baixo
                 v_str = "".join(filter(str.isdigit, str(valor)))
                 return int(v_str) if v_str != "" else 0
             
-            # Captura das colunas de turno
+            # Captura inicial das vagas
             df_final["VAGAS_MANHA"] = df_aba.loc[df_final.index, df_aba.columns[idx_manha]].apply(limpar_vagas)
             df_final["VAGAS_TARDE"] = df_aba.loc[df_final.index, df_aba.columns[idx_tarde]].apply(limpar_vagas)
             
-            # Preenchimento automático inteligente para sub-linhas vazias
+            # Preenchimento automático inteligente (ffill) para alocar as vagas do setor pai nas sub-linhas vazias
             df_final["VAGAS_MANHA"] = df_final["VAGAS_MANHA"].ffill().fillna(0).astype(int)
             df_final["VAGAS_TARDE"] = df_final["VAGAS_TARDE"].ffill().fillna(0).astype(int)
             df_final["VAGAS_TOTAL"] = df_final["VAGAS_MANHA"] + df_final["VAGAS_TARDE"]
             
-            # Construção do eixo de locais combinados
+            # Construção elegante do eixo de subsetores combinados
             df_final["LOCAL_COMBINADO"] = df_final.apply(
                 lambda r: f"{r['SETOR_RAW']} ➔ {r['SUB_SETOR_RAW']}" if (r['SUB_SETOR_RAW'] != "" and r['SETOR_RAW'].upper() != r['SUB_SETOR_RAW'].upper()) else f"{r['SETOR_RAW']}",
                 axis=1
             )
             df_final["LOCAL_E_PROF"] = df_final["LOCAL_COMBINADO"] + " (" + df_final["CATEGORIA_RAW"] + ")"
             
-            # Separação estrutural entre vagas ativas e inativas
             df_ativas = df_final[df_final["VAGAS_TOTAL"] > 0].copy()
             df_inativas = df_final[df_final["VAGAS_TOTAL"] == 0].copy()
             
