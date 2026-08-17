@@ -41,33 +41,55 @@ st.sidebar.header("⚙️ Painel de Controle")
 uploaded_file = st.sidebar.file_uploader("Carregar Planilha de Estágios (.xlsx):", type=["xlsx"])
 
 # ==============================================================================
-# 3. FUNÇÃO DE TRATAMENTO DE DADOS (ISOLADA)
+# 3. MOTOR DE TRATAMENTO DE DADOS CUSTOMIZADO PARA CABEÇALHOS MESCLADOS
 # ==============================================================================
 def extrair_e_limpar_dados(uploaded_file, sheet_name):
     if not sheet_name:
         return pd.DataFrame()
     
-    df_bruto = pd.read_excel(uploaded_file, sheet_name=sheet_name, header=None)
+    # Lê as primeiras 15 linhas para varrer o cabeçalho complexo com precisão
+    df_topo = pd.read_excel(uploaded_file, sheet_name=sheet_name, header=None, nrows=15)
     
-    linha_cabecalho = 0
-    for idx, row in df_bruto.iterrows():
+    linha_cabecalho_pai = 0
+    for idx, row in df_topo.iterrows():
         row_str = " ".join([str(x).upper() for x in row.dropna()])
-        if "CATEGOR" in row_str or "PROFISS" in row_str or "SETOR" in row_str:
-            linha_cabecalho = idx
+        if "SETOR" in row_str or "CATEGOR" in row_str or "PROFISS" in row_str:
+            linha_cabecalho_pai = idx
             break
+            
+    # Captura a linha de cima e a de baixo para resolver células mescladas
+    linha_pai = df_topo.iloc[linha_cabecalho_pai].fillna("").astype(str).tolist()
+    linha_filho = df_topo.iloc[linha_cabecalho_pai + 1].fillna("").astype(str).tolist()
     
-    cabecalhos = [str(c).strip().replace('\n', ' ') for c in df_bruto.iloc[linha_cabecalho]]
-    df_dados = df_bruto.iloc[linha_cabecalho+1:].copy()
-    df_dados.columns = cabecalhos
+    # Reconstrói os cabeçalhos combinando as duas linhas do Excel
+    cabecalhos_combinados = []
+    for p, f in zip(linha_pai, linha_filho):
+        p_clean = p.strip()
+        f_clean = f.strip()
+        if f_clean and f_clean.lower() != "nan" and p_clean != f_clean:
+            cabecalhos_combinados.append(f"{p_clean} {f_clean}")
+        else:
+            cabecalhos_combinados.append(p_clean)
+            
+    # Carrega os dados reais ignorando as linhas de cabeçalho processadas
+    df_dados = pd.read_excel(uploaded_file, sheet_name=sheet_name, header=None, skiprows=linha_cabecalho_pai + 2)
+    df_dados.columns = cabecalhos_combinados[:len(df_dados.columns)]
     
+    # Procura os índices corretos baseado no nome combinado
     idx_setor, idx_sub, idx_cat, idx_manha, idx_tarde = 0, 1, 2, 3, 4
     for idx_c, col_nome in enumerate(df_dados.columns):
         c_norm = normalizar_texto(col_nome)
-        if "SUB" in c_norm: idx_sub = idx_c
-        elif "SETOR" in c_norm or "CAMPO" in c_norm: idx_setor = idx_c
-        elif "PROF" in c_norm or "CAT" in c_norm: idx_cat = idx_c
-        elif "MANH" in c_norm: idx_manha = idx_c
-        elif "TARD" in c_norm: idx_tarde = idx_c
+        if "SUB" in c_norm: 
+            idx_sub = idx_c
+        elif "SETOR" in c_norm or "CAMPO" in c_norm: 
+            if "MANH" not in c_norm and "TARD" not in c_norm:
+                idx_setor = idx_c
+        elif "PROF" in c_norm or "CAT" in c_norm: 
+            idx_cat = idx_c
+        elif "MANH" in c_norm: 
+            idx_manha = idx_c
+        elif "TARD" in c_norm: 
+            idx_tarde = idx_c
 
     def extrair_inteiro(valor):
         if pd.isna(valor) or str(valor).strip() == "" or str(valor).strip().lower() == "nan": 
@@ -76,18 +98,24 @@ def extrair_e_limpar_dados(uploaded_file, sheet_name):
         return int(v_str) if v_str != "" else 0
 
     df_limpo = pd.DataFrame()
-    df_limpo["SETOR"] = df_dados.iloc[:, idx_setor].astype(str).str.strip().ffill()
-    df_limpo["SUB_SETOR"] = df_dados.iloc[:, idx_sub].fillna("GERAL").astype(str).str.strip()
+    df_limpo["SETOR"] = df_dados.iloc[:, idx_setor].astype(str).str.strip()
+    # Substitui strings vazias ou nulas por NaN real para o ffill funcionar corretamente repassando o setor pai
+    df_limpo["SETOR"] = df_limpo["SETOR"].replace(["nan", "NAN", ""], pd.NA).ffill()
+    
+    df_limpo["SUB_SETOR"] = df_dados.iloc[:, idx_sub].fillna("GERAL").astype(str).str.strip().replace(["nan", "NAN", ""], "GERAL")
     df_limpo["CATEGORIA"] = df_dados.iloc[:, idx_cat].fillna("NÃO ESPECIFICADO").astype(str).str.strip()
+    
+    # Extração isolada e correta utilizando os novos índices combinados
     df_limpo["MANHÃ"] = df_dados.iloc[:, idx_manha].apply(extrair_inteiro)
     df_limpo["TARDE"] = df_dados.iloc[:, idx_tarde].apply(extrair_inteiro)
     df_limpo["TOTAL_VAGAS"] = df_limpo["MANHÃ"] + df_limpo["TARDE"]
     
+    # Limpa linhas vazias, de metadados ou de totais parciais da planilha
     linhas_validas = []
     for _, row in df_limpo.iterrows():
         txt_s = str(row["SETOR"]).upper()
         txt_c = str(row["CATEGORIA"]).upper()
-        if "TOTAL" in txt_s or "TOTAL" in txt_c or txt_s == "NAN" or txt_c == "NAN":
+        if "TOTAL" in txt_s or "TOTAL" in txt_c or txt_s == "NAN" or txt_c == "NAN" or txt_c == "NÃO ESPECIFICADO":
             linhas_validas.append(False)
         else:
             linhas_validas.append(True)
@@ -96,14 +124,14 @@ def extrair_e_limpar_dados(uploaded_file, sheet_name):
     return df_final[df_final["TOTAL_VAGAS"] > 0]
 
 # ==============================================================================
-# 4. FUNÇÃO DE RENDERIZAÇÃO VISUAL (EVITA DUPLICAÇÃO DE CÓDIGO)
+# 4. FUNÇÃO DE RENDERIZAÇÃO DO DASHBOARD PROGRESSIVO POR ETAPAS
 # ==============================================================================
 def renderizar_painel_etapas(df_alvo, nome_aba_excel, chave_unica):
     if df_alvo.empty:
-        st.warning(f"Nenhum dado válido ou ativo foi processado na aba '{nome_aba_excel}'. Verifique as colunas da planilha.")
+        st.warning(f"Nenhum dado ativo foi localizado na aba '{nome_aba_excel}'. Verifique o formato do arquivo.")
         return
 
-    st.caption(f"📂 Lendo dados da Aba: **'{nome_aba_excel}'**")
+    st.caption(f"📂 Fonte dos dados ativa: Aba **'{nome_aba_excel}'**")
 
     # --- TOP CARD METRICS ---
     total_geral = df_alvo["TOTAL_VAGAS"].sum()
@@ -183,28 +211,7 @@ if uploaded_file is not None:
     excel_file = pd.ExcelFile(uploaded_file)
     abas_disponiveis = excel_file.sheet_names
     
-    # Identifica as abas dinamicamente ou por posição
     aba_hcid_real = next((op for op in ["HCID_BDD", "HCID", "HCID1", "DADOS"] if op in abas_disponiveis), abas_disponiveis[0])
+    
     aba_anexo_real = next((op for op in ["ANEXO", "ANEXO2", "ANEXOS"] if op in abas_disponiveis), None)
     if aba_anexo_real is None and len(abas_disponiveis) > 1:
-        aba_anexo_real = abas_disponiveis[1]
-        
-    df_hcid = extrair_e_limpar_dados(uploaded_file, aba_hcid_real)
-    
-    df_anexo = pd.DataFrame()
-    if aba_anexo_real:
-        df_anexo = extrair_e_limpar_dados(uploaded_file, aba_anexo_real)
-
-    # Cria as abas de navegação visual
-    tab_hcid, tab_anexos = st.tabs(["🏥 Hospital Geral (HCID)", "🏢 Unidades Anexas"])
-    
-    with tab_hcid:
-        renderizar_painel_etapas(df_hcid, aba_hcid_real, "hcid")
-        
-    with tab_anexos:
-        if aba_anexo_real:
-            renderizar_painel_etapas(df_anexo, aba_anexo_real, "anexos")
-        else:
-            st.info("Sua planilha possui apenas 1 aba de dados ativos. Se possuir anexos, adicione-os na aba seguinte do arquivo Excel.")
-else:
-    st.info("💡 Por favor, arraste ou carregue sua planilha Excel para estruturar os painéis automaticamente.")
