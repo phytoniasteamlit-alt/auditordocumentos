@@ -61,21 +61,20 @@ else:
 
 tipo_grafico_5 = st.sidebar.radio("Estilo dos Gráficos de Setor:", options=["Barras Verticais", "Barras Horizontais"], index=1)
 
+# Lógica de leitura inteligente de abas e colunas
 if uploaded_file is not None:
     try:
         excel_file = pd.ExcelFile(uploaded_file)
         abas_disponiveis = excel_file.sheet_names
         
-        # Identificação inteligente e isolada da aba do HCID
         aba_hcid_real = None
         for opcao in ["HCID_BDD", "HCID", "HCID1", "DADOS"]:
             if opcao in abas_disponiveis:
                 aba_hcid_real = opcao
                 break
         if not aba_hcid_real:
-            aba_hcid_real = abas_disponiveis[0]
+            aba_hcid_real = abas_disponiveis
                 
-        # Identificação inteligente e isolada da aba de ANEXO
         aba_anexo_real = None
         for opcao in ["ANEXO", "ANEXO2", "ANEXOS"]:
             if opcao in abas_disponiveis:
@@ -84,7 +83,6 @@ if uploaded_file is not None:
                 
         df_hcid = pd.read_excel(uploaded_file, sheet_name=aba_hcid_real)
         
-        # Se o anexo não foi criado ou está vazio, monta a estrutura fantasma para blindar o código
         if aba_anexo_real and aba_anexo_real in abas_disponiveis:
             df_anexo = pd.read_excel(uploaded_file, sheet_name=aba_anexo_real)
             if df_anexo.dropna(how="all").empty:
@@ -141,7 +139,6 @@ if uploaded_file is not None:
         df_hcid, hc_setor, hc_sub, hc_cat, hc_turno, hc_vagas = processar_mapeamento_inteligente(df_hcid)
         df_anexo, ax_setor, ax_sub, ax_cat, ax_turno, ax_vagas = processar_mapeamento_inteligente(df_anexo)
         
-        # Cria a engenharia clean de Setor - Sub-setor unificada de forma isolada por aba
         for d_f, s_t, s_b in [(df_hcid, hc_setor, hc_sub), (df_anexo, ax_setor, ax_sub)]:
             if not d_f.empty:
                 d_f["LOCAL_COMBINADO"] = d_f.apply(
@@ -172,12 +169,15 @@ else:
     df_hcid_filtrado = df_hcid
 
 r1_c1, r1_col2 = st.columns(2)
-if not df_hcid_filtrado.empty and "LOCAL_COMBINADO" in df_hcid_filtrado.columns:
-    r1_c1.metric(label="Vagas de Estágio por Turno no HCID", value=int(df_hcid_filtrado.groupby(["LOCAL_COMBINADO", hc_turno])[hc_vagas].sum().max()))
-    r1_col2.metric(label="Áreas de Estágio Ativas no HCID", value=df_hcid_filtrado["LOCAL_COMBINADO"].nunique())
+
+if not df_hcid_filtrado.empty:
+    # --- CORREÇÃO DA MÉTRICA GENERALIZADA: Soma real matemática de todas as vagas do Excel ---
+    soma_vagas_total_hcid = int(df_hcid_filtrado[hc_vagas].sum())
+    r1_c1.metric(label="Total de Vagas de Estágio no HCID", value=soma_vagas_total_hcid)
+    r1_col2.metric(label="Total de Setores Disponibilizados p/ Campo de Estágio no HCID", value=df_hcid_filtrado["LOCAL_COMBINADO"].nunique())
 else:
-    r1_c1.metric(label="Vagas de Estágio por Turno no HCID", value=0)
-    r1_col2.metric(label="Áreas de Estágio Ativas no HCID", value=0)
+    r1_c1.metric(label="Total de Vagas de Estágio no HCID", value=0)
+    r1_col2.metric(label="Total de Setores Disponibilizados p/ Campo de Estágio no HCID", value=0)
 
 st.markdown("---")
 
@@ -189,7 +189,7 @@ if not df_hcid_filtrado.empty:
     df_g3[hc_vagas] = df_g3[hc_vagas].round(1)
     ori_3 = "h" if tipo_grafico_5 == "Barras Horizontais" else "v"
     x_v, y_v = (hc_vagas, "LOCAL_COMBINADO") if ori_3 == "h" else ("LOCAL_COMBINADO", hc_vagas)
-    fig3 = px.bar(df_g3, x=x_v, y=y_v, text=hc_vagas, orientation=ori_3, color="LOCAL_COMBINADO", color_discrete_sequence=cor_sequencia, title="3. Vagas Disponibilizadas por Turno / Campo de Estágio no HCID")
+    fig3 = px.bar(df_g3, x=x_v, y=y_v, text=hc_vagas, orientation=ori_3, color="LOCAL_COMBINADO", color_discrete_sequence=cor_sequencia, title="3. Setores Disponibilizados para Realização de Estágio no HCID")
     fig3.update_traces(textposition="outside", textfont=dict(size=14))
     fig3.update_layout(showlegend=False, height=650)
     r2_c1.plotly_chart(fig3, use_container_width=True)
@@ -202,7 +202,7 @@ if not df_hcid_filtrado.empty:
     df_g4[hc_vagas] = df_g4[hc_vagas].round(1)
     ori_4 = "h" if tipo_grafico_5 == "Barras Horizontais" else "v"
     x_v4, y_v4 = (hc_vagas, "LOCAL_COMBINADO") if ori_4 == "h" else ("LOCAL_COMBINADO", hc_vagas)
-    fig4 = px.bar(df_g4, x=x_v4, y=y_v4, color=hc_cat, orientation=ori_4, barmode="stack", color_discrete_sequence=cor_sequencia, title="4. Vagas por Turno por Categoria Profissional e Campo de Estágio no HCID")
+    fig4 = px.bar(df_g4, x=x_v4, y=y_v4, color=hc_cat, orientation=ori_4, barmode="stack", color_discrete_sequence=cor_sequencia, title="4. Categorias Profissionais Contempladas no Estágio por Setor no HCID")
     fig4.update_layout(height=650, legend=dict(title_text="Profissão"))
     r2_c2.plotly_chart(fig4, use_container_width=True)
 else:
@@ -215,3 +215,4 @@ r3_c1, r3_c2, r3_c3 = st.columns(3)
 # Gráfico 5
 if not df_hcid_filtrado.empty:
     df_g5 = df_hcid_filtrado.groupby(hc_sub)[hc_vagas].mean().reset_index()
+    df_g5[hc_vagas] = df_g5[hc_vagas].round(1)
