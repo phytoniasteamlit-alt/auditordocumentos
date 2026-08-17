@@ -191,22 +191,22 @@ if uploaded_file is not None:
     
     # Identifica as abas disponíveis de maneira direta
     aba_hcid_real = "HCID_BDD" if "HCID_BDD" in abas_disponiveis else abas_disponiveis
+    
+    # Procura um nome de anexo conhecido
     aba_anexo_real = "ANEXO" if "ANEXO" in abas_disponiveis else ("ANEXO2" if "ANEXO2" in abas_disponiveis else None)
     
-    if aba_anexo_real is None and len(abas_disponiveis) > 1:
-        aba_anexo_real = abas_disponiveis if abas_disponiveis != aba_hcid_real else None
-        
     df_hcid = extrair_e_limpar_dados(uploaded_file, aba_hcid_real)
-    df_anexo = extrair_e_limpar_dados(uploaded_file, aba_anexo_real) if aba_anexo_real else pd.DataFrame()
-
+    
+    # Monta as abas visuais do painel principal
     tab_hcid, tab_anexos = st.tabs(["🏥 Hospital Geral (HCID)", "🏢 Unidades Anexas"])
     
     with tab_hcid:
         renderizar_painel_etapas(df_hcid, aba_hcid_real, "hcid")
         
     with tab_anexos:
-        if aba_anexo_real and not df_anexo.empty:
+        if aba_anexo_real:
+            df_anexo = extrair_e_limpar_dados(uploaded_file, aba_anexo_real)
             renderizar_painel_etapas(df_anexo, aba_anexo_real, "anexos")
-        else:
-            st.info("Sua planilha possui apenas 1 aba de dados ativos. Se tiver anexos, adicione a segunda aba ao arquivo Excel.")
+        if not aba_anexo_real:
+            st.info("Sua planilha possui apenas 1 aba de dados ativos. Se tiver anexos, adicione a segunda aba ao arquivo Excel com o nome ANEXO.")
 else:
