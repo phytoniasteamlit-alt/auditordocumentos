@@ -14,7 +14,7 @@ st.set_page_config(
 def extrair_numero(valor):
     if pd.isna(valor) or str(valor).strip() == "" or str(valor).strip().lower() == "nan":
         return 0
-    # Remove textos como "por turno" e captura exclusivamente os dígitos numéricos
+    # Isola estritamente os dígitos numéricos das células
     v_str = "".join(filter(str.isdigit, str(valor)))
     return int(v_str) if v_str != "" else 0
 
@@ -40,63 +40,58 @@ st.sidebar.header("⚙️ Painel de Controle")
 uploaded_file = st.sidebar.file_uploader("Carregar Planilha de Estágios (.xlsx):", type=["xlsx"])
 
 # ==============================================================================
-# 3. MOTOR DE PROCESSAMENTO LINEAR FOCADO NAS COLUNAS FIXAS D E E
+# 3. MOTOR DE PROCESSAMENTO LINEAR ISOLADO POR ÍNDICE FÍSICO DE ABA
 # ==============================================================================
-def processar_vagas_estaticas(uploaded_file, padrao_procurado, sheet_fallback):
-    excel_file = pd.ExcelFile(uploaded_file)
-    abas = excel_file.sheet_names
-    
-    aba_real = next((op for op in padrao_procurado if op in abas), None)
-    if not aba_real:
-        aba_real = sheet_fallback if sheet_fallback in abas else None
-        
-    if not aba_real:
-        return pd.DataFrame()
-        
-    # Lê a tabela pulando as linhas iniciais de título (Começa estritamente na linha indexada 7)
-    df_raw = pd.read_excel(uploaded_file, sheet_name=aba_real, header=None, skiprows=7)
+def extrair_dados_aba_especifica(uploaded_file, numero_posicao_aba):
+    # Carrega a planilha ignorando o cabeçalho superior baseado na posição exata (0=Primeira aba, 1=Segunda aba)
+    df_raw = pd.read_excel(uploaded_file, sheet_name=numero_posicao_aba, header=None, skiprows=7)
     if df_raw.empty:
         return pd.DataFrame()
         
-    # Mapeamento estrito por posições de colunas físicas (A=0, B=1, C=2, D=3, E=4)
     df_processado = pd.DataFrame()
     df_processado["SETOR_RAW"] = df_raw.iloc[:, 0].astype(str).str.strip().ffill()
     df_processado["SUB_SETOR"] = df_raw.iloc[:, 1].fillna("").astype(str).str.strip()
     df_processado["CATEGORIA"] = df_raw.iloc[:, 2].fillna("").astype(str).str.strip()
     
-    # Extração direta das colunas fixas D e E de vagas por turno
+    # Coleta de vagas fixas das colunas D e E
     df_processado["MANHÃ"] = df_raw.iloc[:, 3].apply(extrair_numero)
     df_processado["TARDE"] = df_raw.iloc[:, 4].apply(extrair_numero)
     df_processado["TOTAL_VAGAS"] = df_processado["MANHÃ"] + df_processado["TARDE"]
     
-    # Filtro rígido para descartar ruídos e linhas de totalizadores nativos da planilha
+    # Filtro de descarte de linhas inúteis ou vazias
     linhas_validas = []
     for _, row in df_processado.iterrows():
         txt_s = str(row["SETOR_RAW"]).upper()
         txt_c = str(row["CATEGORIA"]).upper()
-        
-        # Permite strings padrões como "GERAL", limpando apenas lixos e campos de TOTAL vazios
         if "TOTAL" in txt_s or "TOTAL" in txt_c or txt_s == "NAN" or (txt_s == "" and txt_c == ""):
             linhas_validas.append(False)
         else:
             linhas_validas.append(True)
             
     df_final = df_processado[linhas_validas].copy()
-    
-    # Padroniza visualmente os sub-setores vazios sem apagar o registro
+    df_final["CATEGORIA"] = df_final["CATEGORIA"].apply(lambda x: "NÃO ESPECIFICADO" if x == "" else x)
     df_final["SUB_SETOR"] = df_final["SUB_SETOR"].apply(lambda x: "GERAL" if x == "" else x)
     
     return df_final[df_final["TOTAL_VAGAS"] > 0]
 
 # ==============================================================================
-# 4. EXECUÇÃO DO PROCESSAMENTO EM QUADROS TOTALMENTE ISOLADOS
+# 4. EXECUÇÃO DO PROCESSAMENTO EM QUADROS VERTICAIS TOTALMENTE ISOLADOS
 # ==============================================================================
 if uploaded_file is not None:
-    # Processamento isolado do HCID usando a aba limpa configurada
-    df_hcid = processar_vagas_estaticas(uploaded_file, ["HCID_BDD", "HCID", "HCID1"], "HCID_BDD")
+    excel_file = pd.ExcelFile(uploaded_file)
+    abas_planilha = excel_file.sheet_names
     
-    # Processamento isolado dos Anexos
-    df_anexos = processar_vagas_estaticas(uploaded_file, ["ANEXO", "ANEXO2", "ANEXOS"], "ANEXO")
+    # EXECUÇÃO DO ISOLAMENTO ESTREITO:
+    # df_hcid pega estritamente a primeira aba do Excel (índice 0)
+    df_hcid = extrair_dados_aba_especifica(uploaded_file, 0)
+    nome_aba_hcid = abas_planilha[0]
+    
+    # df_anexos tenta pegar a segunda aba se existir (índice 1)
+    df_anexos = pd.DataFrame()
+    nome_aba_anexo = ""
+    if len(abas_planilha) > 1:
+        df_anexos = extrair_dados_aba_especifica(uploaded_file, 1)
+        nome_aba_anexo = abas_planilha[1]
 
     # ==========================================================================
     # QUADRO 1: CONJUNTO EXCLUSIVO HOSPITAL GERAL (HCID)
@@ -104,7 +99,8 @@ if uploaded_file is not None:
     st.markdown("<div style='background-color: #1a2a3a; padding: 12px; border-radius: 5px; margin-bottom: 20px;'><h2 style='margin:0; font-size:1.6rem; color:#fff;'>🏥 QUADRO DE INDICADORES - SOMENTE HCID</h2></div>", unsafe_allow_html=True)
     
     if not df_hcid.empty:
-        # Caixas de Texto com os valores cravados do Excel (158 Vagas / 21 Setores)
+        st.caption(f"📂 Lendo dados da Primeira Aba: **'{nome_aba_hcid}'**")
+        
         t_vagas_h = df_hcid["TOTAL_VAGAS"].sum()
         t_setores_h = df_hcid["SETOR_RAW"].nunique()
         t_m_h = df_hcid["MANHÃ"].sum()
@@ -117,7 +113,6 @@ if uploaded_file is not None:
         c4.metric("Total de vagas de estágio do HCID tarde", f"{t_t_h} T")
         
         st.markdown("<br>", unsafe_allow_html=True)
-        
         col1_h, col2_h = st.columns(2)
         
         with col1_h:
@@ -133,7 +128,6 @@ if uploaded_file is not None:
             f3_h.update_layout(height=280, coloraxis_showscale=False, margin=dict(l=10,r=10,t=10,b=10), xaxis_title="Vagas", yaxis_title="Setor")
             st.plotly_chart(f3_h, use_container_width=True)
 
-            # CORREÇÃO CRÍTICA DO GRÁFICO 5: Vincula o DataFrame correto ordenado de forma crescente para as barras variarem
             st.markdown("##### 5️⃣ Total de vagas de estágio disponibilizados por setor no HCID")
             f5_h = px.bar(df_g3_h, x="TOTAL_VAGAS", y="SETOR_RAW", orientation="h", text_auto=True, color_discrete_sequence=["#5F9EA0"])
             f5_h.update_layout(height=280, margin=dict(l=10,r=10,t=10,b=10), xaxis_title="Vagas", yaxis_title="Setor")
@@ -165,3 +159,10 @@ if uploaded_file is not None:
             f6_h.update_layout(height=280, margin=dict(l=10,r=10,t=10,b=10))
             st.plotly_chart(f6_h, use_container_width=True)
     else:
+        st.warning("Nenhum registro ativo foi identificado para a aba do HCID.")
+
+    st.markdown("<br><br>", unsafe_allow_html=True)
+
+    # ==========================================================================
+    # QUADRO 2: CONJUNTO EXCLUSIVO UNIDADES ANEXAS (ANEXO)
+    # ==========================================================================
