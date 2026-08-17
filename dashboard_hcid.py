@@ -33,68 +33,63 @@ st.sidebar.header("⚙️ Painel de Controle")
 uploaded_file = st.sidebar.file_uploader("Carregar Planilha de Estágios (.xlsx):", type=["xlsx"])
 
 # ==============================================================================
-# 3. MOTOR DE TRATAMENTO DE DADOS BLINDADO E HIGIENIZADO
+# 3. MOTOR DE TRATAMENTO DE DADOS COM PREENCHIMENTO EM CASCATA
 # ==============================================================================
 def extrair_e_limpar_dados(uploaded_file, sheet_name):
     if not sheet_name:
         return pd.DataFrame()
     
-    # Lê a planilha bruta sem pular cabeçalhos para não deslocar fisicamente as colunas
+    # Lê a planilha bruta sem pular cabeçalhos para manter os índices das colunas fixos
     df_bruto = pd.read_excel(uploaded_file, sheet_name=sheet_name, header=None)
     
-    # Isola os dados reais a partir da linha indexada 7 (Linha 8 física do Excel)
+    # Isola os dados a partir da linha de índice 7 (Linha 8 real do Excel)
     df_dados = df_bruto.iloc[7:].copy()
-    
     if df_dados.empty:
         return pd.DataFrame()
         
-    # Mapeamento manual estrito das colunas (A, B, C, D, E)
+    # Mapeamento manual estrito das colunas físicas (A, B, C, D, E)
     idx_setor = 0  # Coluna A
     idx_sub   = 1  # Coluna B
     idx_cat   = 2  # Coluna C
     idx_manha = 3  # Coluna D
     idx_tarde = 4  # Coluna E
 
-    # Função limpadora de expressões textuais de vagas
     def extrair_inteiro(valor):
         if pd.isna(valor) or str(valor).strip() == "" or str(valor).strip().lower() == "nan": 
-            return None  # Retorna None para podermos aplicar o ffill em cascata
+            return None  # Retorna None para aplicar o ffill do bloco de setor
         v_str = "".join(filter(str.isdigit, str(valor)))
         return int(v_str) if v_str != "" else 0
 
     df_limpo = pd.DataFrame()
     
-    # Preenchimento textual estrutural do Setor Principal
+    # Tratamento estrutural do Setor Principal
     df_limpo["SETOR"] = df_dados.iloc[:, idx_setor].astype(str).str.strip()
     df_limpo["SETOR"] = df_limpo["SETOR"].replace(["nan", "NAN", ""], pd.NA).ffill()
     
-    # Preenchimento das Sub-Áreas e Profissões
+    # Tratamento de sub-áreas e profissões
     df_limpo["SUB_SETOR"] = df_dados.iloc[:, idx_sub].fillna("").astype(str).str.strip().replace(["nan", "NAN"], "")
     df_limpo["CATEGORIA"] = df_dados.iloc[:, idx_cat].fillna("").astype(str).str.strip().replace(["nan", "NAN"], "")
     
-    # Extração das vagas aplicando conversão inicial
+    # Extração de vagas com conversão inicial
     df_limpo["MANHÃ"] = df_dados.iloc[:, idx_manha].apply(extrair_inteiro)
     df_limpo["TARDE"] = df_dados.iloc[:, idx_tarde].apply(extrair_inteiro)
     
-    # ESTRATÉGIA EM CASCATA: Herda as vagas do bloco caso as linhas de sub-especialidades estejam em branco no Excel
+    # PREENCHIMENTO EM CASCATA: Herda as vagas para as linhas seguintes do mesmo bloco
     df_limpo["MANHÃ"] = df_limpo["MANHÃ"].ffill().fillna(0).astype(int)
     df_limpo["TARDE"] = df_limpo["TARDE"].ffill().fillna(0).astype(int)
     df_limpo["TOTAL_VAGAS"] = df_limpo["MANHÃ"] + df_limpo["TARDE"]
     
-    # Filtro de descarte de linhas inúteis, títulos remanescentes ou vazias
+    # Filtro de descarte de totais gerais e linhas limpas
     linhas_validas = []
     for _, row in df_limpo.iterrows():
         txt_s = str(row["SETOR"]).upper()
         txt_c = str(row["CATEGORIA"]).upper()
-        # Ignora linhas de totalizadores nativos da planilha para evitar duplicidade na soma geral
         if "TOTAL" in txt_s or "TOTAL" in txt_c or txt_c == "" or txt_s == "SETOR":
             linhas_validas.append(False)
         else:
             linhas_validas.append(True)
     
     df_final = df_limpo[linhas_validas].copy()
-    
-    # Garante a formatação adequada para subsetores vazios
     df_final["SUB_SETOR"] = df_final["SUB_SETOR"].apply(lambda x: "GERAL" if x == "" else x)
     
     return df_final[df_final["TOTAL_VAGAS"] > 0]
@@ -104,7 +99,7 @@ def extrair_e_limpar_dados(uploaded_file, sheet_name):
 # ==============================================================================
 def renderizar_painel_etapas(df_alvo, nome_aba_excel, chave_unica):
     if df_alvo.empty:
-        st.warning(f"Nenhum dado ativo foi localizado na aba '{nome_aba_excel}'. Verifique o formato do arquivo.")
+        st.warning(f"Nenhum dado ativo foi localizado na aba '{nome_aba_excel}'. Verifique a estrutura das colunas.")
         return
 
     st.caption(f"📂 Fonte dos dados ativa: Aba **'{nome_aba_excel}'**")
@@ -127,7 +122,6 @@ def renderizar_painel_etapas(df_alvo, nome_aba_excel, chave_unica):
         st.markdown("### 📊 Etapa 1: Visão Macro por Setor")
         st.caption("Volume macro consolidado por área principal.")
         
-        # Agrupamento macro por setor
         df_macro = df_alvo.groupby("SETOR")["TOTAL_VAGAS"].sum().reset_index()
         df_macro = df_macro.sort_values(by="TOTAL_VAGAS", ascending=True)
         
@@ -139,7 +133,7 @@ def renderizar_painel_etapas(df_alvo, nome_aba_excel, chave_unica):
             labels={"TOTAL_VAGAS": "Total de Vagas", "SETOR": "Setor Principal"},
             color="TOTAL_VAGAS",
             color_continuous_scale=px.colors.sequential.Tealgrn,
-            text_auto=True # ATIVA NÚMEROS DE PRECISÃO NAS BARRAS MACRO
+            text_auto=True  # RÓTULO COM PRECISÃO NAS BARRAS MACRO
         )
         fig_macro.update_layout(showlegend=False, height=450, margin=dict(l=20, r=35, t=10, b=10))
         fig_macro.update_traces(textposition="outside", cliponaxis=False)
@@ -147,14 +141,13 @@ def renderizar_painel_etapas(df_alvo, nome_aba_excel, chave_unica):
 
     with col_direita:
         st.markdown("### 🔍 Etapa 2: Detalhar Sub-Setores e Turnos")
-        st.caption("Filtre um setor para abrir o destrinchamento de sub-areas, turnos e profissões.")
+        st.caption("Filtre um setor para abrir o destrinchamento de sub-áreas e turnos.")
         
         setores_disponiveis = sorted(df_alvo["SETOR"].unique())
         setor_selecionado = st.selectbox("Selecione o Setor Principal:", setores_disponiveis, key=f"sel_{chave_unica}")
         
         df_filtrado = df_alvo[df_alvo["SETOR"] == setor_selecionado].copy()
         
-        # Transforma o DataFrame estruturando turnos lado a lado
         df_melted = df_filtrado.melt(
             id_vars=["SUB_SETOR", "CATEGORIA"],
             value_vars=["MANHÃ", "TARDE"],
@@ -174,7 +167,7 @@ def renderizar_painel_etapas(df_alvo, nome_aba_excel, chave_unica):
                 orientation="h",
                 labels={"VAGAS": "Quantidade de Vagas", "SUB_E_CAT": "Sub-Setor (Profissão)"},
                 color_discrete_map={"MANHÃ": "#008080", "TARDE": "#FF7F50"},
-                text_auto=True # ATIVA NÚMEROS DE PRECISÃO NAS BARRAS DETALHADAS
+                text_auto=True  # RÓTULO COM PRECISÃO NAS BARRAS DETALHADAS
             )
             fig_detalhe.update_layout(barmode="stack", height=450, margin=dict(l=20, r=35, t=10, b=10))
             fig_detalhe.update_traces(textposition="inside", insidetextanchor="middle")
@@ -187,18 +180,19 @@ def renderizar_painel_etapas(df_alvo, nome_aba_excel, chave_unica):
         st.dataframe(df_alvo[["SETOR", "SUB_SETOR", "CATEGORIA", "MANHÃ", "TARDE", "TOTAL_VAGAS"]], use_container_width=True)
 
 # ==============================================================================
-# 5. EXECUÇÃO DO FLUXO PRINCIPAL
+# 5. EXECUÇÃO DO FLUXO PRINCIPAL (LINHA RETA SEM RISCO DE INDENTAÇÃO)
 # ==============================================================================
 if uploaded_file is not None:
     excel_file = pd.ExcelFile(uploaded_file)
     abas_disponiveis = excel_file.sheet_names
     
-    aba_hcid_real = next((op for op in ["HCID_BDD", "HCID", "HCID1", "DADOS"] if op in abas_disponiveis), abas_disponiveis[0])
+    # Mapeamento estrito sem condicionais de bloco que causam recuos errados
+    aba_hcid_real = "HCID_BDD" if "HCID_BDD" in abas_disponiveis else abas_disponiveis[0]
+    aba_anexo_real = "ANEXO" if "ANEXO" in abas_disponiveis else ("ANEXO2" if "ANEXO2" in abas_disponiveis else None)
     
-    aba_anexo_real = next((op for op in ["ANEXO", "ANEXO2", "ANEXOS"] if op in abas_disponiveis), abas_disponiveis[1] if len(abas_disponiveis) > 1 else None)
-    if aba_anexo_real == aba_hcid_real:
-        aba_anexo_real = None
-        
+    if aba_anexo_real is None and len(abas_disponiveis) > 1:
+        aba_anexo_real = abas_disponiveis[1] if abas_disponiveis[1] != aba_hcid_real else None
+
     df_hcid = extrair_e_limpar_dados(uploaded_file, aba_hcid_real)
     df_anexo = extrair_e_limpar_dados(uploaded_file, aba_anexo_real) if aba_anexo_real else pd.DataFrame()
 
@@ -211,5 +205,6 @@ if uploaded_file is not None:
         if aba_anexo_real and not df_anexo.empty:
             renderizar_painel_etapas(df_anexo, aba_anexo_real, "anexos")
         else:
-            st.info("Sua planilha possui apenas 1 aba de dados ativos. Se possuir anexos, adicione-os na segunda aba do arquivo Excel.")
+            st.info("Sua planilha possui apenas 1 aba de dados ativos. Se tiver anexos, coloque os dados na segunda aba do Excel.")
 else:
+    st.info("💡 Por favor, arraste ou carregue sua planilha Excel para estruturar os painéis automaticamente.")
