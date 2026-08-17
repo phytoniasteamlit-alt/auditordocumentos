@@ -210,5 +210,5 @@ if not df_hcid.empty:
     tab_graficos, tab_sumario, tab_inativos = st.tabs(["📈 Painel Geral de Gráficos", "📝 Sumário de Distribuição Detalhado", "🔍 Áreas Mapeadas Sem Vagas Ativas"])
     
     with tab_graficos:
-        c1, c2 = st.columns(2)
-        with c1:
+        col_g1, col_g2 = st.columns(2)
+        
