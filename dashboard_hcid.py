@@ -163,7 +163,38 @@ else:
     st.stop()
 
 # ==============================================================================
-# 4. QUADRO 1: INDICADORES EXCLUSIVOS - HCID
+# FUNÇÃO AUXILIAR: GERA O TEXTO DE DESTRINCHAMENTO AUTOMÁTICO
+# ==============================================================================
+def gerar_texto_distribuicao(df_filtrado):
+    textos = []
+    setores_unicos = df_filtrado["SETOR_RAW"].unique()
+    for s in setores_unicos:
+        df_s = df_filtrado[df_filtrado["SETOR_RAW"] == s]
+        total_s = df_s["VAGAS_TOTAL"].sum()
+        
+        texto_setor = f"📌 **Setor {s}**: Disponibiliza um total de **{total_s} vagas** para campo de estágio. "
+        sub_detalhes = []
+        
+        # Agrupa por sub-setor dentro daquele setor para detalhar as subdivisões
+        sub_unicos = df_s["SUB_SETOR_RAW"].unique()
+        for sub in sub_unicos:
+            df_sub = df_s[df_s["SUB_SETOR_RAW"] == sub]
+            total_sub = df_sub["VAGAS_TOTAL"].sum()
+            m_sub = df_sub["VAGAS_MANHA"].sum()
+            t_sub = df_sub["VAGAS_TARDE"].sum()
+            profissoes = ", ".join(df_sub["CATEGORIA_RAW"].unique())
+            
+            nome_sub = f"na ala/área **{sub}**" if sub != "" else "na área geral"
+            sub_detalhes.append(
+                f"destas, **{total_sub} estão alocadas** {nome_sub} (composta por: {profissoes}), sendo **{m_sub} no turno da manhã** e **{t_sub} no turno da tarde**"
+            )
+            
+        texto_setor += " Deste montante, " + "; ".join(sub_detalhes) + "."
+        textos.append(texto_setor)
+    return textos
+
+# ==============================================================================
+# 4. QUADRO I - HCID (ORGANIZAÇÃO EM ABAS INTERNAS)
 # ==============================================================================
 st.markdown("<h2 style='color: #008080; border-bottom: 2px solid #008080;'>🏢 QUADRO I - Mapeamento de Vagas Exclusivo HCID</h2>", unsafe_allow_html=True)
 
@@ -174,26 +205,10 @@ if not df_hcid.empty:
     
     m1.metric(label="📊 1. Total de Vagas de Estágio no HCID (Soma Geral)", value=f"{t_vagas_hcid} Vagas")
     m2.metric(label="📍 2. Total de Setores Disponibilizados p/ Campo no HCID", value=t_setores_hcid)
-    st.markdown("---")
     
-    c1, c2 = st.columns(2)
-    with c1:
-        df_g3 = df_hcid.groupby("LOCAL_COMBINADO")["LOCAL_COMBINADO"].count().reset_index(name="Contagem")
-        x_3, y_3 = ("Contagem", "LOCAL_COMBINADO") if sub_or == "h" else ("LOCAL_COMBINADO", "Contagem")
-        fig3 = px.bar(df_g3, x=x_3, y=y_3, orientation=sub_or, text="Contagem", title="3. Setores Disponibilizados para Estágio (HCID)", color_discrete_sequence=["#008080"])
-        fig3.update_layout(yaxis={'categoryorder':'total ascending'} if sub_or == "h" else {'categoryorder':'total descending'}, height=450, margin=dict(l=180))
-        fig3.update_traces(texttemplate='<b>%{text}</b>', textposition='outside', textfont=dict(size=14))
-        st.plotly_chart(fig3, use_container_width=True)
-    with c2:
-        df_g4 = df_hcid.groupby(["LOCAL_COMBINADO", hc_cat])["VAGAS_TOTAL"].sum().reset_index()
-        x_4, y_4 = ("VAGAS_TOTAL", "LOCAL_COMBINADO") if sub_or == "h" else ("LOCAL_COMBINADO", "VAGAS_TOTAL")
-        # AJUSTE EXECUTIVO: Removido o 'text="VAGAS_TOTAL"' para evitar o atropelo de fontes na pilha
-        fig4 = px.bar(df_g4, x=x_4, y=y_4, color=hc_cat, orientation=sub_or, barmode="stack", title="4. Categorias Profissionais Contempladas por Setor (HCID)", color_discrete_sequence=cor_sequencia)
-        fig4.update_layout(yaxis={'categoryorder':'total ascending'} if sub_or == "h" else {'categoryorder':'total descending'}, legend_title_text="Profissão", height=450, margin=dict(l=180))
-        st.plotly_chart(fig4, use_container_width=True)
-        
-    st.markdown("---")
+    # CRIAÇÃO DAS ABAS EXECUTIVAS PARA EVITAR POLUIÇÃO VISUAL
+    tab_graficos, tab_sumario, tab_inativos = st.tabs(["📈 Painel Geral de Gráficos", "📝 Sumário de Distribuição Detalhado", "🔍 Áreas Mapeadas Sem Vagas Ativas"])
     
-    st.markdown("### 🔍 5. Visão de Detalhamento por Setor/Subsetor")
-    df_g5 = df_hcid.groupby("LOCAL_E_PROF")["VAGAS_TOTAL"].sum().reset_index()
-    x_5, y_5 = ("VAGAS_TOTAL", "LOCAL_E_PROF") if sub_or == "h" else ("LOCAL_E_PROF", "VAGAS_TOTAL")
+    with tab_graficos:
+        c1, c2 = st.columns(2)
+        with c1:
