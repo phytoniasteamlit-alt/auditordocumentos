@@ -19,7 +19,7 @@ def normalizar_texto(texto):
     texto = "".join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
     return texto
 
-# --- CABEÇALHO SUPERIOR (Igual ao Modelo Solicitado) ---
+# --- CABEÇALHO SUPERIOR ---
 header_left, header_right = st.columns(2)
 
 header_left.markdown("<h1 style='margin: 0; padding: 0; font-size: 2.2rem;'>📊 Painel de Indicadores de Estágio</h1>", unsafe_allow_html=True)
@@ -81,14 +81,14 @@ if uploaded_file is not None:
                 aba_anexo_real = opcao
                 break
         
-        # Função interna de tratamento e limpeza de dados
+        # Função de mapeamento e tratamento de dados corrigida
         def extrair_e_limpar_dados(sheet_name):
             if not sheet_name or sheet_name not in abas_disponiveis:
                 return pd.DataFrame(), "SETOR", "SUB_SETOR", "CATEGORIA"
             
             df_bruto = pd.read_excel(uploaded_file, sheet_name=sheet_name, header=None)
             
-            # Varredura para encontrar a linha real do cabeçalho
+            # Encontra a linha de cabeçalho
             linha_cabecalho = 0
             for idx, row in df_bruto.iterrows():
                 row_str = " ".join([str(x).upper() for x in row.dropna()])
@@ -97,12 +97,12 @@ if uploaded_file is not None:
                     break
             
             df_aba = df_bruto.iloc[linha_cabecalho+1:].copy()
-            df_aba.columns = [str(c).strip().replace('\n', ' ') for c in df_bruto.iloc[linha_cabecalho]]
+            valores_cabecalho = [str(c).strip().replace('\n', ' ') for c in df_bruto.iloc[linha_cabecalho]]
             
-            # Tratamento de colunas nulas resultantes de células mescladas
+            # Corrige colunas nulas geradas por mesclagem lateral
             novas_colunas = []
             ultima_coluna_valida = "COLUNA"
-            for col in df_aba.columns:
+            for col in valores_cabecalho:
                 if pd.isna(col) or "UNNAMED" in str(col).upper() or str(col).strip() == "":
                     novas_colunas.append(ultima_coluna_valida)
                 else:
@@ -110,6 +110,7 @@ if uploaded_file is not None:
                     novas_colunas.append(ultima_coluna_valida)
             df_aba.columns = novas_colunas
             
+            # Busca textual dos cabeçalhos estruturais
             c_setor, c_sub, c_cat = None, None, None
             for col in set(df_aba.columns):
                 col_upper = col.upper()
@@ -117,9 +118,10 @@ if uploaded_file is not None:
                 elif "SETOR" in col_upper or "CAMPO" in col_upper: c_setor = col
                 elif "PROF" in col_upper or "CAT" in col_upper: c_cat = col
             
-            c_setor = c_setor or df_aba.columns[0]
-            c_sub = c_sub or (df_aba.columns[1] if len(df_aba.columns) > 1 else df_aba.columns[0])
-            c_cat = c_cat or (df_aba.columns[2] if len(df_aba.columns) > 2 else df_aba.columns[0])
+            # Correção posicional segura para evitar ambiguidade de séries do pandas
+            c_setor = c_setor if c_setor is not None else df_aba.columns[0]
+            c_sub = c_sub if c_sub is not None else (df_aba.columns[1] if len(df_aba.columns) > 1 else df_aba.columns[0])
+            c_cat = c_cat if c_cat is not None else (df_aba.columns[2] if len(df_aba.columns) > 2 else df_aba.columns[0])
             
             df_aba[c_setor] = df_aba[c_setor].ffill()
             df_aba[c_sub] = df_aba[c_sub].fillna("")
@@ -130,7 +132,7 @@ if uploaded_file is not None:
                 v_str = "".join(filter(str.isdigit, str(valor)))
                 return int(v_str) if v_str != "" else 0
             
-            # Extração posicional padrão para turnos (Manhã na coluna 4, Tarde na coluna 5)
+            # Processamento de turnos baseado no índice posicional das colunas numéricas
             if df_aba.shape[1] >= 5:
                 df_aba["VAGAS_MANHA"] = df_aba.iloc[:, 3].apply(limpar_vagas)
                 df_aba["VAGAS_TARDE"] = df_aba.iloc[:, 4].apply(limpar_vagas)
@@ -145,14 +147,14 @@ if uploaded_file is not None:
                 axis=1
             )
             
-            # Expurgar linhas de totais acumulados no Excel para evitar duplicidade nos gráficos
+            # Expurgar linhas inválidas e totais estáticos da tabela
             df_aba = df_aba[
                 (~df_aba[c_setor].astype(str).str.upper().str.contains("TOTAL|QUANTITATIVO|HOSPITAL", na=False)) & 
                 (df_aba["VAGAS_TOTAL"] > 0)
             ]
             return df_aba, c_setor, c_sub, c_cat
 
-        # Processamento isolado de cada aba
+        # Processamento isolado de cada bloco
         df_hcid, hc_setor, hc_sub, hc_cat = extrair_e_limpar_dados(aba_hcid_real)
         df_anexo, ax_setor, ax_sub, ax_cat = extrair_e_limpar_dados(aba_anexo_real)
         
@@ -169,12 +171,10 @@ else:
 st.markdown("<h2 style='color: #008080; border-bottom: 2px solid #008080;'>🏢 QUADRO I - Mapeamento de Vagas Exclusivo HCID</h2>", unsafe_allow_html=True)
 
 if not df_hcid.empty:
-    # Métricas Estruturais (Filtro invisível por aba para não misturar)
-    m1, m2, m3 = st.columns(3)
+    m1, m2 = st.columns(2)
     t_vagas_hcid = int(df_hcid["VAGAS_TOTAL"].sum())
     t_setores_hcid = df_hcid["LOCAL_COMBINADO"].nunique()
     
-    # Gráficos 1 e 2: Exibidos como KPIs Executivos de Impacto
     m1.metric(label="📊 1. Total de Vagas de Estágio no HCID", value=f"{t_vagas_hcid} Vagas")
     m2.metric(label="📍 2. Total de Setores Disponibilizados p/ Campo no HCID", value=t_setores_hcid)
     
@@ -182,25 +182,26 @@ if not df_hcid.empty:
     c1, c2 = st.columns(2)
     
     with c1:
-        # Gráfico 3: Setores disponibilizados para realização de estágio no HCID
         df_g3 = df_hcid.groupby("LOCAL_COMBINADO")["LOCAL_COMBINADO"].count().reset_index(name="Contagem")
         fig3 = px.bar(df_g3, x="Contagem", y="LOCAL_COMBINADO", orientation="h", title="3. Setores Disponibilizados para Estágio (HCID)", color_discrete_sequence=["#008080"])
         st.plotly_chart(fig3, use_container_width=True)
         
-        # Gráfico 5: Total de vagas de estágio disponibilizados por setor no HCID
         df_g5 = df_hcid.groupby("LOCAL_COMBINADO")["VAGAS_TOTAL"].sum().reset_index()
         fig5 = px.bar(df_g5, x="VAGAS_TOTAL", y="LOCAL_COMBINADO", orientation="h", title="5. Total de Vagas Disponibilizadas por Setor (HCID)", color_discrete_sequence=["#4682B4"])
         st.plotly_chart(fig5, use_container_width=True)
 
     with c2:
-        # Gráfico 4: Categorias profissionais contempladas no estágio por setor no HCID
         df_g4 = df_hcid.groupby(["LOCAL_COMBINADO", hc_cat])["VAGAS_TOTAL"].sum().reset_index()
         fig4 = px.bar(df_g4, x="VAGAS_TOTAL", y="LOCAL_COMBINADO", color=hc_cat, barmode="stack", title="4. Categorias Profissionais Contempladas por Setor (HCID)", color_discrete_sequence=cor_sequencia)
         st.plotly_chart(fig4, use_container_width=True)
         
-        # Gráfico 6: Total de vagas de estágio do HCID por turno no HCID
         df_g6 = pd.DataFrame({
             "Turno": ["Manhã", "Tarde"],
             "Vagas": [df_hcid["VAGAS_MANHA"].sum(), df_hcid["VAGAS_TARDE"].sum()]
         })
         fig6 = px.bar(df_g6, x="Turno", y="Vagas", text="Vagas", title="6. Total de Vagas de Estágio por Turno (HCID)", color="Turno", color_discrete_map={"Manhã": "#4682B4", "Tarde": "#FF8C00"})
+        st.plotly_chart(fig6, use_container_width=True)
+        
+    st.markdown("#### 📅 7. Total Estagiários por Turno por Dia (HCID)")
+    df_g7 = df_hcid.groupby(hc_cat)[["VAGAS_MANHA", "VAGAS_TARDE"]].sum().reset_index()
+    df_g7_melt = df_g7.melt(id_vars=hc_cat, value_vars=["VAGAS_MANHA", "VAGAS_TARDE"], var_name="Turno", value_name="Vagas")
