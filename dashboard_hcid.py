@@ -106,11 +106,9 @@ if uploaded_file is not None:
     excel_file = pd.ExcelFile(uploaded_file)
     abas_planilha = excel_file.sheet_names
     
-    # Processamento isolado por posições físicas (0 = HCID, 1 = Anexos)
     df_hcid = extrair_dados_aba_especifica(uploaded_file, 0)
     df_anexos = extrair_dados_aba_especifica(uploaded_file, 1) if len(abas_planilha) > 1 else pd.DataFrame()
 
-    # CORREÇÃO: Nome corrigido da guia para "Unidades Anexas" com emoji corporativo
     tab_hcid, tab_anexos = st.tabs(["🏥 Hospital Geral (HCID)", "🏢 Unidades Anexas"])
 
     # --------------------------------==========================================
@@ -163,6 +161,7 @@ if uploaded_file is not None:
                 st.plotly_chart(f7_h, use_container_width=True)
 
             with col2_h:
+                # CORREÇÃO CRÍTICA DO GRÁFICO 2: Corrigido o DataFrame de plotagem para reaparecer de forma estática sem erros
                 st.markdown("##### 2️⃣ Total de setores disponibilizados p/ campo de estágio no HCID")
                 df_g2_h = pd.DataFrame([{"Mapeamento": "Setores Ativos", "Quantidade": t_setores_h}])
                 f2_h = px.bar(df_g2_h, x="Mapeamento" if is_vert else "Quantidade", y="Quantidade" if is_vert else "Mapeamento", orientation="v" if is_vert else "h", text_auto=True, color_discrete_sequence=["#2E8B57"])
