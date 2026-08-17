@@ -47,7 +47,7 @@ st.sidebar.header("⚙️ Painel de Controle")
 uploaded_file = st.sidebar.file_uploader("Carregar Planilha de Estágios (.xlsx):", type=["xlsx"])
 
 # ==============================================================================
-# 3. MOTOR MATRICIAL DE PROCESSAMENTO ISOLADO POR ABA (BLINDADO CONTRA CÉLULAS VAZIAS)
+# 3. MOTOR MATRICIAL DE PROCESSAMENTO ISOLADO POR ABA (BLINDADO CONTRA TYPGEERROR)
 # ==============================================================================
 def processar_aba_matricial(uploaded_file, sheet_name_fallback, padrao_procurado):
     excel_file = pd.ExcelFile(uploaded_file)
@@ -73,28 +73,27 @@ def processar_aba_matricial(uploaded_file, sheet_name_fallback, padrao_procurado
     # Isola o corpo de registros (Linha 8 física / índice 7 em diante)
     df_corpo = df_raw.iloc[7:].copy().reset_index(drop=True)
     
-    # Tratamento vertical em cascata (ffill) para herdar setores e subsetores mesclados
-    df_corpo.iloc[:, 0] = df_corpo.iloc[:, 0].replace(["nan", "NAN", ""], pd.NA).ffill().fillna("GERAL")
-    df_corpo.iloc[:, 1] = df_corpo.iloc[:, 1].replace(["nan", "NAN", ""], pd.NA).ffill().fillna("GERAL")
-    df_corpo.iloc[:, 2] = df_corpo.iloc[:, 2].replace(["nan", "NAN", ""], pd.NA).ffill().fillna("NÃO ESPECIFICADO")
+    # CORREÇÃO INTEGRAL COMPATÍVEL COM PANDAS MODERNO: Isola as séries para evitar o TypeError de conversão de dtypes
+    setores_col = df_corpo.iloc[:, 0].astype(str).str.strip().replace(["nan", "NAN", ""], None).ffill().fillna("GERAL")
+    sub_setores_col = df_corpo.iloc[:, 1].astype(str).str.strip().replace(["nan", "NAN", ""], None).ffill().fillna("GERAL")
+    categorias_col = df_corpo.iloc[:, 2].astype(str).str.strip().replace(["nan", "NAN", ""], None).ffill().fillna("NÃO ESPECIFICADO")
     
     # Captura a referência fixa padrão das colunas D e E
-    vagas_m_padrao = df_corpo.iloc[:, 3].astype(str).str.strip().replace(["nan", "NAN", ""], pd.NA).ffill().fillna("0")
-    vagas_t_padrao = df_corpo.iloc[:, 4].astype(str).str.strip().replace(["nan", "NAN", ""], pd.NA).ffill().fillna("0")
+    vagas_m_padrao = df_corpo.iloc[:, 3].astype(str).str.strip().replace(["nan", "NAN", ""], None).ffill().fillna("0")
+    vagas_t_padrao = df_corpo.iloc[:, 4].astype(str).str.strip().replace(["nan", "NAN", ""], None).ffill().fillna("0")
 
     registros_vagas = []
     num_colunas_total = len(df_raw.columns)
     
     for idx_row in range(len(df_corpo)):
-        setor = str(df_corpo.iloc[idx_row, 0]).strip().upper()
-        sub_setor = str(df_corpo.iloc[idx_row, 1]).strip().upper()
-        categoria = str(df_corpo.iloc[idx_row, 2]).strip().upper()
+        setor = str(setores_col.iloc[idx_row]).strip().upper()
+        sub_setor = str(sub_setores_col.iloc[idx_row]).strip().upper()
+        categoria = str(categorias_col.iloc[idx_row]).strip().upper()
         
         # Ignora linhas de cabeçalhos residuais, títulos replicados ou totais parciais da planilha
         if "TOTAL" in setor or "TOTAL" in categoria or categoria == "" or setor == "SETOR" or setor == "GERAL":
             continue
             
-        # Percorre as colunas do calendário a partir da coluna indexada 8 (onde começam as vagas diárias)
         for col_idx in range(8, num_colunas_total):
             vaga_bruta = df_corpo.iloc[idx_row, col_idx]
             qtd_vagas = extrair_numero(vaga_bruta)
@@ -106,7 +105,7 @@ def processar_aba_matricial(uploaded_file, sheet_name_fallback, padrao_procurado
                 if pd.notna(vaga_bruta) and str(vaga_bruta).strip() != "" and str(vaga_bruta).strip().lower() != "nan":
                     qtd_vagas = extrair_numero(vaga_padrao_celula)
             
-            # FILTRO CRÍTICO: Ignora sub-setores vazios. Só insere se a quantidade for maior que zero
+            # Filtro rígido: só insere se a quantidade de vagas for maior que zero
             if qtd_vagas > 0:
                 mes_name = str(linha_meses[col_idx]).strip().upper()
                 dia_name = str(linha_dias[col_idx]).strip().upper()
@@ -143,7 +142,6 @@ if uploaded_file is not None:
     st.markdown("<div style='background-color: #1a2a3a; padding: 12px; border-radius: 5px; margin-bottom: 20px;'><h2 style='margin:0; font-size:1.6rem; color:#fff;'>🏥 QUADRO DE INDICADORES - SOMENTE HCID</h2></div>", unsafe_allow_html=True)
     
     if not df_hcid.empty:
-        # Caixas de Texto Executivas integradas com os indicadores solicitados
         t_vagas_h = df_hcid["VAGAS"].sum()
         t_setores_h = df_hcid["SETOR"].nunique()
         t_m_h = df_hcid[df_hcid["TURNO"] == "MANHÃ"]["VAGAS"].sum()
@@ -157,23 +155,25 @@ if uploaded_file is not None:
         
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # Estrutura de colunas simétricas para organizar os 7 gráficos sem amontoar
         col1_h, col2_h = st.columns(2)
         
         with col1_h:
-            # Gráfico 1: Total de vagas e de estágio no HCID
             st.markdown("##### 1️⃣ Total de vagas e de estágio no HCID")
             df_g1_h = df_hcid.groupby("MÊS")["VAGAS"].sum().reset_index()
             f1_h = px.bar(df_g1_h, x="MÊS", y="VAGAS", color="MÊS", text_auto=True, color_discrete_sequence=px.colors.qualitative.Set2)
             f1_h.update_layout(height=280, showlegend=False, margin=dict(l=10,r=10,t=10,b=10))
             st.plotly_chart(f1_h, use_container_width=True)
             
-            # Gráfico 3: Setores disponibilizados para realização de estágio no HCID
             st.markdown("##### 3️⃣ Setores disponibilizados para realização de estágio no HCID")
             df_g3_h = df_hcid.groupby("SETOR")["VAGAS"].sum().reset_index().sort_values(by="VAGAS", ascending=True)
             f3_h = px.bar(df_g3_h, x="VAGAS", y="SETOR", orientation="h", text_auto=True, color="VAGAS", color_continuous_scale=px.colors.sequential.Tealgrn)
             f3_h.update_layout(height=280, coloraxis_showscale=False, margin=dict(l=10,r=10,t=10,b=10))
             st.plotly_chart(f3_h, use_container_width=True)
 
-            # Gráfico 5: Total de vagas de estágio disponibilizados por setor no HCID
             st.markdown("##### 5️⃣ Total de vagas de estágio disponibilizados por setor no HCID")
+            df_g5_h = df_hcid.groupby("SETOR")["VAGAS"].sum().reset_index().sort_values(by="VAGAS", ascending=True)
+            f5_h = px.bar(df_g5_h, x="VAGAS", y="SETOR", orientation="h", text_auto=True, color_discrete_sequence=["#5F9EA0"])
+            f5_h.update_layout(height=280, margin=dict(l=10,r=10,t=10,b=10))
+            st.plotly_chart(f5_h, use_container_width=True)
+
+            st.markdown("##### 7️⃣ Total de estagiários por turno por dia no HCID")
