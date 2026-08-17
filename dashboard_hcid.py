@@ -4,10 +4,10 @@ import plotly.express as px
 import unicodedata
 
 # ==============================================================================
-# 1. CONFIGURAÇÃO DA PÁGINA (Modo Amplo)
+# 1. CONFIGURAÇÃO DA PÁGINA (Modo Amplo e Executivo)
 # ==============================================================================
 st.set_page_config(
-    page_title="Painel de Estágios - HCID & ANEXO",
+    page_title="Painel Executivo de Estágios - HCID",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -27,8 +27,8 @@ header_left.markdown("<h1 style='margin: 0; padding: 0; font-size: 2.2rem;'>📊
 header_right.markdown(
     """
     <div style="text-align: right; line-height: 1.2; padding-bottom: 10px;">
-        <span style="font-size: 16px; font-weight: bold;">🏥 Hospital da Cidade</span><br>
-        <span style="font-size: 14px; color: #888;">👩‍💼 Coord: Verônica Azevedo</span>
+        <span style="font-size: 16px; font-weight: bold;">🏥 Hospital da Cidade Dr. Jackson Lago</span><br>
+        <span style="font-size: 14px; color: #888;">👩‍💼 Coordenação: Verônica Azevedo</span>
     </div>
     """, 
     unsafe_allow_html=True
@@ -47,7 +47,7 @@ st.sidebar.subheader("🎨 Customização Visual")
 paleta_selecionada = st.sidebar.selectbox(
     "Tema de Cores Geral:",
     options=["Padrão Hospitalar", "Tons Pastéis", "Vibrante", "Esmeralda"],
-    index=2
+    index=0
 )
 
 if paleta_selecionada == "Tons Pastéis":
@@ -57,16 +57,15 @@ elif paleta_selecionada == "Vibrante":
 elif paleta_selecionada == "Esmeralda":
     cor_sequencia = px.colors.sequential.Mint
 else:
-    cor_sequencia = px.colors.qualitative.Safe
+    cor_sequencia = ["#008080", "#4682B4", "#20B2AA", "#5F9EA0", "#B0C4DE"]
 
-tipo_grafico_5 = st.sidebar.radio("Estilo dos Gráficos de Setor:", options=["Barras Verticais", "Barras Horizontais"], index=1)
-
-# Lógica de leitura inteligente de abas e colunas
+# Lógica de leitura de abas
 if uploaded_file is not None:
     try:
         excel_file = pd.ExcelFile(uploaded_file)
         abas_disponiveis = excel_file.sheet_names
         
+        # Força prioridade máxima para a nova aba limpa
         aba_hcid_real = None
         for opcao in ["HCID_BDD", "HCID", "HCID1", "DADOS"]:
             if opcao in abas_disponiveis:
@@ -75,138 +74,157 @@ if uploaded_file is not None:
         if not aba_hcid_real:
             aba_hcid_real = abas_disponiveis[0] if abas_disponiveis else None
                 
-        aba_anexo_real = None
-        for opcao in ["ANEXO", "ANEXO2", "ANEXOS"]:
-            if opcao in abas_disponiveis:
-                aba_anexo_real = opcao
-                break
-                
-        df_hcid = pd.read_excel(uploaded_file, sheet_name=aba_hcid_real)
+        df_hcid_bruto = pd.read_excel(uploaded_file, sheet_name=aba_hcid_real)
         
-        if aba_anexo_real and aba_anexo_real in abas_disponiveis:
-            df_anexo = pd.read_excel(uploaded_file, sheet_name=aba_anexo_real)
-            if df_anexo.dropna(how="all").empty:
-                df_anexo = pd.DataFrame(columns=["SETOR", "SUB_SETOR", "CATEGORIA PROFISSIONAL", "TURNO", "VAGAS"])
-        else:
-            df_anexo = pd.DataFrame(columns=["SETOR", "SUB_SETOR", "CATEGORIA PROFISSIONAL", "TURNO", "VAGAS"])
-            
-        def processar_mapeamento_inteligente(df_aba):
+        def processar_mapeamento_executivo(df_aba):
             if df_aba.empty:
-                df_vazia = pd.DataFrame(columns=["SETOR", "SUB_SETOR", "CATEGORIA PROFISSIONAL", "TURNO", "VAGAS"])
-                return df_vazia, "SETOR", "SUB_SETOR", "CATEGORIA PROFISSIONAL", "TURNO", "VAGAS"
+                return pd.DataFrame(), "SETOR", "SUB_SETOR", "CATEGORIA", "VAGAS_MANHA", "VAGAS_TARDE", "VAGAS_TOTAL"
             
-            df_aba.columns = [str(c).strip() for c in df_aba.columns]
-            c_setor, c_sub, c_cat, c_turno, c_vagas = None, None, None, None, None
+            # Limpeza inicial de colunas
+            df_aba.columns = [str(c).strip().replace('\n', ' ') for c in df_aba.columns]
             
-            # Identifica a coluna de vagas pelo nome do cabeçalho
+            # Identificação das colunas estruturais
+            c_setor, c_sub, c_cat = None, None, None
+            c_manha, c_tarde = None, None
+            
             for col in df_aba.columns:
-                col_upper = col.upper()
-                if "VAGA" in col_upper or "TOTAL" in col_upper or "QTD" in col_upper or "QUANTIDADE" in col_upper:
-                    c_vagas = col
-                    break
-            
-            if not c_vagas:
-                # Caso não localize pelo nome, assume temporariamente a última coluna
-                c_vagas = df_aba.columns[-1]
-            
-            # Identifica as demais colunas do relatório
-            for col in df_aba.columns:
-                if col == c_vagas:
-                    continue
                 col_upper = col.upper()
                 if "SUB" in col_upper: c_sub = col
                 elif "SETOR" in col_upper or "CAMPO" in col_upper: c_setor = col
                 elif "PROF" in col_upper or "CAT" in col_upper: c_cat = col
-                elif "TURN" in col_upper: c_turno = col
+                elif "MANH" in col_upper: c_manha = col
+                elif "TARD" in col_upper: c_tarde = col
             
-            c_setor = str(c_setor) if c_setor else "SETOR"
-            c_sub = str(c_sub) if c_sub else "SUB_SETOR"
-            c_cat = str(c_cat) if c_cat else "CATEGORIA PROFISSIONAL"
-            c_turno = str(c_turno) if c_turno else "TURNO"
-            c_vagas = str(c_vagas) if c_vagas else "VAGAS"
+            # Fallbacks caso os nomes mudem
+            c_setor = c_setor or "SETOR"
+            c_sub = c_sub or "SUB_SETOR"
+            c_cat = c_cat or "CATEGORIA PROFISSIONAL"
             
-            for col_nome in [c_setor, c_sub, c_cat, c_turno, c_vagas]:
-                if col_nome not in df_aba.columns:
-                    df_aba[col_nome] = "NÃO INFORMADO" if col_nome != c_vagas else 0
+            # Criar colunas caso não existam
+            if c_setor not in df_aba.columns: df_aba[c_setor] = "NÃO INFORMADO"
+            if c_sub not in df_aba.columns: df_aba[c_sub] = ""
+            if c_cat not in df_aba.columns: df_aba[c_cat] = "NÃO INFORMADO"
             
-            for col in [c_setor, c_sub, c_cat, c_turno]:
-                if df_aba[col].dtype == "object":
-                    df_aba[col] = df_aba[col].astype(str).str.strip()
-                    
-            # ------------------------------------------------------------------
-            # CORREÇÃO CRÍTICA: Extração de dígitos purificando texto misto
-            # ------------------------------------------------------------------
-            # Converte para string, remove tudo que não é número e põe 0 onde for nulo/vazio
-            df_aba[c_vagas] = df_aba[c_vagas].astype(str).str.replace(r'\D', '', regex=True)
-            df_aba[c_vagas] = pd.to_numeric(df_aba[c_vagas], errors='coerce').fillna(0).astype(int)
-            # ------------------------------------------------------------------
+            # Tratamento de preenchimento para células mescladas visualmente (Forward Fill)
+            df_aba[c_setor] = df_aba[c_setor].ffill()
+            df_aba[c_sub] = df_aba[c_sub].fillna("")
+            df_aba[c_cat] = df_aba[c_cat].ffill()
             
-            return df_aba, c_setor, c_sub, c_cat, c_turno, c_vagas
-
-        df_hcid, hc_setor, hc_sub, hc_cat, hc_turno, hc_vagas = processar_mapeamento_inteligente(df_hcid)
-        df_anexo, ax_setor, ax_sub, ax_cat, ax_turno, ax_vagas = processar_mapeamento_inteligente(df_anexo)
-        
-        for d_f, s_t, s_b in [(df_hcid, hc_setor, hc_sub), (df_anexo, ax_setor, ax_sub)]:
-            if not d_f.empty:
-                d_f["LOCAL_COMBINADO"] = d_f.apply(
-                    lambda r: f"{r[s_t]}" if str(r[s_t]).upper() == str(r[s_b]).upper() else f"{r[s_t]} - {r[s_b]}",
-                    axis=1
-                )
-            else:
-                d_f["LOCAL_COMBINADO"] = pd.Series(dtype=str)
+            # Função para limpar o texto "4 por turno" mantendo apenas o número 4
+            def limpar_vagas(valor):
+                if pd.isna(valor):
+                    return 0
+                v_str = "".join(filter(str.isdigit, str(valor)))
+                return int(v_str) if v_str != "" else 0
+            
+            # Processar colunas de turnos dinamicamente
+            df_aba["VAGAS_MANHA"] = df_aba[c_manha].apply(limpar_vagas) if c_manha else 0
+            df_aba["VAGAS_TARDE"] = df_aba[c_tarde].apply(limpar_vagas) if c_tarde else 0
+            df_aba["VAGAS_TOTAL"] = df_aba["VAGAS_MANHA"] + df_aba["VAGAS_TARDE"]
+            
+            # Criar o Local Combinado unificado para os gráficos
+            df_aba["LOCAL_COMBINADO"] = df_aba.apply(
+                lambda r: f"{r[c_setor]}" if (not r[c_sub] or str(r[c_setor]).upper() == str(r[c_sub]).upper()) else f"{r[c_setor]} - {r[c_sub]}",
+                axis=1
+            )
+            
+            # Filtro drástico: remove linhas de lixo, títulos e totais agregados do Excel
+            df_aba = df_aba[
+                (~df_aba[c_setor].astype(str).str.upper().str.contains("TOTAL|QUANTITATIVO|HOSPITAL", na=False)) & 
+                (df_aba["VAGAS_TOTAL"] > 0)
+            ]
+            
+            return df_aba, c_setor, c_sub, c_cat
+            
+        df_hcid, hc_setor, hc_sub, hc_cat = processar_mapeamento_executivo(df_hcid_bruto)
         
     except Exception as e:
-        st.error(f"Erro crítico no mapeamento das colunas da planilha. Detalhes: {e}")
+        st.error(f"Erro ao processar estrutura da aba HCID_BDD: {e}")
         st.stop()
 else:
-    st.info("💡 Por favor, use o menu lateral para carregar a sua planilha Excel estruturada na vertical.")
+    st.info("💡 Por favor, use o menu lateral para carregar a sua nova planilha modificada (HCID_BDD).")
     st.stop()
 
 # ==============================================================================
-# 3. BLOCO 1: GRÁFICOS DO HCID
+# 3. APRESENTAÇÃO DE INDICADORES (FOCO EXECUTIVO)
 # ==============================================================================
-st.markdown("<h2 style='color: #2ca02c;'>🏢 Indicadores Exclusivos - HCID</h2>", unsafe_allow_html=True)
+st.markdown("<h2 style='color: #008080;'>🏢 Análise Estratégica de Capacidade - HCID</h2>", unsafe_allow_html=True)
 st.markdown("---")
 
-if hc_cat in df_hcid.columns and not df_hcid.empty:
-    categorias_hcid = sorted(df_hcid[hc_cat].dropna().unique().tolist())
-    filtro_cat_hcid = st.sidebar.multiselect("Filtrar Profissões (HCID):", options=categorias_hcid, default=categorias_hcid)
-    df_hcid_filtrado = df_hcid[df_hcid[hc_cat].isin(filtro_cat_hcid)]
-else:
-    df_hcid_filtrado = df_hcid
+# Filtros inteligentes na barra lateral
+categorias_disponiveis = sorted(df_hcid[hc_cat].unique().tolist())
+filtro_cat = st.sidebar.multiselect("Filtrar por Categoria Profissional:", options=categorias_disponiveis, default=categorias_disponiveis)
+df_filtrado = df_hcid[df_hcid[hc_cat].isin(filtro_cat)]
 
-r1_c1, r1_col2 = st.columns(2)
+# --- LINHA 1: MÉTRICAS DE IMPACTO IEDIATO ---
+m1, m2, m3, m4 = st.columns(4)
 
-if not df_hcid_filtrado.empty:
-    # A soma matemática agora processará corretamente os valores limpos pelo Regex
-    soma_vagas_total_hcid = int(df_hcid_filtrado[hc_vagas].sum())
-    r1_c1.metric(label="Total de Vagas de Estágio no HCID", value=soma_vagas_total_hcid)
-    r1_col2.metric(label="Total de Setores Disponibilizados p/ Campo de Estágio no HCID", value=df_hcid_filtrado["LOCAL_COMBINADO"].nunique())
-else:
-    r1_c1.metric(label="Total de Vagas de Estágio no HCID", value=0)
-    r1_col2.metric(label="Total de Setores Disponibilizados p/ Campo de Estágio no HCID", value=0)
+total_geral = int(df_filtrado["VAGAS_TOTAL"].sum())
+total_manha = int(df_filtrado["VAGAS_MANHA"].sum())
+total_tarde = int(df_filtrado["VAGAS_TARDE"].sum())
+total_setores = df_filtrado["LOCAL_COMBINADO"].nunique()
+
+m1.metric(label="🎯 Capacidade Total de Vagas", value=f"{total_geral} Vagas")
+m2.metric(label="🌅 Alocação Período Manhã", value=f"{total_manha} Estagiários")
+m3.metric(label="🌇 Alocação Período Tarde", value=f"{total_tarde} Estagiários")
+m4.metric(label="📍 Setores/Subsetores Atendidos", value=total_setores)
 
 st.markdown("---")
 
-r2_c1, r2_c2 = st.columns(2)
+# --- LINHA 2: GRÁFICOS VISUAIS PARA IMPRESSIONAR ---
+g1, g2 = st.columns([3, 2])
 
-# Gráfico 3
-if not df_hcid_filtrado.empty:
-    # Alterado para .sum() para refletir o acúmulo real total de vagas por setor
-    df_g3 = df_hcid_filtrado.groupby("LOCAL_COMBINADO")[hc_vagas].sum().reset_index()
-    df_g3[hc_vagas] = df_g3[hc_vagas].round(1)
-    ori_3 = "h" if tipo_grafico_5 == "Barras Horizontais" else "v"
-    x_v, y_v = (hc_vagas, "LOCAL_COMBINADO") if ori_3 == "h" else ("LOCAL_COMBINADO", hc_vagas)
-    fig3 = px.bar(df_g3, x=x_v, y=y_v, text=hc_vagas, orientation=ori_3, color="LOCAL_COMBINADO", color_discrete_sequence=cor_sequencia, title="3. Setores Disponibilizados para Realização de Estágio no HCID")
-    fig3.update_traces(textposition="outside", textfont=dict(size=14))
-    fig3.update_layout(showlegend=False, height=650)
-    r2_c1.plotly_chart(fig3, use_container_width=True)
-else:
-    r2_c1.info("Nenhum dado do HCID selecionado nos filtros laterais.")
+with g1:
+    st.markdown("#### 📊 Distribuição de Vagas por Setor e Turno")
+    # Agrupa somando os turnos separadamente
+    df_grafico = df_filtrado.groupby("LOCAL_COMBINADO")[["VAGAS_MANHA", "VAGAS_TARDE"]].sum().reset_index()
+    
+    # Derrete o dataframe para o formato longo exigido pelo Plotly express para empilhamento
+    df_longo = df_grafico.melt(id_vars="LOCAL_COMBINADO", value_vars=["VAGAS_MANHA", "VAGAS_TARDE"], 
+                              var_name="TURNO", value_name="VAGAS")
+    df_longo["TURNO"] = df_longo["TURNO"].map({"VAGAS_MANHA": "Manhã", "VAGAS_TARDE": "Tarde"})
+    
+    fig_barra = px.bar(
+        df_longo,
+        x="VAGAS",
+        y="LOCAL_COMBINADO",
+        color="TURNO",
+        orientation="h",
+        title="Divisão Horária Real por Campo de Estágio",
+        color_discrete_map={"Manhã": "#4682B4", "Tarde": "#FF8C00"},
+        text="VAGAS"
+    )
+    fig_barra.update_layout(barmode="stack", height=500, yaxis={'categoryorder':'total ascending'}, legend_title_text="Turno")
+    fig_barra.update_traces(textposition="inside")
+    st.plotly_chart(fig_barra, use_container_width=True)
 
-# Gráfico 4
-if not df_hcid_filtrado.empty:
-    # Alterado para .sum() para acumular corretamente as fatias empilhadas de vagas por profissão
-    df_g4 = df_hcid_filtrado.groupby(["LOCAL_COMBINADO", hc_cat])[hc_vagas].sum().reset_index()
-    df_g4[hc_vagas] = df_g4[hc_vagas].round(1)
-    ori_4 = "h" if tipo_grafico_5 == "Barras Horizontais" else "v"
+with g2:
+    st.markdown("#### 🎯 Ocupação por Categoria Profissional")
+    df_pizza = df_filtrado.groupby(hc_cat)["VAGAS_TOTAL"].sum().reset_index()
+    fig_pizza = px.pie(
+        df_pizza, 
+        values="VAGAS_TOTAL", 
+        names=hc_cat, 
+        hole=0.4,
+        color_discrete_sequence=cor_sequencia
+    )
+    fig_pizza.update_traces(textinfo="percent+value")
+    fig_pizza.update_layout(height=500, legend=dict(orientation="h", y=-0.1))
+    st.plotly_chart(fig_pizza, use_container_width=True)
+
+st.markdown("---")
+
+# --- LINHA 3: TABELA DETALHADA AUDITÁVEL ---
+st.markdown("### 📋 Resumo Executivo para Auditoria (Diretoria)")
+df_tabela_entrega = df_filtrado[[hc_setor, hc_sub, hc_cat, "VAGAS_MANHA", "VAGAS_TARDE", "VAGAS_TOTAL"]].rename(
+    columns={
+        hc_setor: "Setor Hospitalar",
+        hc_sub: "Sub-Setor / Ala",
+        hc_cat: "Categoria Profissional",
+        "VAGAS_MANHA": "Vagas Manhã",
+        "VAGAS_TARDE": "Vagas Tarde",
+        "VAGAS_TOTAL": "Total de Vagas"
+    }
+)
+
+st.dataframe(df_tabela_entrega.reset_index(drop=True), use_container_width=True)
