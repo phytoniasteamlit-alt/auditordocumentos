@@ -73,7 +73,7 @@ if uploaded_file is not None:
                 aba_hcid_real = opcao
                 break
         if not aba_hcid_real:
-            aba_hcid_real = abas_disponiveis
+            aba_hcid_real = abas_disponiveis[0] if abas_disponiveis else None
                 
         aba_anexo_real = None
         for opcao in ["ANEXO", "ANEXO2", "ANEXOS"]:
@@ -98,18 +98,18 @@ if uploaded_file is not None:
             df_aba.columns = [str(c).strip() for c in df_aba.columns]
             c_setor, c_sub, c_cat, c_turno, c_vagas = None, None, None, None, None
             
+            # Identifica a coluna de vagas pelo nome do cabeçalho
             for col in df_aba.columns:
-                v_num = pd.to_numeric(df_aba[col], errors='coerce').dropna()
-                if len(v_num) > 0 and v_num.sum() > len(v_num): 
+                col_upper = col.upper()
+                if "VAGA" in col_upper or "TOTAL" in col_upper or "QTD" in col_upper or "QUANTIDADE" in col_upper:
                     c_vagas = col
                     break
             
             if not c_vagas:
-                for col in df_aba.columns:
-                    if "VAGA" in col.upper() or "TOTAL" in col.upper() or "QTD" in col.upper():
-                        c_vagas = col
-                        break
+                # Caso não localize pelo nome, assume temporariamente a última coluna
+                c_vagas = df_aba.columns[-1]
             
+            # Identifica as demais colunas do relatório
             for col in df_aba.columns:
                 if col == c_vagas:
                     continue
@@ -133,7 +133,14 @@ if uploaded_file is not None:
                 if df_aba[col].dtype == "object":
                     df_aba[col] = df_aba[col].astype(str).str.strip()
                     
+            # ------------------------------------------------------------------
+            # CORREÇÃO CRÍTICA: Extração de dígitos purificando texto misto
+            # ------------------------------------------------------------------
+            # Converte para string, remove tudo que não é número e põe 0 onde for nulo/vazio
+            df_aba[c_vagas] = df_aba[c_vagas].astype(str).str.replace(r'\D', '', regex=True)
             df_aba[c_vagas] = pd.to_numeric(df_aba[c_vagas], errors='coerce').fillna(0).astype(int)
+            # ------------------------------------------------------------------
+            
             return df_aba, c_setor, c_sub, c_cat, c_turno, c_vagas
 
         df_hcid, hc_setor, hc_sub, hc_cat, hc_turno, hc_vagas = processar_mapeamento_inteligente(df_hcid)
@@ -171,7 +178,7 @@ else:
 r1_c1, r1_col2 = st.columns(2)
 
 if not df_hcid_filtrado.empty:
-    # --- CORREÇÃO DA MÉTRICA GENERALIZADA: Soma real matemática de todas as vagas do Excel ---
+    # A soma matemática agora processará corretamente os valores limpos pelo Regex
     soma_vagas_total_hcid = int(df_hcid_filtrado[hc_vagas].sum())
     r1_c1.metric(label="Total de Vagas de Estágio no HCID", value=soma_vagas_total_hcid)
     r1_col2.metric(label="Total de Setores Disponibilizados p/ Campo de Estágio no HCID", value=df_hcid_filtrado["LOCAL_COMBINADO"].nunique())
@@ -185,7 +192,8 @@ r2_c1, r2_c2 = st.columns(2)
 
 # Gráfico 3
 if not df_hcid_filtrado.empty:
-    df_g3 = df_hcid_filtrado.groupby("LOCAL_COMBINADO")[hc_vagas].mean().reset_index()
+    # Alterado para .sum() para refletir o acúmulo real total de vagas por setor
+    df_g3 = df_hcid_filtrado.groupby("LOCAL_COMBINADO")[hc_vagas].sum().reset_index()
     df_g3[hc_vagas] = df_g3[hc_vagas].round(1)
     ori_3 = "h" if tipo_grafico_5 == "Barras Horizontais" else "v"
     x_v, y_v = (hc_vagas, "LOCAL_COMBINADO") if ori_3 == "h" else ("LOCAL_COMBINADO", hc_vagas)
@@ -198,21 +206,7 @@ else:
 
 # Gráfico 4
 if not df_hcid_filtrado.empty:
-    df_g4 = df_hcid_filtrado.groupby(["LOCAL_COMBINADO", hc_cat])[hc_vagas].mean().reset_index()
+    # Alterado para .sum() para acumular corretamente as fatias empilhadas de vagas por profissão
+    df_g4 = df_hcid_filtrado.groupby(["LOCAL_COMBINADO", hc_cat])[hc_vagas].sum().reset_index()
     df_g4[hc_vagas] = df_g4[hc_vagas].round(1)
     ori_4 = "h" if tipo_grafico_5 == "Barras Horizontais" else "v"
-    x_v4, y_v4 = (hc_vagas, "LOCAL_COMBINADO") if ori_4 == "h" else ("LOCAL_COMBINADO", hc_vagas)
-    fig4 = px.bar(df_g4, x=x_v4, y=y_v4, color=hc_cat, orientation=ori_4, barmode="stack", color_discrete_sequence=cor_sequencia, title="4. Categorias Profissionais Contempladas no Estágio por Setor no HCID")
-    fig4.update_layout(height=650, legend=dict(title_text="Profissão"))
-    r2_c2.plotly_chart(fig4, use_container_width=True)
-else:
-    r2_c2.info("Nenhum dado do HCID selecionado nos filtros laterais.")
-
-st.markdown("---")
-
-r3_c1, r3_c2, r3_c3 = st.columns(3)
-
-# Gráfico 5
-if not df_hcid_filtrado.empty:
-    df_g5 = df_hcid_filtrado.groupby(hc_sub)[hc_vagas].mean().reset_index()
-    df_g5[hc_vagas] = df_g5[hc_vagas].round(1)
