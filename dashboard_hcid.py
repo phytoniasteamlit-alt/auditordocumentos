@@ -51,12 +51,6 @@ paleta_selecionada = st.sidebar.selectbox(
     index=0
 )
 
-estilo_grafico = st.sidebar.radio(
-    "Estilo Visual dos Gráficos:",
-    options=["Barras Horizontais", "Barras Verticais"],
-    index=0
-)
-
 if paleta_selecionada == "Tons Pastéis":
     cor_sequencia = px.colors.qualitative.Pastel
 elif paleta_selecionada == "Vibrante":
@@ -66,35 +60,25 @@ elif paleta_selecionada == "Esmeralda":
 else:
     cor_sequencia = ["#008080", "#4682B4", "#20B2AA", "#5F9EA0", "#B0C4DE"]
 
-sub_or = "h" if estilo_grafico == "Barras Horizontais" else "v"
-
 # ==============================================================================
-# 3. MOTOR DE PROCESSAMENTO DE DADOS TOTALMENTE REESTRUTURADO E BLINDADO
+# 3. MOTOR DE PROCESSAMENTO BLINDADO (EVITA ERROS DE SÉRIES AMBÍGUAS)
 # ==============================================================================
 if uploaded_file is not None:
     try:
         excel_file = pd.ExcelFile(uploaded_file)
         abas_disponiveis = excel_file.sheet_names
         
-        aba_hcid_real = None
-        for opcao in ["HCID_BDD", "HCID", "HCID1", "DADOS"]:
-            if opcao in abas_disponiveis:
-                aba_hcid_real = opcao
-                break
-                
-        aba_anexo_real = None
-        for opcao in ["ANEXO", "ANEXO2", "ANEXOS"]:
-            if opcao in abas_disponiveis:
-                aba_anexo_real = opcao
-                break
+        aba_hcid_real = next((op for op in ["HCID_BDD", "HCID", "HCID1", "DADOS"] if op in abas_disponiveis), None)
+        aba_anexo_real = next((op for op in ["ANEXO", "ANEXO2", "ANEXOS"] if op in abas_disponiveis), None)
         
         def extrair_e_limpar_dados(sheet_name):
-            if not sheet_name or sheet_name not in abas_disponiveis:
-                return pd.DataFrame(), pd.DataFrame(), "SETOR_RAW", "SUB_SETOR_RAW", "CATEGORIA_RAW"
+            if not sheet_name:
+                return pd.DataFrame()
             
+            # Carrega a aba bruta
             df_bruto = pd.read_excel(uploaded_file, sheet_name=sheet_name, header=None)
             
-            # Localiza a linha do cabeçalho estrutural
+            # Localiza a linha do cabeçalho estrutural buscando palavras-chave comuns
             linha_cabecalho = 0
             for idx, row in df_bruto.iterrows():
                 row_str = " ".join([str(x).upper() for x in row.dropna()])
@@ -102,79 +86,53 @@ if uploaded_file is not None:
                     linha_cabecalho = idx
                     break
             
-            cabecalhos_originais = [str(c).strip().replace('\n', ' ') for c in df_bruto.iloc[linha_cabecalho]]
-            df_aba = df_bruto.iloc[linha_cabecalho+1:].copy()
-            df_aba.columns = cabecalhos_originais
+            # Define os cabeçalhos encontrados e isola os dados
+            cabecalhos = [str(c).strip().replace('\n', ' ') for c in df_bruto.iloc[linha_cabecalho]]
+            df_dados = df_bruto.iloc[linha_cabecalho+1:].copy()
+            df_dados.columns = cabecalhos
             
-            # Busca de índices por correspondência textual aproximada
-            idx_setor, idx_sub, idx_cat = 0, 1, 2
-            idx_manha, idx_tarde = 3, 4
-            
-            for idx_c, col_nome in enumerate(df_aba.columns):
+            # Mapeamento estrito por varredura simples (evita conflitos lógicos do pandas)
+            idx_setor, idx_sub, idx_cat, idx_manha, idx_tarde = 0, 1, 2, 3, 4
+            for idx_c, col_nome in enumerate(df_dados.columns):
                 c_norm = normalizar_texto(col_nome)
                 if "SUB" in c_norm: idx_sub = idx_c
                 elif "SETOR" in c_norm or "CAMPO" in c_norm: idx_setor = idx_c
                 elif "PROF" in c_norm or "CAT" in c_norm: idx_cat = idx_c
                 elif "MANH" in c_norm: idx_manha = idx_c
-                elif "TARD" in c_norm: idx_tarde = idx_c  # CORRIGIDO: alterado de col_tarde para idx_tarde
+                elif "TARD" in c_norm: idx_tarde = idx_c
 
-            # Força a conversão das colunas base do Excel para tipos String limpos
-            df_final = pd.DataFrame()
-            df_final["SETOR_RAW"] = df_aba.iloc[:, idx_setor].astype(str).str.strip().ffill()
-            df_final["SUB_SETOR_RAW"] = df_aba.iloc[:, idx_sub].fillna("").astype(str).str.strip()
-            df_final["CATEGORIA_RAW"] = df_aba.iloc[:, idx_cat].fillna("").astype(str).str.strip()
+            # Limpeza das células de vagas para extrair apenas os números inteiros
+            def extrair_inteiro(valor):
+                if pd.isna(valor) or str(valor).strip() == "" or str(valor).strip().lower() == "nan": 
+                    return 0
+                v_str = "".join(filter(str.isdigit, str(valor)))
+                return int(v_str) if v_str != "" else 0
+
+            # Criação do DataFrame unificado e higienizado
+            df_limpo = pd.DataFrame()
+            df_limpo["SETOR"] = df_dados.iloc[:, idx_setor].astype(str).str.strip().ffill()
+            df_limpo["SUB_SETOR"] = df_dados.iloc[:, idx_sub].fillna("GERAL").astype(str).str.strip()
+            df_limpo["CATEGORIA"] = df_dados.iloc[:, idx_cat].fillna("NÃO ESPECIFICADO").astype(str).str.strip()
             
-            # --- PROTEÇÃO ABSOLUTA CONTRA AMBIGUIDADE (Filtro por loops nativos) ---
-            # Remove linhas em branco que ficaram perdidas no Excel
-            df_final = df_final[(df_final["CATEGORIA_RAW"] != "") & (df_final["CATEGORIA_RAW"] != "nan")]
+            df_limpo["MANHÃ"] = df_dados.iloc[:, idx_manha].apply(extrair_inteiro)
+            df_limpo["TARDE"] = df_dados.iloc[:, idx_tarde].apply(extrair_inteiro)
+            df_limpo["TOTAL_VAGAS"] = df_limpo["MANHÃ"] + df_limpo["TARDE"]
             
-            # Nova filtragem sem utilizar strings dinâmicas no Pandas (Resolve o erro vermelho)
+            # Filtro básico: remove ruídos textuais gerados por linhas de "Total" da planilha original
             linhas_validas = []
-            for idx_r, row_f in df_final.iterrows():
-                setor_upper = str(row_f["SETOR_RAW"]).upper()
-                cat_upper = str(row_f["CATEGORIA_RAW"]).upper()
-                
-                # Ignora linhas que contenham ruídos do Excel como subtotais ou títulos duplicados
-                if "TOTAL" in setor_upper or "QUANTITATIVO" in setor_upper or "HOSPITAL" in setor_upper:
-                    linhas_validas.append(False)
-                elif "TOTAL" in cat_upper or "CATEGOR" in cat_upper or "PROFISS" in cat_upper:
+            for _, row in df_limpo.iterrows():
+                txt_s = str(row["SETOR"]).upper()
+                txt_c = str(row["CATEGORIA"]).upper()
+                if "TOTAL" in txt_s or "TOTAL" in txt_c or txt_s == "NAN" or txt_c == "NAN":
                     linhas_validas.append(False)
                 else:
                     linhas_validas.append(True)
-                    
-            df_final = df_final[linhas_validas].copy()
             
-            # Limpeza das expressões textuais das vagas ('4 por turno' -> 4)
-            def limpar_vagas(valor):
-                if pd.isna(valor) or str(valor).strip() == "" or str(valor).strip().lower() == "nan": 
-                    return None  # Retorna None para aplicar o ffill do setor pai nas sub-especialidades
-                v_str = "".join(filter(str.isdigit, str(valor)))
-                return int(v_str) if v_str != "" else 0
-            
-            # Vincula e limpa os turnos coletando as vagas originais do Excel
-            df_final["VAGAS_MANHA"] = df_aba.loc[df_final.index, df_aba.columns[idx_manha]].apply(limpar_vagas)
-            df_final["VAGAS_TARDE"] = df_aba.loc[df_final.index, df_aba.columns[idx_tarde]].apply(limpar_vagas)
-            
-            # Preenchimento em cascata para herdar as vagas se a linha de baixo estiver em branco
-            df_final["VAGAS_MANHA"] = df_final["VAGAS_MANHA"].ffill().fillna(0).astype(int)
-            df_final["VAGAS_TARDE"] = df_final["VAGAS_TARDE"].ffill().fillna(0).astype(int)
-            df_final["VAGAS_TOTAL"] = df_final["VAGAS_MANHA"] + df_final["VAGAS_TARDE"]
-            
-            # Construção elegante do identificador combinado setor ➔ subsetor
-            df_final["LOCAL_COMBINADO"] = df_final.apply(
-                lambda r: f"{r['SETOR_RAW']} ➔ {r['SUB_SETOR_RAW']}" if (r['SUB_SETOR_RAW'] != "" and r['SETOR_RAW'].upper() != r['SUB_SETOR_RAW'].upper()) else f"{r['SETOR_RAW']}",
-                axis=1
-            )
-            df_final["LOCAL_E_PROF"] = df_final["LOCAL_COMBINADO"] + " (" + df_final["CATEGORIA_RAW"] + ")"
-            
-            # Divide os dataframes entre ativos (com vagas) e inativos (vagas zeradas)
-            df_ativas = df_final[df_final["VAGAS_TOTAL"] > 0].copy()
-            df_inativas = df_final[df_final["VAGAS_TOTAL"] == 0].copy()
-            
-            return df_ativas, df_inativas, "SETOR_RAW", "SUB_SETOR_RAW", "CATEGORIA_RAW"
+            df_final = df_limpo[linhas_validas].copy()
+            return df_final[df_final["TOTAL_VAGAS"] > 0]
 
-        df_hcid, df_hcid_zero, hc_setor, hc_sub, hc_cat = extrair_e_limpar_dados(aba_hcid_real)
-        df_anexo, df_anexo_zero, ax_setor, ax_sub, ax_cat = extrair_e_limpar_dados(aba_anexo_real)
+        df_hcid = extrair_e_limpar_dados(aba_hcid_real)
+        df_anexo = extrair_e_limpar_dados(aba_anexo_real)
         
     except Exception as e:
         st.error(f"Erro inesperado durante a leitura dos dados: {e}")
@@ -184,23 +142,75 @@ else:
     st.stop()
 
 # ==============================================================================
-# FUNÇÃO AUXILIAR: GERA O TEXTO DE DESTRINCHAMENTO AUTOMÁTICO
+# 4. ARQUITETURA VISUAL DO DASHBOARD PROGRESSIVO (DADOS DESTREINCHADOS)
 # ==============================================================================
-def gerar_texto_distribuicao(df_filtrado):
-    textos = []
-    if df_filtrado.empty:
-        return textos
-    setores_unicos = df_filtrado["SETOR_RAW"].unique()
-    for s in setores_unicos:
-        df_s = df_filtrado[df_filtrado["SETOR_RAW"] == s]
-        total_s = df_s["VAGAS_TOTAL"].sum()
+tab_hcid, tab_anexos = st.tabs(["🏥 Hospital Geral (HCID)", "🏢 Unidades Anexas"])
+
+def renderizar_painel_etapas(df_alvo, chave_unica):
+    if df_alvo.empty:
+        st.warning("Nenhum dado válido ou ativo foi processado para esta unidade.")
+        return
+
+    # --- ETAPA 1: MÉTRICAS MACRO ---
+    total_geral = df_alvo["TOTAL_VAGAS"].sum()
+    total_m = df_alvo["MANHÃ"].sum()
+    total_t = df_alvo["TARDE"].sum()
+    
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Capacidade Total de Vagas", f"{total_geral} Vagas")
+    m2.metric("Disponíveis no Turno Manhã", f"{total_m} M")
+    m3.metric("Disponíveis no Turno Tarde", f"{total_t} T")
+    
+    st.markdown("---")
+    
+    col_esquerda, col_direita = st.columns([2, 3])
+    
+    with col_esquerda:
+        st.markdown("### 📊 Etapa 1: Visão Macro por Setor")
+        st.caption("Veja abaixo a distribuição do volume total de vagas concentrado em cada grande setor do hospital.")
         
-        texto_setor = f"📌 **Setor {s}**: Disponibiliza um total de **{total_s} vagas** para campo de estágio. "
-        sub_detalhes = []
+        # Agrupamento macro por setor para o gráfico principal
+        df_macro = df_alvo.groupby("SETOR")["TOTAL_VAGAS"].sum().reset_index()
+        df_macro = df_macro.sort_values(by="TOTAL_VAGAS", ascending=True)
         
-        sub_unicos = df_s["SUB_SETOR_RAW"].unique()
-        for sub in sub_unicos:
-            df_sub = df_s[df_s["SUB_SETOR_RAW"] == sub]
-            total_sub = df_sub["VAGAS_TOTAL"].sum()
-            m_sub = df_sub["VAGAS_MANHA"].sum()
-            t_sub = df_sub["VAGAS_TARDE"].sum()
+        fig_macro = px.bar(
+            df_macro,
+            x="TOTAL_VAGAS",
+            y="SETOR",
+            orientation="h",
+            labels={"TOTAL_VAGAS": "Total de Vagas", "SETOR": "Setor Principal"},
+            color="TOTAL_VAGAS",
+            color_continuous_scale=px.colors.sequential.Tealgrn
+        )
+        fig_macro.update_layout(showlegend=False, height=380, margin=dict(l=20, r=20, t=10, b=10))
+        st.plotly_chart(fig_macro, use_container_width=True, key=f"macro_{chave_unica}")
+
+    with col_direita:
+        st.markdown("### 🔍 Etapa 2: Investigar Sub-Setores e Turnos")
+        st.caption("Selecione um setor específico abaixo para abrir o detalhamento das sub-áreas sem amontoar as informações.")
+        
+        # Seletor interativo para isolar o setor desejado
+        setores_disponiveis = sorted(df_alvo["SETOR"].unique())
+        setor_selecionado = st.selectbox("Escolha o Setor para Filtrar:", setores_disponiveis, key=f"sel_{chave_unica}")
+        
+        # Filtra o DataFrame original com base na escolha do usuário
+        df_filtrado = df_alvo[df_alvo["SETOR"] == setor_selecionado].copy()
+        
+        # Prepara a tabela transformando os turnos de colunas para linhas (formato ideal para barras empilhadas)
+        df_melted = df_filtrado.melt(
+            id_vars=["SUB_SETOR", "CATEGORIA"],
+            value_vars=["MANHÃ", "TARDE"],
+            var_name="TURNO",
+            value_name="VAGAS"
+        )
+        df_melted = df_melted[df_melted["VAGAS"] > 0] # Remove turnos zerados para limpar o visual
+        
+        if not df_melted.empty:
+            # Gráfico de barras empilhadas mostrando Sub-setor e Categoria separadas por Cor de Turno
+            df_melted["SUB_E_CAT"] = df_melted["SUB_SETOR"] + " - " + df_melted["CATEGORIA"]
+            
+            fig_detalhe = px.bar(
+                df_melted,
+                x="VAGAS",
+                y="SUB_E_CAT",
+                color="TURNO",
