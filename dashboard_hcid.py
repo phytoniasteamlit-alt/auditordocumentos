@@ -7,7 +7,7 @@ import unicodedata
 # 1. CONFIGURAÇÃO DA PÁGINA (Interface Dashboard Executivo)
 # ==============================================================================
 st.set_page_config(
-    page_title="Painel de Estágios Executivo - HCID",
+    page_title="Painel de Controle de Estágios - HCID & ANEXOS",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -25,9 +25,9 @@ def extrair_numero(valor):
     v_str = "".join(filter(str.isdigit, str(valor)))
     return int(v_str) if v_str != "" else 0
 
-# --- CABEÇALHO SUPERIOR ---
+# --- CABEÇALHO SUPERIOR INSTITUCIONAL ---
 header_left, header_right = st.columns(2)
-header_left.markdown("<h1 style='margin: 0; padding: 0; font-size: 2.2rem;'>📊 Painel de Indicadores de Estágio</h1>", unsafe_allow_html=True)
+header_left.markdown("<h1 style='margin: 0; padding: 0; font-size: 2.2rem;'>📊 Painel Unificado de Indicadores de Estágio</h1>", unsafe_allow_html=True)
 header_right.markdown(
     """
     <div style="text-align: right; line-height: 1.3; padding-bottom: 10px;">
@@ -47,24 +47,33 @@ st.sidebar.header("⚙️ Painel de Controle")
 uploaded_file = st.sidebar.file_uploader("Carregar Planilha de Estágios (.xlsx):", type=["xlsx"])
 
 # ==============================================================================
-# 3. MOTOR DE PROCESSAMENTO MATRICIAL (CORREÇÃO DE SINAL DE TURNOS)
+# 3. MOTOR MATRICIAL DE PROCESSAMENTO ISOLADO POR ABA
 # ==============================================================================
-if uploaded_file is not None:
+def processar_aba_matricial(uploaded_file, sheet_name_fallback, padrao_procurado):
     excel_file = pd.ExcelFile(uploaded_file)
-    abas_disponiveis = excel_file.sheet_names
-    aba_alvo = "HCID_BDD" if "HCID_BDD" in abas_disponiveis else ("HCID" if "HCID" in abas_disponiveis else abas_disponiveis)
+    abas = excel_file.sheet_names
     
-    df_raw = pd.read_excel(uploaded_file, sheet_name=aba_alvo, header=None)
-    
-    # CORREÇÃO CRÍTICA: Aplica ffill() horizontal em TODOS os cabeçalhos para não deixar turnos vazios se perderem
+    # Caça a aba exata por correspondência de texto para evitar quebras por digitação
+    aba_real = next((op for op in padrao_procurado if op in abas), None)
+    if not aba_real:
+        aba_real = sheet_name_fallback if sheet_name_fallback in abas else None
+        
+    if not aba_real:
+        return pd.DataFrame()
+        
+    df_raw = pd.read_excel(uploaded_file, sheet_name=aba_real, header=None)
+    if df_raw.empty or len(df_raw) <= 7:
+        return pd.DataFrame()
+        
+    # Tratamento horizontal do calendário mesclado (Meses, Dias e Turnos)
     linha_meses = pd.Series(df_raw.iloc[3, :]).ffill().fillna("").astype(str).tolist()
     linha_dias = pd.Series(df_raw.iloc[4, :]).ffill().fillna("").astype(str).tolist()
-    linha_turnos = pd.Series(df_raw.iloc[5, :]).ffill().fillna("").astype(str).tolist() # Adicionado ffill() aqui
+    linha_turnos = pd.Series(df_raw.iloc[5, :]).ffill().fillna("").astype(str).tolist()
     
-    # Isola o corpo de dados reais (A partir da Linha 8 física / índice 7)
+    # Isola o corpo de registros (Linha 8 física / índice 7 em diante)
     df_corpo = df_raw.iloc[7:].copy().reset_index(drop=True)
     
-    # Preenchimento em cascata vertical das colunas estruturais mescladas
+    # Tratamento vertical das colunas estruturais textuais
     df_corpo.iloc[:, 0] = df_corpo.iloc[:, 0].replace(["nan", "NAN", ""], pd.NA).ffill().fillna("GERAL")
     df_corpo.iloc[:, 1] = df_corpo.iloc[:, 1].replace(["nan", "NAN", ""], pd.NA).ffill().fillna("GERAL")
     df_corpo.iloc[:, 2] = df_corpo.iloc[:, 2].replace(["nan", "NAN", ""], pd.NA).ffill().fillna("NÃO ESPECIFICADO")
@@ -84,7 +93,7 @@ if uploaded_file is not None:
             vaga_bruta = df_corpo.iloc[idx_row, col_idx]
             qtd_vagas = extrair_numero(vaga_bruta)
             
-            # Se a célula estiver zerada mas possuir registro ativo, tenta herdar do cabeçalho D ou E
+            # Recuperação em cascata se a célula diária pontual estiver sem preenchimento
             if qtd_vagas == 0:
                 turno_atual = str(linha_turnos[col_idx]).strip().upper()
                 vaga_padrao_celula = df_corpo.iloc[idx_row, 3] if "MANH" in turno_atual else df_corpo.iloc[idx_row, 4]
@@ -100,7 +109,6 @@ if uploaded_file is not None:
                     if "VAGAS" in mes_name or mes_name == "": 
                         mes_name = "AGOSTO"
                         
-                    # Mapeamento do Turno corrigido baseado no cabeçalho ffill horizontal
                     final_turno = "MANHÃ" if "MANH" in turno_name or "MANH" in dia_name else "TARDE"
                         
                     registros_vagas.append({
@@ -113,71 +121,63 @@ if uploaded_file is not None:
                         "VAGAS": qtd_vagas
                     })
                     
-    df_master = pd.DataFrame(registros_vagas)
+    return pd.DataFrame(registros_vagas)
+
+# ==============================================================================
+# 4. EXECUÇÃO DO PROCESSAMENTO EM AMBIENTES ISOLADOS (SEM MISTURA DE DADOS)
+# ==============================================================================
+if uploaded_file is not None:
+    # Processa estritamente o bloco HCID
+    df_hcid = processar_aba_matricial(uploaded_file, "HCID", ["HCID_BDD", "HCID", "HCID1"])
     
-    # ==============================================================================
-    # 4. EXIBIÇÃO EM CAIXAS DE TEXTO DESTACADAS (MÉTRICAS EXECUTIVAS)
-    # ==============================================================================
-    if not df_master.empty:
-        st.markdown("### 📋 Resumo Executivo de Capacidade (HCID)")
-        
-        total_vagas_geral = df_master["VAGAS"].sum()
-        total_setores = df_master["SETOR"].nunique()
-        total_m_geral = df_master[df_master["TURNO"] == "MANHÃ"]["VAGAS"].sum()
-        total_t_geral = df_master[df_master["TURNO"] == "TARDE"]["VAGAS"].sum()
+    # Processa estritamente o bloco ANEXOS
+    df_anexos = processar_aba_matricial(uploaded_file, "ANEXO", ["ANEXO", "ANEXO2", "ANEXOS"])
+
+    # ==========================================================================
+    # QUADRO 1: CONJUNTO EXCLUSIVO HOSPITAL GERAL (HCID)
+    # ==========================================================================
+    st.markdown("<div style='background-color: #1a2a3a; padding: 12px; border-radius: 5px; margin-bottom: 20px;'><h2 style='margin:0; font-size:1.6rem; color:#fff;'>🏥 QUADRO DE INDICADORES - SOMENTE HCID</h2></div>", unsafe_allow_html=True)
+    
+    if not df_hcid.empty:
+        # Caixas de Texto com as métricas propostas integradas
+        t_vagas_h = df_hcid["VAGAS"].sum()
+        t_setores_h = df_hcid["SETOR"].nunique()
+        t_m_h = df_hcid[df_hcid["TURNO"] == "MANHÃ"]["VAGAS"].sum()
+        t_t_h = df_hcid[df_hcid["TURNO"] == "TARDE"]["VAGAS"].sum()
         
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Total de vagas de estágio geral HCID", f"{total_vagas_geral} Vagas")
-        c2.metric("Total de setores disponibilizados p/ campo de estágio no HCID", f"{total_setores} Setores")
-        c3.metric("Total de vagas de estágio do HCID por turno manhã", f"{total_m_geral} M")
-        c4.metric("Total de vagas de estágio do HCID tarde", f"{total_t_geral} T")
+        c1.metric("Total de vagas de estágio geral HCID", f"{t_vagas_h} Vagas")
+        c2.metric("Total de setores disponibilizados no HCID", f"{t_setores_h} Setores")
+        c3.metric("Total de vagas por turno MANHÃ (HCID)", f"{t_m_h} M")
+        c4.metric("Total de vagas por turno TARDE (HCID)", f"{t_t_h} T")
         
         st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown("##### 🗓️ Total de estagiários por dia")
         
-        col_seletor, _ = st.columns(2)
-        dias_disponiveis = sorted(df_master["DIA_SEMANA"].unique())
-        dia_selecionado = col_seletor.selectbox("Selecione o Dia da Semana para Filtrar os Totais:", dias_disponiveis)
+        # --- RENDERIZAÇÃO DOS 7 GRÁFICOS DO HCID ---
+        col1_h, col2_h = st.columns(2)
         
-        vagas_dia_m = df_master[(df_master["DIA_SEMANA"] == dia_selecionado) & (df_master["TURNO"] == "MANHÃ")]["VAGAS"].sum()
-        vagas_dia_t = df_master[(df_master["DIA_SEMANA"] == dia_selecionado) & (df_master["TURNO"] == "TARDE")]["VAGAS"].sum()
-        
-        cc1, cc2 = st.columns(2)
-        cc1.info(f"🟢 **Total de estagiários por dia turno manhã ({dia_selecionado}):** {vagas_dia_m} alunos em campo.")
-        cc2.warning(f"🟠 **Total de estagiários por dia turno tarde ({dia_selecionado}):** {vagas_dia_t} alunos em campo.")
-        
-        st.markdown("---")
-        
-        # ==============================================================================
-        # 5. RENDERIZAÇÃO DOS GRÁFICOS INTERATIVOS EXECUTIVOS
-        # ==============================================================================
-        col_g1, col_g2 = st.columns(2)
-        
-        with col_g1:
-            st.markdown("### 🏢 Setores disponibilizados para realização de estágio no hcid")
-            df_g1 = df_master.groupby("SETOR")["VAGAS"].sum().reset_index().sort_values(by="VAGAS", ascending=True)
+        with col1_h:
+            # Gráfico 1: Total de vagas de estágio geral no HCID (Visão Cronológica Mensal)
+            st.markdown("##### Gráfico 1: Total de vagas e de estágio no HCID")
+            df_m_h = df_hcid.groupby("MÊS")["VAGAS"].sum().reset_index()
+            f1_h = px.bar(df_m_h, x="MÊS", y="VAGAS", color="MÊS", text_auto=True, color_discrete_sequence=px.colors.qualitative.Set2)
+            f1_h.update_layout(height=300, showlegend=False, margin=dict(l=10,r=10,t=10,b=10))
+            st.plotly_chart(f1_h, use_container_width=True)
             
-            fig1 = px.bar(
-                df_g1, x="VAGAS", y="SETOR", orientation="h",
-                color="VAGAS", color_continuous_scale=px.colors.sequential.Tealgrn, text_auto=True
-            )
-            fig1.update_layout(showlegend=False, height=400, margin=dict(l=20, r=35, t=10, b=10))
-            fig1.update_traces(textposition="outside", cliponaxis=False)
-            st.plotly_chart(fig1, use_container_width=True)
-            
-        with col_g2:
-            st.markdown("### 👩‍⚕️ Categorias profissionais contemplados no estagio por setor no hcid")
-            setor_selecionado_g2 = st.selectbox("Escolha o Setor para Filtrar as Profissões:", sorted(df_master["SETOR"].unique()))
-            df_g2 = df_master[df_master["SETOR"] == setor_selecionado_g2].groupby("CATEGORIA")["VAGAS"].sum().reset_index().sort_values(by="VAGAS", ascending=True)
-            
-            fig2 = px.bar(
-                df_g2, x="VAGAS", y="CATEGORIA", orientation="h",
-                color="VAGAS", color_continuous_scale=px.colors.sequential.Bluered, text_auto=True
-            )
-            fig2.update_layout(showlegend=False, height=335, margin=dict(l=20, r=35, t=10, b=10))
-            fig2.update_traces(textposition="outside", cliponaxis=False)
-            st.plotly_chart(fig2, use_container_width=True)
-            
-        # --- GRÁFICO CRONOLÓGICO MENSAL REQUISITADO ---
-        st.markdown("---")
-        st.markdown("### 📅 Distribuição Mensal Organizada de Vagas Ocupadas por Turno")
+            # Gráfico 3: Setores disponibilizados para realização de estágio no HCID
+            st.markdown("##### Gráfico 3: Setores disponibilizados para realização de estágio o HCID")
+            df_s_h = df_hcid.groupby("SETOR")["VAGAS"].sum().reset_index().sort_values(by="VAGAS", ascending=True)
+            f3_h = px.bar(df_s_h, x="VAGAS", y="SETOR", orientation="h", text_auto=True, color="VAGAS", color_continuous_scale=px.colors.sequential.Tealgrn)
+            f3_h.update_layout(height=300, coloraxis_showscale=False, margin=dict(l=10,r=10,t=10,b=10))
+            st.plotly_chart(f3_h, use_container_width=True)
+
+            # Gráfico 5: Total de vagas de estágio disponibilizados por setor no HCID
+            st.markdown("##### Gráfico 5: Total de vagas de estágio disponibilizados por setor no HCID")
+            df_v_s_h = df_hcid.groupby("SETOR")["VAGAS"].sum().reset_index()
+            f5_h = px.pie(df_v_s_h, values="VAGAS", names="SETOR", hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel)
+            f5_h.update_layout(height=300, margin=dict(l=10,r=10,t=10,b=10))
+            st.plotly_chart(f5_h, use_container_width=True)
+
+            # Gráfico 7: Total de estagiários por turno por dia no HCID
+            st.markdown("##### Gráfico 7: Total de estagiários por turno por dia no HCID")
+            df_d_t_h = df_hcid.groupby(["DIA_SEMANA", "TURNO"])["VAGAS"].sum().reset_index()
