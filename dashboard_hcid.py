@@ -1,4 +1,4 @@
-import streamlit st
+import streamlit as st
 import pandas as pd
 import plotly.express as px
 
@@ -106,11 +106,11 @@ if uploaded_file is not None:
     excel_file = pd.ExcelFile(uploaded_file)
     abas_planilha = excel_file.sheet_names
     
-    # Processamento estritamente isolado por posições do Excel
+    # Processamento isolado por posições físicas (0 = HCID, 1 = Anexos)
     df_hcid = extrair_dados_aba_especifica(uploaded_file, 0)
     df_anexos = extrair_dados_aba_especifica(uploaded_file, 1) if len(abas_planilha) > 1 else pd.DataFrame()
 
-    # Criando os botões de abas no topo do painel
+    # Criação das abas visuais do Streamlit no topo
     tab_hcid, tab_anexos = st.tabs(["🏥 Hospital Geral (HCID)", "🏢 Unidades Anexas"])
 
     # --------------------------------==========================================
