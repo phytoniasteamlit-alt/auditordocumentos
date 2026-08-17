@@ -19,7 +19,7 @@ def normalizar_texto(texto):
     texto = "".join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
     return " ".join(texto.split())
 
-# --- CABEÇALHO SUPERIOR (Atualizado com Setor Nep / Nepex) ---
+# --- CABEÇALHO SUPERIOR ---
 header_left, header_right = st.columns(2)
 
 header_left.markdown("<h1 style='margin: 0; padding: 0; font-size: 2.2rem;'>📊 Painel de Indicadores de Estágio</h1>", unsafe_allow_html=True)
@@ -51,7 +51,6 @@ paleta_selecionada = st.sidebar.selectbox(
     index=0
 )
 
-# NOVO: Customização de estilos das barras exigido na solicitação
 estilo_grafico = st.sidebar.radio(
     "Estilo Visual dos Gráficos:",
     options=["Barras Horizontais", "Barras Verticais"],
@@ -67,7 +66,6 @@ elif paleta_selecionada == "Esmeralda":
 else:
     cor_sequencia = ["#008080", "#4682B4", "#20B2AA", "#5F9EA0", "#B0C4DE"]
 
-# Configuração da orientação das barras com base no seletor do usuário
 sub_or = "h" if estilo_grafico == "Barras Horizontais" else "v"
 
 # ==============================================================================
@@ -178,20 +176,24 @@ if not df_hcid.empty:
     m2.metric(label="📍 2. Total de Setores Disponibilizados p/ Campo no HCID", value=t_setores_hcid)
     st.markdown("---")
     
-    # LINHA 2: GRÁFICOS DE VISÃO GERAL (3 E 4) LADO A LADO
     c1, c2 = st.columns(2)
     with c1:
         df_g3 = df_hcid.groupby("LOCAL_COMBINADO")["LOCAL_COMBINADO"].count().reset_index(name="Contagem")
         x_3, y_3 = ("Contagem", "LOCAL_COMBINADO") if sub_or == "h" else ("LOCAL_COMBINADO", "Contagem")
         fig3 = px.bar(df_g3, x=x_3, y=y_3, orientation=sub_or, text="Contagem", title="3. Setores Disponibilizados para Estágio (HCID)", color_discrete_sequence=["#008080"])
-        fig3.update_layout(yaxis={'categoryorder':'total ascending'} if sub_or == "h" else {'categoryorder':'total descending'}, height=450)
+        fig3.update_layout(yaxis={'categoryorder':'total ascending'} if sub_or == "h" else {'categoryorder':'total descending'}, height=450, margin=dict(l=180))
         fig3.update_traces(texttemplate='<b>%{text}</b>', textposition='outside', textfont=dict(size=14))
         st.plotly_chart(fig3, use_container_width=True)
     with c2:
         df_g4 = df_hcid.groupby(["LOCAL_COMBINADO", hc_cat])["VAGAS_TOTAL"].sum().reset_index()
         x_4, y_4 = ("VAGAS_TOTAL", "LOCAL_COMBINADO") if sub_or == "h" else ("LOCAL_COMBINADO", "VAGAS_TOTAL")
-        fig4 = px.bar(df_g4, x=x_4, y=y_4, color=hc_cat, orientation=sub_or, barmode="stack", text="VAGAS_TOTAL", title="4. Categorias Profissionais Contempladas por Setor (HCID)", color_discrete_sequence=cor_sequencia)
-        fig4.update_layout(yaxis={'categoryorder':'total ascending'} if sub_or == "h" else {'categoryorder':'total descending'}, legend_title_text="Profissão", height=450)
-        fig4.update_traces(texttemplate='<b>%{text}</b>', textposition='inside', textfont=dict(size=13))
+        # AJUSTE EXECUTIVO: Removido o 'text="VAGAS_TOTAL"' para evitar o atropelo de fontes na pilha
+        fig4 = px.bar(df_g4, x=x_4, y=y_4, color=hc_cat, orientation=sub_or, barmode="stack", title="4. Categorias Profissionais Contempladas por Setor (HCID)", color_discrete_sequence=cor_sequencia)
+        fig4.update_layout(yaxis={'categoryorder':'total ascending'} if sub_or == "h" else {'categoryorder':'total descending'}, legend_title_text="Profissão", height=450, margin=dict(l=180))
         st.plotly_chart(fig4, use_container_width=True)
         
+    st.markdown("---")
+    
+    st.markdown("### 🔍 5. Visão de Detalhamento por Setor/Subsetor")
+    df_g5 = df_hcid.groupby("LOCAL_E_PROF")["VAGAS_TOTAL"].sum().reset_index()
+    x_5, y_5 = ("VAGAS_TOTAL", "LOCAL_E_PROF") if sub_or == "h" else ("LOCAL_E_PROF", "VAGAS_TOTAL")
