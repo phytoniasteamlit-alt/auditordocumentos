@@ -63,38 +63,48 @@ else:
 
 tipo_grafico_5 = st.sidebar.radio("Estilo dos Gráficos de Setor:", options=["Barras Verticais", "Barras Horizontais"], index=1)
 
-# Lógica robusta de leitura de planilhas para evitar travar com nomes de abas ou colunas diferentes
+# Lógica robusta de leitura de planilhas para aceitar HCID_BDD de forma inteligente
 if uploaded_file is not None:
     try:
         excel_file = pd.ExcelFile(uploaded_file)
         abas_disponiveis = excel_file.sheet_names
         
-        # Procura de forma inteligente a aba do HCID (aceita HCID, HCID_BDD, HCID1...)
-        aba_hcid_real = "HCID"
-        for aba in abas_disponiveis:
-            if "HCID" in aba.upper():
-                aba_hcid_real = aba
-                break
-                
-        # Procura de forma inteligente a aba do ANEXO
-        aba_anexo_real = "ANEXO"
-        for aba in abas_disponiveis:
-            if "ANEXO" in aba.upper():
-                aba_anexo_real = aba
+        # Ordem de prioridade inteligente para achar a aba do HCID com dados
+        aba_hcid_real = None
+        for opcao in ["HCID_BDD", "HCID", "HCID1"]:
+            if opcao in abas_disponiveis:
+                aba_hcid_real = opcao
                 break
         
+        # Se não achar nenhuma das opções conhecidas, pega a primeira aba que tiver no arquivo
+        if not aba_hcid_real:
+            aba_hcid_real = abas_disponiveis[0]
+                
+        # Ordem de prioridade inteligente para achar a aba do ANEXO
+        aba_anexo_real = None
+        for opcao in ["ANEXO", "ANEXO2"]:
+            if opcao in abas_disponiveis:
+                aba_anexo_real = opcao
+                break
+                
         df_hcid = pd.read_excel(uploaded_file, sheet_name=aba_hcid_real)
-        df_anexo = pd.read_excel(uploaded_file, sheet_name=aba_anexo_real if aba_anexo_real in abas_disponiveis else abas_disponiveis[-1])
+        
+        if aba_anexo_real and aba_anexo_real in abas_disponiveis:
+            df_anexo = pd.read_excel(uploaded_file, sheet_name=aba_anexo_real)
+        else:
+            # Se não houver a aba de anexos ainda, cria uma tabela vazia com a mesma estrutura para não dar erro
+            df_anexo = pd.DataFrame(columns=df_hcid.columns)
         
         # Padronização e limpeza forçada de cabeçalhos
         for df_aba in [df_hcid, df_anexo]:
-            for col in df_aba.columns:
-                df_aba.rename(columns={col: str(col).strip().upper()}, inplace=True)
-            for col in df_aba.columns:
-                if df_aba[col].dtype == "object":
-                    df_aba[col] = df_aba[col].astype(str).str.strip()
+            if not df_aba.empty:
+                for col in df_aba.columns:
+                    df_aba.rename(columns={col: str(col).strip().upper()}, inplace=True)
+                for col in df_aba.columns:
+                    if df_aba[col].dtype == "object":
+                        df_aba[col] = df_aba[col].astype(str).str.strip()
                     
-        # Mapeamento dinâmico de colunas para blindar o erro 'VAGAS'
+        # Mapeamento dinâmico de colunas para blindar erros de digitação
         def descobrir_colunas(df_tratar):
             c_setor, c_sub, c_cat, c_turno, c_vagas = "SETOR", "SUB_SETOR", "CATEGORIA PROFISSIONAL", "TURNO", "VAGAS"
             for col in df_tratar.columns:
@@ -108,9 +118,9 @@ if uploaded_file is not None:
         hc_setor, hc_sub, hc_cat, hc_turno, hc_vagas = descobrir_colunas(df_hcid)
         ax_setor, ax_sub, ax_cat, ax_turno, ax_vagas = descobrir_colunas(df_anexo)
         
-        # Conversão numérica limpa e segura
         df_hcid[hc_vagas] = pd.to_numeric(df_hcid[hc_vagas], errors='coerce').fillna(0).astype(int)
-        df_anexo[ax_vagas] = pd.to_numeric(df_anexo[ax_vagas], errors='coerce').fillna(0).astype(int)
+        if not df_anexo.empty:
+            df_anexo[ax_vagas] = pd.to_numeric(df_anexo[ax_vagas], errors='coerce').fillna(0).astype(int)
         
     except Exception as e:
         st.error(f"Erro crítico no mapeamento das colunas da planilha. Detalhes: {e}")
@@ -169,7 +179,7 @@ r3_c1, r3_c2, r3_c3 = st.columns(3)
 with r3_c1:
     st.subheader("5. Total de Vagas por Sub-Setor no HCID")
     df_g5 = df_hcid_filtrado.groupby(hc_sub)[hc_vagas].sum().reset_index()
-    fig5 = px.bar(df_g5, x=hc_vagas, y=hc_sub, orientation="h", color_discrete_sequence=cor_sequencia)
+    fig5 = px.bar(df_g5, x="VAGAS", y=hc_sub, orientation="h", color_discrete_sequence=cor_sequencia)
     fig5.update_layout(height=450)
     st.plotly_chart(fig5, use_container_width=True)
 
@@ -195,7 +205,7 @@ st.markdown("<br><br>---", unsafe_allow_html=True)
 st.markdown("<h2 style='color: #d62728;'>🏢 Indicadores Exclusivos - ANEXO</h2>", unsafe_allow_html=True)
 st.markdown("---")
 
-if ax_cat in df_anexo.columns and not df_anexo.empty:
+if not df_anexo.empty and ax_cat in df_anexo.columns:
     categorias_anexo = sorted(df_anexo[ax_cat].dropna().unique().tolist())
     filtro_cat_anexo = st.sidebar.multiselect("Filtrar Profissões (Anexo):", options=categorias_anexo, default=categorias_anexo)
     df_anexo_filtrado = df_anexo[df_anexo[ax_cat].isin(filtro_cat_anexo)]
@@ -205,13 +215,3 @@ else:
 ax_r1_c1, ax_r1_col2 = st.columns(2)
 with ax_r1_c1:
     st.subheader("1. Total de Vagas de Estágio no Anexo")
-    st.metric(label="Vagas Totais (Anexo)", value=df_anexo_filtrado[ax_vagas].sum() if not df_anexo_filtrado.empty else 0)
-
-with ax_r1_col2:
-    st.subheader("2. Total de Setores Disponibilizados por Campo de Estágio no Anexo")
-    st.metric(label="Setores Ativos (Anexo)", value=df_anexo_filtrado[ax_setor].nunique() if not df_anexo_filtrado.empty else 0)
-
-st.markdown("---")
-
-ax_r2_c1, ax_r2_c2 = st.columns(2)
-with ax_r2_c1:
