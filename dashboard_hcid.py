@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import unicodedata
 
 # ==============================================================================
 # 1. CONFIGURAÇÃO DA PÁGINA (Interface Dashboard Executivo)
@@ -11,13 +10,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
-def normalizar_texto(texto):
-    if pd.isna(texto) or not isinstance(texto, str):
-        return ""
-    texto = texto.strip().upper().replace('\n', ' ').replace('\r', ' ')
-    texto = "".join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
-    return " ".join(texto.split())
 
 # --- CABEÇALHO SUPERIOR ---
 header_left, header_right = st.columns(2)
@@ -41,74 +33,50 @@ st.sidebar.header("⚙️ Painel de Controle")
 uploaded_file = st.sidebar.file_uploader("Carregar Planilha de Estágios (.xlsx):", type=["xlsx"])
 
 # ==============================================================================
-# 3. MOTOR DE TRATAMENTO DE DADOS CUSTOMIZADO PARA CABEÇALHOS MESCLADOS
+# 3. MOTOR DE TRATAMENTO DE DADOS COM MAPEAMENTO FIXO ESTREITO
 # ==============================================================================
 def extrair_e_limpar_dados(uploaded_file, sheet_name):
     if not sheet_name:
         return pd.DataFrame()
     
-    # Lê as primeiras 15 linhas para varrer o cabeçalho complexo com precisão
-    df_topo = pd.read_excel(uploaded_file, sheet_name=sheet_name, header=None, nrows=15)
+    # Carrega os dados brutos ignorando as primeiras 7 linhas (Títulos e Cabeçalhos mesclados)
+    # Começa a ler diretamente a partir da Linha 8 da planilha original
+    df_dados = pd.read_excel(uploaded_file, sheet_name=sheet_name, header=None, skiprows=7)
     
-    linha_cabecalho_pai = 0
-    for idx, row in df_topo.iterrows():
-        row_str = " ".join([str(x).upper() for x in row.dropna()])
-        if "SETOR" in row_str or "CATEGOR" in row_str or "PROFISS" in row_str:
-            linha_cabecalho_pai = idx
-            break
-            
-    # Captura a linha de cima e a de baixo para resolver células mescladas
-    linha_pai = df_topo.iloc[linha_cabecalho_pai].fillna("").astype(str).tolist()
-    linha_filho = df_topo.iloc[linha_cabecalho_pai + 1].fillna("").astype(str).tolist()
-    
-    # Reconstrói os cabeçalhos combinando as duas linhas do Excel
-    cabecalhos_combinados = []
-    for p, f in zip(linha_pai, linha_filho):
-        p_clean = p.strip()
-        f_clean = f.strip()
-        if f_clean and f_clean.lower() != "nan" and p_clean != f_clean:
-            cabecalhos_combinados.append(f"{p_clean} {f_clean}")
-        else:
-            cabecalhos_combinados.append(p_clean)
-            
-    # Carrega os dados reais ignorando as linhas de cabeçalho processadas
-    df_dados = pd.read_excel(uploaded_file, sheet_name=sheet_name, header=None, skiprows=linha_cabecalho_pai + 2)
-    df_dados.columns = cabecalhos_combinados[:len(df_dados.columns)]
-    
-    # Procura os índices corretos baseado no nome combinado
-    idx_setor, idx_sub, idx_cat, idx_manha, idx_tarde = 0, 1, 2, 3, 4
-    for idx_c, col_nome in enumerate(df_dados.columns):
-        c_norm = normalizar_texto(col_nome)
-        if "SUB" in c_norm: 
-            idx_sub = idx_c
-        elif "SETOR" in c_norm or "CAMPO" in c_norm: 
-            if "MANH" not in c_norm and "TARD" not in c_norm:
-                idx_setor = idx_c
-        elif "PROF" in c_norm or "CAT" in c_norm: 
-            idx_cat = idx_c
-        elif "MANH" in c_norm: 
-            idx_manha = idx_c
-        elif "TARD" in c_norm: 
-            idx_tarde = idx_c
+    if df_dados.empty:
+        return pd.DataFrame()
+        
+    # Mapeamento manual estrito baseado na estrutura física real (A, B, C, D, E)
+    # Garante que nenhuma coluna seja trocada ou lida incorretamente
+    idx_setor = 0  # Coluna A
+    idx_sub   = 1  # Coluna B
+    idx_cat   = 2  # Coluna C
+    idx_manha = 3  # Coluna D
+    idx_tarde = 4  # Coluna E
 
     def extrair_inteiro(valor):
         if pd.isna(valor) or str(valor).strip() == "" or str(valor).strip().lower() == "nan": 
             return 0
+        # Remove textos como "por turno" e isola apenas os dígitos numéricos
         v_str = "".join(filter(str.isdigit, str(valor)))
         return int(v_str) if v_str != "" else 0
 
     df_limpo = pd.DataFrame()
+    
+    # Tratamento da coluna Setor com preenchimento para baixo (ffill) das células mescladas
     df_limpo["SETOR"] = df_dados.iloc[:, idx_setor].astype(str).str.strip()
     df_limpo["SETOR"] = df_limpo["SETOR"].replace(["nan", "NAN", ""], pd.NA).ffill()
     
+    # Tratamento das sub-áreas e profissões
     df_limpo["SUB_SETOR"] = df_dados.iloc[:, idx_sub].fillna("GERAL").astype(str).str.strip().replace(["nan", "NAN", ""], "GERAL")
     df_limpo["CATEGORIA"] = df_dados.iloc[:, idx_cat].fillna("NÃO ESPECIFICADO").astype(str).str.strip()
     
-    # Extração isolada baseada nos índices remapeados
+    # Extração numérica isolada e independente dos turnos
     df_limpo["MANHÃ"] = df_dados.iloc[:, idx_manha].apply(extrair_inteiro)
     df_limpo["TARDE"] = df_dados.iloc[:, idx_tarde].apply(extrair_inteiro)
     df_limpo["TOTAL_VAGAS"] = df_limpo["MANHÃ"] + df_limpo["TARDE"]
     
+    # Filtro de descarte de linhas inúteis, subtotais ou vazias
     linhas_validas = []
     for _, row in df_limpo.iterrows():
         txt_s = str(row["SETOR"]).upper()
@@ -126,7 +94,7 @@ def extrair_e_limpar_dados(uploaded_file, sheet_name):
 # ==============================================================================
 def renderizar_painel_etapas(df_alvo, nome_aba_excel, chave_unica):
     if df_alvo.empty:
-        st.warning(f"Nenhum dado ativo foi localizado na aba '{nome_aba_excel}'. Verifique o formato do arquivo.")
+        st.warning(f"Nenhum dado ativo foi localizado na aba '{nome_aba_excel}'. Verifique a estrutura da planilha.")
         return
 
     st.caption(f"📂 Fonte dos dados ativa: Aba **'{nome_aba_excel}'**")
@@ -203,14 +171,31 @@ def renderizar_painel_etapas(df_alvo, nome_aba_excel, chave_unica):
         st.dataframe(df_alvo[["SETOR", "SUB_SETOR", "CATEGORIA", "MANHÃ", "TARDE", "TOTAL_VAGAS"]], use_container_width=True)
 
 # ==============================================================================
-# 5. EXECUÇÃO DO FLUXO PRINCIPAL (LINHA DEFINITIVA SEM CONDICIONAIS QUEBRADAS)
+# 5. EXECUÇÃO DO FLUXO PRINCIPAL
 # ==============================================================================
 if uploaded_file is not None:
     excel_file = pd.ExcelFile(uploaded_file)
     abas_disponiveis = excel_file.sheet_names
     
-    # Descobre o nome da aba principal
+    # Identifica as abas baseadas nas posições físicas ou nomes conhecidos
     aba_hcid_real = next((op for op in ["HCID_BDD", "HCID", "HCID1", "DADOS"] if op in abas_disponiveis), abas_disponiveis[0])
     
-    # Lógica em linha única para a segunda aba (blinda contra IndentationError)
-    aba_anexo_real = next((op for op in ["ANEXO", "ANEXO2", "ANEXOS"] if op in abas_disponiveis), abas_disponiveis[1] if len(abas_disponiveis) > 1 and abas_disponiveis[1] != aba_hcid_real else None)
+    aba_anexo_real = next((op for op in ["ANEXO", "ANEXO2", "ANEXOS"] if op in abas_disponiveis), None)
+    if not aba_anexo_real and len(abas_disponiveis) > 1:
+        aba_anexo_real = abas_disponiveis[1] if abas_disponiveis[1] != aba_hcid_real else None
+        
+    df_hcid = extrair_e_limpar_dados(uploaded_file, aba_hcid_real)
+    df_anexo = extrair_e_limpar_dados(uploaded_file, aba_anexo_real) if aba_anexo_real else pd.DataFrame()
+
+    tab_hcid, tab_anexos = st.tabs(["🏥 Hospital Geral (HCID)", "🏢 Unidades Anexas"])
+    
+    with tab_hcid:
+        renderizar_painel_etapas(df_hcid, aba_hcid_real, "hcid")
+        
+    with tab_anexos:
+        if aba_anexo_real and not df_anexo.empty:
+            renderizar_painel_etapas(df_anexo, aba_anexo_real, "anexos")
+        else:
+            st.info("Sua planilha possui apenas 1 aba de dados ativos. Se possuir anexos, adicione-os na segunda aba do arquivo Excel.")
+else:
+    st.info("💡 Por favor, arraste ou carregue sua planilha Excel para estruturar os painéis automaticamente.")
