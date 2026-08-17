@@ -118,40 +118,43 @@ if uploaded_file is not None:
                 elif "MANH" in c_norm: idx_manha = idx_c
                 elif "TARD" in c_norm: col_tarde = idx_c
 
-            # Estrutura base de processamento
+            # Estrutura base de preenchimento de dados
             df_final = pd.DataFrame()
             df_final["SETOR_RAW"] = df_aba.iloc[:, idx_setor].astype(str).str.strip().ffill()
             df_final["SUB_SETOR_RAW"] = df_aba.iloc[:, idx_sub].fillna("").astype(str).str.strip()
             df_final["CATEGORIA_RAW"] = df_aba.iloc[:, idx_cat].fillna("").astype(str).str.strip()
             
-            # CORREÇÃO DA LINHA DO ERRO: Uso correto de .str.contains() do Pandas
+            # --- CORREÇÃO DEFINITIVA DOS FILTROS (Sem comandos ambíguos) ---
             df_final = df_final[df_final["CATEGORIA_RAW"] != ""]
+            
+            # Remove linhas de cabeçalhos repetidos ou totais estruturais do Excel de forma segura
             df_final = df_final[~df_final["SETOR_RAW"].str.upper().str.contains("TOTAL|QUANTITATIVO|HOSPITAL", na=False)]
-            df_final = df_final[~df_final["CATEGORIA_RAW"].str.upper().str.contains("TOTAL|QUANTITATIVO|HOSPITAL", na=False)]
+            df_final = df_final[~df_final["CATEGORIA_RAW"].str.upper().str.contains("TOTAL|QUANTITATIVO|HOSPITAL|CATEGOR|PROFISS", na=False)]
             
             # Limpeza das expressões textuais das vagas ('4 por turno' -> 4)
             def limpar_vagas(valor):
                 if pd.isna(valor) or str(valor).strip() == "": 
-                    return None  # Ffill inteligente herda a quantidade do setor pai
+                    return None  # Retorna None para herdar a vaga do setor pai via ffill
                 v_str = "".join(filter(str.isdigit, str(valor)))
                 return int(v_str) if v_str != "" else 0
             
-            # Captura inicial das vagas
+            # Captura das colunas de turno
             df_final["VAGAS_MANHA"] = df_aba.loc[df_final.index, df_aba.columns[idx_manha]].apply(limpar_vagas)
             df_final["VAGAS_TARDE"] = df_aba.loc[df_final.index, df_aba.columns[idx_tarde]].apply(limpar_vagas)
             
-            # Preenchimento automático inteligente para alocar vagas do setor principal nas linhas de baixo
+            # Preenchimento automático inteligente para sub-linhas vazias
             df_final["VAGAS_MANHA"] = df_final["VAGAS_MANHA"].ffill().fillna(0).astype(int)
             df_final["VAGAS_TARDE"] = df_final["VAGAS_TARDE"].ffill().fillna(0).astype(int)
             df_final["VAGAS_TOTAL"] = df_final["VAGAS_MANHA"] + df_final["VAGAS_TARDE"]
             
-            # Construção do eixo de subsetores combinados
+            # Construção do eixo de locais combinados
             df_final["LOCAL_COMBINADO"] = df_final.apply(
                 lambda r: f"{r['SETOR_RAW']} ➔ {r['SUB_SETOR_RAW']}" if (r['SUB_SETOR_RAW'] != "" and r['SETOR_RAW'].upper() != r['SUB_SETOR_RAW'].upper()) else f"{r['SETOR_RAW']}",
                 axis=1
             )
             df_final["LOCAL_E_PROF"] = df_final["LOCAL_COMBINADO"] + " (" + df_final["CATEGORIA_RAW"] + ")"
             
+            # Separação estrutural entre vagas ativas e inativas
             df_ativas = df_final[df_final["VAGAS_TOTAL"] > 0].copy()
             df_inativas = df_final[df_final["VAGAS_TOTAL"] == 0].copy()
             
@@ -202,10 +205,3 @@ def gerar_texto_distribuicao(df_filtrado):
 # ==============================================================================
 # 4. QUADRO I - HCID (ORGANIZAÇÃO EM ABAS INTERNAS)
 # ==============================================================================
-st.markdown("<h2 style='color: #008080; border-bottom: 2px solid #008080;'>🏢 QUADRO I - Mapeamento de Vagas Exclusivo HCID</h2>", unsafe_allow_html=True)
-
-if not df_hcid.empty:
-    m1, m2 = st.columns(2)
-    t_vagas_hcid = int(df_hcid["VAGAS_TOTAL"].sum())
-    t_setores_hcid = df_hcid["LOCAL_COMBINADO"].nunique()
-    
