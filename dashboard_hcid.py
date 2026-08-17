@@ -47,7 +47,7 @@ st.sidebar.header("⚙️ Painel de Controle")
 uploaded_file = st.sidebar.file_uploader("Carregar Planilha de Estágios (.xlsx):", type=["xlsx"])
 
 # ==============================================================================
-# 3. MOTOR DE PROCESSAMENTO MATRICIAL CORRIGIDO
+# 3. MOTOR DE PROCESSAMENTO MATRICIAL CORRIGIDO (LEITURA HORIZONTAL COMPLETA)
 # ==============================================================================
 if uploaded_file is not None:
     excel_file = pd.ExcelFile(uploaded_file)
@@ -58,6 +58,7 @@ if uploaded_file is not None:
     df_raw = pd.read_excel(uploaded_file, sheet_name=aba_alvo, header=None)
     
     # Processamento horizontal das linhas de cabeçalho mescladas (Meses, Dias e Turnos)
+    # Garante o preenchimento de strings para a direita na horizontal antes de extrair a lista
     linha_meses = df_raw.iloc[3].ffill().fillna("").astype(str).tolist()
     linha_dias = df_raw.iloc[4].ffill().fillna("").astype(str).tolist()
     linha_turnos = df_raw.iloc[5].fillna("").astype(str).tolist()
@@ -65,7 +66,7 @@ if uploaded_file is not None:
     # Isola o corpo de dados reais (A partir da Linha 8 física / índice 7)
     df_corpo = df_raw.iloc[7:].copy()
     
-    # Preenchimento em cascata vertical das colunas estruturais de texto
+    # Preenchimento em cascata vertical das colunas estruturais de texto (Setor, Sub-setor, Categoria)
     df_corpo.iloc[:, 0] = df_corpo.iloc[:, 0].replace(["nan", "NAN", ""], pd.NA).ffill().fillna("GERAL")
     df_corpo.iloc[:, 1] = df_corpo.iloc[:, 1].replace(["nan", "NAN", ""], pd.NA).ffill().fillna("GERAL")
     df_corpo.iloc[:, 2] = df_corpo.iloc[:, 2].replace(["nan", "NAN", ""], pd.NA).ffill().fillna("NÃO ESPECIFICADO")
@@ -74,39 +75,39 @@ if uploaded_file is not None:
     
     # Varredura matricial com extração direta por posição atômica de célula
     for idx_row in range(len(df_corpo)):
-        # Coleta os textos purificados de forma atômica (.iat) sem metadados do Pandas
-        setor = str(df_corpo.iat[idx_row, 0]).strip().upper()
-        sub_setor = str(df_corpo.iat[idx_row, 1]).strip().upper()
-        categoria = str(df_corpo.iat[idx_row, 2]).strip().upper()
+        # Coleta os textos purificados de forma atômica utilizando o índice absoluto do corpo processado
+        setor = str(df_corpo.iloc[idx_row, 0]).strip().upper()
+        sub_setor = str(df_corpo.iloc[idx_row, 1]).strip().upper()
+        categoria = str(df_corpo.iloc[idx_row, 2]).strip().upper()
         
         # Filtro rígido para ignorar linhas de divisórias textuais e somatórios nativos
         if "TOTAL" in setor or "TOTAL" in categoria or categoria == "" or setor == "SETOR" or setor == "GERAL":
             continue
             
-        # CORREGIDO: range configurado com shape[1] para obter a quantidade exata de colunas da tabela
+        # CORRIGIDO DEFINITIVAMENTE: shape[1] força a varredura horizontal completa por todas as colunas do calendário
         for col_idx in range(8, df_corpo.shape[1]):
-            vaga_bruta = df_corpo.iat[idx_row, col_idx]
+            vaga_bruta = df_corpo.iloc[idx_row, col_idx]
             qtd_vagas = extrair_numero(vaga_bruta)
             
             if qtd_vagas > 0:
-                mes_nome = str(linha_meses[col_idx]).strip().upper()
-                dia_nome = str(linha_dias[col_idx]).strip().upper()
-                turno_nome = str(linha_turnos[col_idx]).strip().upper()
+                mes_name = str(linha_meses[col_idx]).strip().upper()
+                dia_name = str(linha_dias[col_idx]).strip().upper()
+                turno_name = str(linha_turnos[col_idx]).strip().upper()
                 
                 # Validação se a coluna percorrida faz parte do escopo cronológico
-                if any(m in mes_nome for m in ["AGO", "SET", "OUT", "NOV", "DEZ"]) or "VAGAS" in mes_nome:
-                    if "VAGAS" in mes_nome or mes_nome == "": 
-                        mes_nome = "AGOSTO"
-                    if "MANH" not in turno_nome and "TARD" not in turno_nome:
-                        turno_nome = "MANHÃ" if "MANH" in dia_nome else "TARDE"
+                if any(m in mes_name for m in ["AGO", "SET", "OUT", "NOV", "DEZ"]) or "VAGAS" in mes_name:
+                    if "VAGAS" in mes_name or mes_name == "": 
+                        mes_name = "AGOSTO"
+                    if "MANH" not in turno_name and "TARD" not in turno_name:
+                        turno_name = "MANHÃ" if "MANH" in dia_name else "TARDE"
                         
                     registros_vagas.append({
                         "SETOR": setor,
                         "SUB_SETOR": sub_setor,
                         "CATEGORIA": categoria,
-                        "MÊS": mes_nome,
-                        "DIA_SEMANA": dia_nome if any(d in dia_nome for d in ["SEG", "TER", "QUA", "QUI", "SEX"]) else "SEGUNDA",
-                        "TURNO": "MANHÃ" if "MANH" in turno_nome else "TARDE",
+                        "MÊS": mes_name,
+                        "DIA_SEMANA": dia_name if any(d in dia_name for d in ["SEG", "TER", "QUA", "QUI", "SEX"]) else "SEGUNDA",
+                        "TURNO": "MANHÃ" if "MANH" in turno_name else "TARDE",
                         "VAGAS": qtd_vagas
                     })
                     
@@ -180,4 +181,3 @@ if uploaded_file is not None:
             
         # --- GRÁFICO CRONOLÓGICO MENSAL SOLICITADO ---
         st.markdown("---")
-        st.markdown("### 📅 Distribuição Mensal Organizada de Vagas Ocupadas por Turno")
