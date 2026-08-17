@@ -19,7 +19,7 @@ def normalizar_texto(texto):
     texto = "".join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
     return texto
 
-# --- CABEÇALHO SUPERIOR ---
+# --- CABEÇALHO SUPERIOR (Alinhamento Direto) ---
 header_left, header_right = st.columns(2)
 
 header_left.markdown("<h1 style='margin: 0; padding: 0; font-size: 2.2rem;'>📊 Painel de Indicadores de Estágio</h1>", unsafe_allow_html=True)
@@ -61,12 +61,13 @@ else:
 
 tipo_grafico_5 = st.sidebar.radio("Estilo dos Gráficos de Setor:", options=["Barras Verticais", "Barras Horizontais"], index=1)
 
-# Lógica de leitura inteligente de abas e colunas
+# Lógica robusta e inteligente para encontrar as colunas de forma automática
 if uploaded_file is not None:
     try:
         excel_file = pd.ExcelFile(uploaded_file)
         abas_disponiveis = excel_file.sheet_names
         
+        # Localiza de forma flexível qual aba contém os dados do HCID (BDD ou Normal)
         aba_hcid_real = None
         for opcao in ["HCID_BDD", "HCID", "HCID1", "DADOS"]:
             if opcao in abas_disponiveis:
@@ -75,6 +76,7 @@ if uploaded_file is not None:
         if not aba_hcid_real:
             aba_hcid_real = abas_disponiveis[0]
                 
+        # Localiza de forma flexível a aba de ANEXO
         aba_anexo_real = None
         for opcao in ["ANEXO", "ANEXO2", "ANEXOS"]:
             if opcao in abas_disponiveis:
@@ -88,6 +90,7 @@ if uploaded_file is not None:
         else:
             df_anexo = pd.DataFrame(columns=df_hcid.columns)
             
+        # Função interna de varredura inteligente para mapear as colunas de forma definitiva
         def processar_mapeamento_inteligente(df_aba):
             if df_aba.empty:
                 return df_aba, "SETOR", "SUB_SETOR", "CATEGORIA PROFISSIONAL", "TURNO", "VAGAS"
@@ -132,7 +135,7 @@ if uploaded_file is not None:
         df_hcid, hc_setor, hc_sub, hc_cat, hc_turno, hc_vagas = processar_mapeamento_inteligente(df_hcid)
         df_anexo, ax_setor, ax_sub, ax_cat, ax_turno, ax_vagas = processar_mapeamento_inteligente(df_anexo)
         
-        # --- ENGENHARIA DE DADOS INTELIGENTE: Cria a coluna combinada limpa para os gráficos ---
+        # Engenharia de Dados: Combinação limpa de Setor + Sub-Setor para o formato clean
         for d_f, s_t, s_b in [(df_hcid, hc_setor, hc_sub), (df_anexo, ax_setor, ax_sub)]:
             if not d_f.empty:
                 d_f["LOCAL_COMBINADO"] = d_f.apply(
@@ -148,7 +151,7 @@ else:
     st.stop()
 
 # ==============================================================================
-# 3. BLOCO 1: GRÁFICOS DO HCID
+# 3. BLOCO 1: GRÁFICOS DO HCID (HOSPITAL DA CIDADE)
 # ==============================================================================
 st.markdown("<h2 style='color: #2ca02c;'>🏢 Indicadores Exclusivos - HCID</h2>", unsafe_allow_html=True)
 st.markdown("---")
@@ -161,52 +164,44 @@ else:
     df_hcid_filtrado = df_hcid
 
 r1_c1, r1_col2 = st.columns(2)
-r1_c1.metric(label="Vagas de Estágio por Turno no HCID", value=df_hcid_filtrado.groupby(["LOCAL_COMBINADO", hc_turno])[hc_vagas].sum().max())
-r1_col2.metric(label="Áreas de Estágio Ativas no HCID", value=df_hcid_filtrado["LOCAL_COMBINADO"].nunique())
+# Gráfico 1: Total de Vagas (Calculado de forma nominal estável por turno)
+r1_c1.metric(label="1. Total de Vagas de Estágio no HCID (Por Turno)", value=int(df_hcid_filtrado.groupby(["LOCAL_COMBINADO", hc_turno])[hc_vagas].sum().max()))
+# Gráfico 2: Total de Setores Ativos
+r1_col2.metric(label="2. Total de Setores Disponibilizados p/ Campo de Estágio no HCID", value=df_hcid_filtrado["LOCAL_COMBINADO"].nunique())
 
 st.markdown("---")
 
 r2_c1, r2_c2 = st.columns(2)
 
-# Gráfico 3 (Ajustado com o LOCAL_COMBINADO para exibir 4 ou 1 vaga individual por turno)
+# Gráfico 3: Setores Disponibilizados para Realização (Visão Clean por Área)
 df_g3 = df_hcid_filtrado.groupby("LOCAL_COMBINADO")[hc_vagas].mean().reset_index()
 df_g3[hc_vagas] = df_g3[hc_vagas].round(1)
 ori_3 = "h" if tipo_grafico_5 == "Barras Horizontais" else "v"
 x_v, y_v = (hc_vagas, "LOCAL_COMBINADO") if ori_3 == "h" else ("LOCAL_COMBINADO", hc_vagas)
-fig3 = px.bar(df_g3, x=x_v, y=y_v, text=hc_vagas, orientation=ori_3, color="LOCAL_COMBINADO", color_discrete_sequence=cor_sequencia, title="3. Vagas Disponibilizadas por Turno / Campo de Estágio no HCID")
+fig3 = px.bar(df_g3, x=x_v, y=y_v, text=hc_vagas, orientation=ori_3, color="LOCAL_COMBINADO", color_discrete_sequence=cor_sequencia, title="3. Setores Disponibilizados para Realização de Estágio no HCID")
 fig3.update_traces(textposition="outside", textfont=dict(size=14))
-fig3.update_layout(showlegend=False, height=650)
+fig3.update_layout(showlegend=False, height=550)
 r2_c1.plotly_chart(fig3, use_container_width=True)
 
-# Gráfico 4 (Ajustado com o LOCAL_COMBINADO para separar por área e mostrar as 4 vagas exatas)
+# Gráfico 4: Categorias Profissionais Contempladas no Estágio por Setor no HCID
 df_g4 = df_hcid_filtrado.groupby(["LOCAL_COMBINADO", hc_cat])[hc_vagas].mean().reset_index()
 df_g4[hc_vagas] = df_g4[hc_vagas].round(1)
 ori_4 = "h" if tipo_grafico_5 == "Barras Horizontais" else "v"
 x_v4, y_v4 = (hc_vagas, "LOCAL_COMBINADO") if ori_4 == "h" else ("LOCAL_COMBINADO", hc_vagas)
-fig4 = px.bar(df_g4, x=x_v4, y=y_v4, color=hc_cat, orientation=ori_4, barmode="stack", color_discrete_sequence=cor_sequencia, title="4. Vagas por Turno por Categoria Profissional e Campo de Estágio no HCID")
-fig4.update_layout(height=650, legend=dict(title_text="Profissão"))
+fig4 = px.bar(df_g4, x=x_v4, y=y_v4, color=hc_cat, orientation=ori_4, barmode="stack", color_discrete_sequence=cor_sequencia, title="4. Categorias Profissionais Contempladas no Estágio por Setor no HCID")
+fig4.update_layout(height=550, legend=dict(title_text="Profissão"))
 r2_c2.plotly_chart(fig4, use_container_width=True)
 
 st.markdown("---")
 
 r3_c1, r3_c2, r3_c3 = st.columns(3)
 
-# Gráfico 5
+# Gráfico 5: Total de Vagas de Estágio Disponibilizados por Setor
 df_g5 = df_hcid_filtrado.groupby(hc_sub)[hc_vagas].mean().reset_index()
 df_g5[hc_vagas] = df_g5[hc_vagas].round(1)
-fig5 = px.bar(df_g5, x="VAGAS", y=hc_sub, text="VAGAS", orientation="h", color_discrete_sequence=cor_sequencia, title="5. Vagas por Turno por Sub-Setor no HCID")
+fig5 = px.bar(df_g5, x="VAGAS", y=hc_sub, text="VAGAS", orientation="h", color_discrete_sequence=cor_sequencia, title="5. Total de Vagas de Estágio Disponibilizados por Setor no HCID")
 fig5.update_traces(textposition="outside", textfont=dict(size=13))
 fig5.update_layout(height=450)
 r3_c1.plotly_chart(fig5, use_container_width=True)
 
-# Gráfico 6
-df_g6 = df_hcid_filtrado.groupby(hc_turno)[hc_vagas].mean().reset_index()
-df_g6[hc_vagas] = df_g6[hc_vagas].round(1)
-fig6 = px.bar(df_g6, x=hc_turno, y=hc_vagas, text=hc_vagas, color=hc_turno, color_discrete_sequence=px.colors.qualitative.Pastel, title="6. Capacidade Média Nominal do HCID por Turno")
-fig6.update_traces(textposition="outside", textfont=dict(size=15))
-fig6.update_layout(showlegend=False, height=450)
-r3_c2.plotly_chart(fig6, use_container_width=True)
-
-# Gráfico 7
-df_g7 = df_hcid_filtrado.groupby(["LOCAL_COMBINADO", hc_turno])[hc_vagas].mean().reset_index()
-df_g7[hc_vagas] = df_g7[hc_vagas].round(1)
+# Gráfico 6: Total de Vagas de Estágio do HCID por Turno
