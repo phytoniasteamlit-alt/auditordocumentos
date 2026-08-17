@@ -22,7 +22,6 @@ def normalizar_texto(texto):
 def extrair_numero(valor):
     if pd.isna(valor) or str(valor).strip() == "" or str(valor).strip().lower() == "nan":
         return 0
-    # Isola apenas os números digitados (ignora "por turno", "vagas", etc.)
     v_str = "".join(filter(str.isdigit, str(valor)))
     return int(v_str) if v_str != "" else 0
 
@@ -48,77 +47,75 @@ st.sidebar.header("⚙️ Painel de Controle")
 uploaded_file = st.sidebar.file_uploader("Carregar Planilha de Estágios (.xlsx):", type=["xlsx"])
 
 # ==============================================================================
-# 3. PROCESSADOR INTELIGENTE DE MATRIZ DE CALENDÁRIO
+# 3. MOTOR DE PROCESSAMENTO DE CALENDÁRIO MATRICIAL (FLUXO LINEAR SEGURO)
 # ==============================================================================
 if uploaded_file is not None:
-    try:
-        excel_file = pd.ExcelFile(uploaded_file)
-        abas_disponiveis = excel_file.sheet_names
-        aba_alvo = "HCID_BDD" if "HCID_BDD" in abas_disponiveis else ("HCID" if "HCID" in abas_disponiveis else abas_disponiveis[0])
+    excel_file = pd.ExcelFile(uploaded_file)
+    abas_disponiveis = excel_file.sheet_names
+    aba_alvo = "HCID_BDD" if "HCID_BDD" in abas_disponiveis else ("HCID" if "HCID" in abas_disponiveis else abas_disponiveis[0])
+    
+    # Carrega a planilha sem cabeçalho automático
+    df_raw = pd.read_excel(uploaded_file, sheet_name=aba_alvo, header=None)
+    
+    # Identifica as linhas estruturais do cabeçalho complexo (Linhas 3, 4 e 5)
+    # Correção do preenchimento: ffill() direto nas séries para evitar deprecation warnings
+    linha_meses = df_raw.iloc[2].ffill().fillna("").astype(str).tolist()
+    linha_dias = df_raw.iloc[3].ffill().fillna("").astype(str).tolist()
+    linha_turnos = df_raw.iloc[4].fillna("").astype(str).tolist()
+    
+    # Corpo dos dados (Linha 8 física em diante)
+    df_corpo = df_raw.iloc[7:].copy()
+    
+    # Preenchimento em cascata das colunas estruturais mescladas (Setor, Sub-setor, Categoria)
+    df_corpo[0] = df_corpo[0].replace(["nan", "NAN", ""], pd.NA).ffill().fillna("GERAL")
+    df_corpo[1] = df_corpo[1].replace(["nan", "NAN", ""], pd.NA).ffill().fillna("GERAL")
+    df_corpo[2] = df_corpo[2].replace(["nan", "NAN", ""], pd.NA).ffill().fillna("NÃO ESPECIFICADO")
+    
+    # Lista para consolidar todas as vagas encontradas na matriz para o formato longo
+    registros_vagas = []
+    
+    for idx_row, row in df_corpo.iterrows():
+        setor = str(row[0]).strip()
+        sub_setor = str(row[1]).strip()
+        categoria = str(row[2]).strip()
         
-        # Carrega a planilha sem cabeçalho automático
-        df_raw = pd.read_excel(uploaded_file, sheet_name=aba_alvo, header=None)
-        
-        # Identifica as linhas estruturais do cabeçalho complexo
-        linha_meses = df_raw.iloc[2].fillna(method='ffill').fillna("").astype(str).tolist() # Linha 3 do Excel
-        linha_dias = df_raw.iloc[3].fillna(method='ffill').fillna("").astype(str).tolist()  # Linha 4 do Excel
-        linha_turnos = df_raw.iloc[4].fillna("").astype(str).tolist()                       # Linha 5 do Excel
-        
-        # Corpo dos dados (Linha 8 física em diante)
-        df_corpo = df_raw.iloc[7:].copy()
-        
-        # Preenchimento em cascata (ffill) para células de setores mescladas verticalmente
-        df_corpo[0] = df_corpo[0].astype(str).str.strip().replace(["nan", "NAN", ""], pd.NA).ffill()
-        df_corpo[1] = df_corpo[1].fillna("GERAL").astype(str).str.strip().replace(["nan", "NAN", ""], "GERAL")
-        df_corpo[2] = df_corpo[2].fillna("").astype(str).str.strip().replace(["nan", "NAN"], "")
-        
-        # Lista para consolidar todas as vagas encontradas na matriz para o formato longo (Melted)
-        registros_vagas = []
-        
-        for idx_row, row in df_corpo.iterrows():
-            setor = row[0]
-            sub_setor = row[1]
-            categoria = row[2]
+        # Ignora linhas de cabeçalho residual ou totais da planilha
+        if "TOTAL" in setor.upper() or "TOTAL" in categoria.upper() or categoria == "" or setor == "GERAL":
+            continue
             
-            # Ignora linhas de cabeçalho residual ou totais da planilha
-            if "TOTAL" in str(setor).upper() or "TOTAL" in str(categoria).upper() or categoria == "":
-                continue
+        # Varre as colunas de dados a partir da coluna de índice 3 (Coluna D do Excel)
+        for col_idx in range(3, len(row)):
+            vaga_bruta = row[col_idx]
+            qtd_vagas = extrair_numero(vaga_bruta)
+            
+            if qtd_vagas > 0:
+                mes = str(linha_meses[col_idx]).strip().upper()
+                dia = str(linha_dias[col_idx]).strip().upper()
+                turno = str(linha_turnos[col_idx]).strip().upper()
                 
-            # Varre as colunas de dados a partir da coluna de índice 3 (Coluna D do Excel)
-            for col_idx in range(3, len(row)):
-                vaga_bruta = row[col_idx]
-                qtd_vagas = extrair_numero(vaga_bruta)
-                
-                if qtd_vagas > 0:
-                    mes = str(linha_meses[col_idx]).strip().upper()
-                    dia = str(linha_dias[col_idx]).strip().upper()
-                    turno = str(linha_turnos[col_idx]).strip().upper()
+                # Filtro de segurança para validar se a coluna realmente pertence ao calendário
+                if any(m in mes for m in ["AGO", "SET", "OUT", "NOV", "DEZ"]) or "VAGAS" in mes:
+                    if "VAGAS" in mes or mes == "": 
+                        mes = "AGOSTO" 
+                    if "MANH" not in turno and "TARD" not in turno: 
+                        turno = "MANHÃ" if "MANH" in dia else "TARDE"
                     
-                    # Filtro de segurança para validar se a coluna realmente pertence ao calendário
-                    if any(m in mes for m in ["AGO", "SET", "OUT", "NOV", "DEZ"]) or "VAGAS" in mes:
-                        # Limpa nomes padrões caso caia em colunas genéricas de cabeçalho pai
-                        if "VAGAS" in mes or mes == "": mes = "AGOSTO" 
-                        if "MANH" not in turno and "TARD" not in turno: turno = "MANHÃ" if "MANH" in dia else "TARDE"
-                        
-                        registros_vagas.append({
-                            "SETOR": setor,
-                            "SUB_SETOR": sub_setor,
-                            "CATEGORIA": categoria,
-                            "MÊS": mes,
-                            "DIA_SEMANA": dia if any(d in dia for d in ["SEG", "TER", "QUA", "QUI", "SEX"]) else "SEGUNDA",
-                            "TURNO": "MANHÃ" if "MANH" in turno else "TARDE",
-                            "VAGAS": qtd_vagas
-                        })
-                        
-        df_master = pd.DataFrame(registros_vagas)
-        
-        if df_master.empty:
-            st.error("Nenhum dado numérico de vaga foi localizado na matriz do calendário. Verifique o arquivo.")
-            st.stop()
-            
-        # ==============================================================================
-        # 4. EXIBIÇÃO DAS CAIXAS DE TEXTO (METRICAS / CARDS PROPOSTOS)
-# ==============================================================================
+                    registros_vagas.append({
+                        "SETOR": setor,
+                        "SUB_SETOR": sub_setor,
+                        "CATEGORIA": categoria,
+                        "MÊS": mes,
+                        "DIA_SEMANA": dia if any(d in dia for d in ["SEG", "TER", "QUA", "QUI", "SEX"]) else "SEGUNDA",
+                        "TURNO": "MANHÃ" if "MANH" in turno else "TARDE",
+                        "VAGAS": qtd_vagas
+                    })
+                    
+    df_master = pd.DataFrame(registros_vagas)
+    
+    # ==============================================================================
+    # 4. EXIBIÇÃO DAS CAIXAS DE TEXTO (MÉTRICAS / CARDS SOLICITADOS)
+    # ==============================================================================
+    if not df_master.empty:
         st.markdown("### 📋 Resumo Executivo de Capacidade (HCID)")
         
         # Cálculos macro unificados
@@ -138,12 +135,9 @@ if uploaded_file is not None:
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("##### 🗓️ Distribuição Diária de Estagiários")
         
-        # Agrupamento para descobrir a média de estagiários por dia da semana
-        df_dia_turno = df_master.groupby(["DIA_SEMANA", "TURNO"])["VAGAS"].sum().reset_index()
-        
         c_dia_m, c_dia_t = st.columns(2)
         
-        # Cria um seletor interativo para não amontoar os dias da semana
+        # Cria um seletor interativo para os dias da semana
         dia_selecionado = c_dia_m.selectbox("Selecione o Dia da Semana para Auditar:", sorted(df_master["DIA_SEMANA"].unique()))
         
         vagas_dia_m = df_master[(df_master["DIA_SEMANA"] == dia_selecionado) & (df_master["TURNO"] == "MANHÃ")]["VAGAS"].sum()
@@ -161,7 +155,7 @@ if uploaded_file is not None:
         col_g1, col_g2 = st.columns(2)
         
         with col_g1:
-            st.markdown("### 🏢 Setores Disponibilizados para Realização de Estágio no HCID")
+            st.markdown("### 🏢 Setores disponibilizados para realização de estágio no hcid")
             df_g1 = df_master.groupby("SETOR")["VAGAS"].sum().reset_index().sort_values(by="VAGAS", ascending=True)
             fig1 = px.bar(
                 df_g1, x="VAGAS", y="SETOR", orientation="h",
@@ -172,7 +166,7 @@ if uploaded_file is not None:
             st.plotly_chart(fig1, use_container_width=True)
 
         with col_g2:
-            st.markdown("### 👩‍⚕️ Categorias Profissionais Contempladas no Estágio por Setor no HCID")
+            st.markdown("### 👩‍⚕️ Categorias profissionais contemplados no estagio por setor no hcid")
             setor_filtro_g2 = st.selectbox("Escolha o Setor para Analisar as Profissões:", sorted(df_master["SETOR"].unique()))
             df_g2 = df_master[df_master["SETOR"] == setor_filtro_g2].groupby("CATEGORIA")["VAGAS"].sum().reset_index().sort_values(by="VAGAS", ascending=True)
             
@@ -184,3 +178,14 @@ if uploaded_file is not None:
             fig2.update_traces(textposition="outside", cliponaxis=False)
             st.plotly_chart(fig2, use_container_width=True)
 
+        # --- GRÁFICO POR MÊS REESTRUTURADO ---
+        st.markdown("---")
+        st.markdown("### 📅 Distribuição Mensal Organizada de Vagas Ocupadas por Turno")
+        st.caption("Separação por mês indicando a quantidade de alunos de manhã e tarde e quais setores ocupam essas vagas.")
+        
+        df_mensal = df_master.groupby(["MÊS", "TURNO", "SETOR"])["VAGAS"].sum().reset_index()
+        
+        ordem_meses = ["AGOSTO", "SETEMBRO", "OUTUBRO", "NOVEMBRO", "DEZEMBRO"]
+        df_mensal["MÊS"] = pd.Categorical(df_mensal["MÊS"], categories=ordem_meses, ordered=True)
+        df_mensal = df_mensal.dropna(subset=["MÊS"]).sort_values(by=["MÊS", "TURNO"])
+        
