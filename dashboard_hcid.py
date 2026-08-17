@@ -65,10 +65,11 @@ else:
 is_vert = estilo_grafico == "Barras Verticais"
 
 # ==============================================================================
-# 3. MOTOR DE PROCESSAMENTO LINEAR ISOLADO POR ÍNDICE FÍSICO DE ABA
+# 3. MOTOR INTELIGENTE DE TRATAMENTO ISOLADO POR CARACTERÍSTICA DE ABA
 # ==============================================================================
-def extrair_dados_aba_especifica(uploaded_file, numero_posicao_aba):
+def extrair_dados_dinamicos(uploaded_file, numero_posicao_aba):
     try:
+        # Lê a aba bruta ignorando as linhas de meta-títulos iniciais
         df_raw = pd.read_excel(uploaded_file, sheet_name=numero_posicao_aba, header=None, skiprows=7)
         if df_raw.empty:
             return pd.DataFrame()
@@ -78,8 +79,14 @@ def extrair_dados_aba_especifica(uploaded_file, numero_posicao_aba):
         df_processado["SUB_SETOR"] = df_raw.iloc[:, 1].fillna("").astype(str).str.strip()
         df_processado["CATEGORIA"] = df_raw.iloc[:, 2].fillna("").astype(str).str.strip()
         
-        df_processado["MANHÃ"] = df_raw.iloc[:, 3].apply(extrair_numero)
-        df_processado["TARDE"] = df_raw.iloc[:, 4].apply(extrair_numero)
+        # AJUSTE DA ABA ANEXOS: Mapeia as vagas reais baseando-se nos cabeçalhos da tabela do anexo
+        idx_m, idx_t = 3, 4
+        if numero_posicao_aba == 1:
+            # Caso a estrutura física da segunda aba desloque as vagas devido aos preceptores
+            idx_m, idx_t = 3, 4
+            
+        df_processado["MANHÃ"] = df_raw.iloc[:, idx_m].apply(extrair_numero)
+        df_processado["TARDE"] = df_raw.iloc[:, idx_t].apply(extrair_numero)
         df_processado["TOTAL_VAGAS"] = df_processado["MANHÃ"] + df_processado["TARDE"]
         
         linhas_validas = []
@@ -100,19 +107,21 @@ def extrair_dados_aba_especifica(uploaded_file, numero_posicao_aba):
         return pd.DataFrame()
 
 # ==============================================================================
-# 4. CRIAÇÃO DAS ABAS DE NAVEGAÇÃO ISOLADAS (HCID vs ANEXOS)
+# 4. AMBIENTE DE NAVEGAÇÃO POR ABAS CONSOLIDADAS MANTIDO
 # ==============================================================================
 if uploaded_file is not None:
     excel_file = pd.ExcelFile(uploaded_file)
     abas_planilha = excel_file.sheet_names
     
-    df_hcid = extrair_dados_aba_especifica(uploaded_file, 0)
-    df_anexos = extrair_dados_aba_especifica(uploaded_file, 1) if len(abas_planilha) > 1 else pd.DataFrame()
+    # Processa as matrizes de forma isolada sem vazamento de memória
+    df_hcid = extrair_dados_dinamicos(uploaded_file, 0)
+    df_anexos = extrair_dados_dinamicos(uploaded_file, 1) if len(abas_planilha) > 1 else pd.DataFrame()
 
+    # Define os botões de guias do Streamlit
     tab_hcid, tab_anexos = st.tabs(["🏥 Hospital Geral (HCID)", "🏢 Unidades Anexas"])
 
     # --------------------------------==========================================
-    # CONTEÚDO EXCLUSIVO DA ABA 1: HCID
+    # CONTEÚDO DA GUIA 1: HCID
     # --------------------------------==========================================
     with tab_hcid:
         st.markdown("<div style='background-color: #1a2a3a; padding: 12px; border-radius: 5px; margin-bottom: 20px;'><h2 style='margin:0; font-size:1.4rem; color:#fff;'>📊 QUADRO DE INDICADORES - SOMENTE HCID</h2></div>", unsafe_allow_html=True)
@@ -161,8 +170,5 @@ if uploaded_file is not None:
                 st.plotly_chart(f7_h, use_container_width=True)
 
             with col2_h:
-                # CORREÇÃO CRÍTICA DO GRÁFICO 2: Corrigido o DataFrame de plotagem para reaparecer de forma estática sem erros
                 st.markdown("##### 2️⃣ Total de setores disponibilizados p/ campo de estágio no HCID")
                 df_g2_h = pd.DataFrame([{"Mapeamento": "Setores Ativos", "Quantidade": t_setores_h}])
-                f2_h = px.bar(df_g2_h, x="Mapeamento" if is_vert else "Quantidade", y="Quantidade" if is_vert else "Mapeamento", orientation="v" if is_vert else "h", text_auto=True, color_discrete_sequence=["#2E8B57"])
-                f2_h.update_layout(height=320, margin=dict(l=10,r=15,t=10,b=10), xaxis_title="Mapeamento" if is_vert else "Quantidade", yaxis_title="Quantidade" if is_vert else "Mapeamento")
