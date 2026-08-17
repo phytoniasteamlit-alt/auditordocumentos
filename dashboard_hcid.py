@@ -188,7 +188,7 @@ def renderizar_painel_etapas(df_alvo, nome_aba_excel, chave_unica):
                 orientation="h",
                 labels={"VAGAS": "Quantidade de Vagas", "SUB_E_CAT": "Sub-Setor (Profissão)"},
                 color_discrete_map={"MANHÃ": "#008080", "TARDE": "#FF7F50"},
-                text_auto=True # Rótulos numéricos ativados dentro das barras empilhadas
+                text_auto=True # Rótulos numéricos dentro das barras empilhadas
             )
             fig_detalhe.update_layout(barmode="stack", height=450, margin=dict(l=20, r=35, t=10, b=10))
             fig_detalhe.update_traces(textposition="inside", insidetextanchor="middle")
@@ -201,13 +201,13 @@ def renderizar_painel_etapas(df_alvo, nome_aba_excel, chave_unica):
         st.dataframe(df_alvo[["SETOR", "SUB_SETOR", "CATEGORIA", "MANHÃ", "TARDE", "TOTAL_VAGAS"]], use_container_width=True)
 
 # ==============================================================================
-# 5. EXECUÇÃO DO FLUXO PRINCIPAL
+# 5. EXECUÇÃO DO FLUXO PRINCIPAL (LINHA SEGUIDA SEM RISCOS DE INDENTAÇÃO)
 # ==============================================================================
 if uploaded_file is not None:
     excel_file = pd.ExcelFile(uploaded_file)
     abas_disponiveis = excel_file.sheet_names
     
+    # Identifica o nome da aba principal do hospital geral
     aba_hcid_real = "HCID_BDD" if "HCID_BDD" in abas_disponiveis else abas_disponiveis[0]
-    aba_anexo_real = "ANEXO" if "ANEXO" in abas_disponiveis else ("ANEXO2" if "ANEXO2" in abas_disponiveis else None)
     
-    if aba_anexo_real is None and len(abas_disponiveis) > 1:
+    # Identifica o nome da aba de anexos de forma direta em linha única
