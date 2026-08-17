@@ -19,22 +19,20 @@ def normalizar_texto(texto):
     texto = "".join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
     return texto
 
-# --- CABEÇALHO SUPERIOR ---
+# --- CABEÇALHO SUPERIOR (Alinhamento em duas colunas diretas) ---
 header_left, header_right = st.columns(2)
 
-with header_left:
-    st.markdown("<h1 style='margin: 0; padding: 0; font-size: 2.2rem;'>📊 Painel de Indicadores de Estágio</h1>", unsafe_allow_html=True)
+header_left.markdown("<h1 style='margin: 0; padding: 0; font-size: 2.2rem;'>📊 Painel de Indicadores de Estágio</h1>", unsafe_allow_html=True)
 
-with header_right:
-    st.markdown(
-        """
-        <div style="text-align: right; line-height: 1.2; padding-bottom: 10px;">
-            <span style="font-size: 16px; font-weight: bold;">🏥 Hospital da Cidade</span><br>
-            <span style="font-size: 14px; color: #888;">👩‍💼 Coord: Verônica Azevedo</span>
-        </div>
-        """, 
-        unsafe_allow_html=True
-    )
+header_right.markdown(
+    """
+    <div style="text-align: right; line-height: 1.2; padding-bottom: 10px;">
+        <span style="font-size: 16px; font-weight: bold;">🏥 Hospital da Cidade</span><br>
+        <span style="font-size: 14px; color: #888;">👩‍💼 Coord: Verônica Azevedo</span>
+    </div>
+    """, 
+    unsafe_allow_html=True
+)
 
 st.markdown("---")
 
@@ -166,52 +164,48 @@ else:
     df_hcid_filtrado = df_hcid
 
 r1_c1, r1_col2 = st.columns(2)
-with r1_c1:
-    st.subheader("1. Total de Vagas de Estágio no HCID")
-    st.metric(label="Vagas Totais Disponibilizadas", value=df_hcid_filtrado[hc_vagas].sum())
-
-with r1_col2:
-    st.subheader("2. Total de Setores Disponibilizados p/ Estágio no HCID")
-    st.metric(label="Setores com Campos Ativos", value=df_hcid_filtrado[hc_setor].nunique())
+r1_c1.metric(label="Vagas Totais Disponibilizadas no HCID", value=df_hcid_filtrado[hc_vagas].sum())
+r1_col2.metric(label="Setores com Campos Ativos no HCID", value=df_hcid_filtrado[hc_setor].nunique())
 
 st.markdown("---")
 
 r2_c1, r2_c2 = st.columns(2)
-with r2_c1:
-    st.subheader("3. Setores Disponibilizados para Realização de Estágio no HCID")
-    df_g3 = df_hcid_filtrado.groupby(hc_setor)[hc_vagas].sum().reset_index()
-    ori_3 = "h" if tipo_grafico_5 == "Barras Horizontais" else "v"
-    x_v, y_v = (hc_vagas, hc_setor) if ori_3 == "h" else (hc_setor, hc_vagas)
-    fig3 = px.bar(df_g3, x=x_v, y=y_v, text=hc_vagas, orientation=ori_3, color=hc_setor, color_discrete_sequence=cor_sequencia)
-    fig3.update_traces(textposition="outside", textfont=dict(size=14))
-    fig3.update_layout(showlegend=False, height=500)
-    st.plotly_chart(fig3, use_container_width=True)
 
-with r2_c2:
-    st.subheader("4. Categorias Profissionais Contempladas no Estágio por Setor no HCID")
-    df_g4 = df_hcid_filtrado.groupby([hc_setor, hc_cat])[hc_vagas].sum().reset_index()
-    ori_4 = "h" if tipo_grafico_5 == "Barras Horizontais" else "v"
-    x_v4, y_v4 = (hc_vagas, hc_setor) if ori_4 == "h" else (hc_setor, hc_vagas)
-    fig4 = px.bar(df_g4, x=x_v4, y=y_v4, color=hc_cat, orientation=ori_4, barmode="stack", color_discrete_sequence=cor_sequencia)
-    fig4.update_layout(height=500, legend=dict(title_text="Profissão"))
-    st.plotly_chart(fig4, use_container_width=True)
+# Gráfico 3
+df_g3 = df_hcid_filtrado.groupby(hc_setor)[hc_vagas].sum().reset_index()
+ori_3 = "h" if tipo_grafico_5 == "Barras Horizontais" else "v"
+x_v, y_v = (hc_vagas, hc_setor) if ori_3 == "h" else (hc_setor, hc_vagas)
+fig3 = px.bar(df_g3, x=x_v, y=y_v, text=hc_vagas, orientation=ori_3, color=hc_setor, color_discrete_sequence=cor_sequencia, title="3. Setores Disponibilizados para Realização de Estágio no HCID")
+fig3.update_traces(textposition="outside", textfont=dict(size=14))
+fig3.update_layout(showlegend=False, height=500)
+r2_c1.plotly_chart(fig3, use_container_width=True)
+
+# Gráfico 4
+df_g4 = df_hcid_filtrado.groupby([hc_setor, hc_cat])[hc_vagas].sum().reset_index()
+ori_4 = "h" if tipo_grafico_5 == "Barras Horizontais" else "v"
+x_v4, y_v4 = (hc_vagas, hc_setor) if ori_4 == "h" else (hc_setor, hc_vagas)
+fig4 = px.bar(df_g4, x=x_v4, y=y_v4, color=hc_cat, orientation=ori_4, barmode="stack", color_discrete_sequence=cor_sequencia, title="4. Categorias Profissionais Contempladas no Estágio por Setor no HCID")
+fig4.update_layout(height=500, legend=dict(title_text="Profissão"))
+r2_c2.plotly_chart(fig4, use_container_width=True)
 
 st.markdown("---")
 
 r3_c1, r3_c2, r3_c3 = st.columns(3)
-with r3_c1:
-    st.subheader("5. Total de Vagas por Sub-Setor no HCID")
-    df_g5 = df_hcid_filtrado.groupby(hc_sub)[hc_vagas].sum().reset_index()
-    fig5 = px.bar(df_g5, x=hc_vagas, y=hc_sub, orientation="h", color_discrete_sequence=cor_sequencia)
-    fig5.update_layout(height=450)
-    st.plotly_chart(fig5, use_container_width=True)
 
-with r3_c2:
-    st.subheader("6. Total de Vagas do HCID por Turno")
-    df_g6 = df_hcid_filtrado.groupby(hc_turno)[hc_vagas].sum().reset_index()
-    fig6 = px.bar(df_g6, x=hc_turno, y=hc_vagas, text=hc_vagas, color=hc_turno, color_discrete_sequence=px.colors.qualitative.Pastel)
-    fig6.update_traces(textposition="outside", textfont=dict(size=15))
-    fig6.update_layout(showlegend=False, height=450)
-    st.plotly_chart(fig6, use_container_width=True)
+# Gráfico 5
+df_g5 = df_hcid_filtrado.groupby(hc_sub)[hc_vagas].sum().reset_index()
+fig5 = px.bar(df_g5, x="VAGAS", y=hc_sub, orientation="h", color_discrete_sequence=cor_sequencia, title="5. Total de Vagas por Sub-Setor no HCID")
+fig5.update_layout(height=450)
+r3_c1.plotly_chart(fig5, use_container_width=True)
 
-with r3_c3:
+# Gráfico 6
+df_g6 = df_hcid_filtrado.groupby(hc_turno)[hc_vagas].sum().reset_index()
+fig6 = px.bar(df_g6, x=hc_turno, y=hc_vagas, text=hc_vagas, color=hc_turno, color_discrete_sequence=px.colors.qualitative.Pastel, title="6. Total de Vagas do HCID por Turno")
+fig6.update_traces(textposition="outside", textfont=dict(size=15))
+fig6.update_layout(showlegend=False, height=450)
+r3_c2.plotly_chart(fig6, use_container_width=True)
+
+# Gráfico 7
+df_g7 = df_hcid_filtrado.groupby([hc_setor, hc_turno])[hc_vagas].sum().reset_index()
+fig7 = px.bar(df_g7, x=hc_setor, y=hc_vagas, color=hc_turno, barmode="group", color_discrete_sequence=px.colors.qualitative.Safe, title="7. Total de Estagiários por Turno por Setor Geral no HCID")
+fig7.update_layout(height=450, xaxis_tickangle=-45)
