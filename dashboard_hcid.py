@@ -69,7 +69,7 @@ else:
 sub_or = "h" if estilo_grafico == "Barras Horizontais" else "v"
 
 # ==============================================================================
-# 3. MOTOR DE PROCESSAMENTO DE DADOS EXECUTIVO E CORRIGIDO
+# 3. MOTOR DE PROCESSAMENTO DE DADOS CORRIGIDO E BLINDADO
 # ==============================================================================
 if uploaded_file is not None:
     try:
@@ -116,7 +116,7 @@ if uploaded_file is not None:
                 elif "SETOR" in c_norm or "CAMPO" in c_norm: idx_setor = idx_c
                 elif "PROF" in c_norm or "CAT" in c_norm: idx_cat = idx_c
                 elif "MANH" in c_norm: idx_manha = idx_c
-                elif "TARD" in c_norm: idx_tarde = idx_c
+                elif "TARD" in c_norm: col_tarde = idx_c
 
             # Estrutura base de processamento
             df_final = pd.DataFrame()
@@ -124,7 +124,7 @@ if uploaded_file is not None:
             df_final["SUB_SETOR_RAW"] = df_aba.iloc[:, idx_sub].fillna("").astype(str).str.strip()
             df_final["CATEGORIA_RAW"] = df_aba.iloc[:, idx_cat].fillna("").astype(str).str.strip()
             
-            # Filtro de purificação de ruídos e remoção das linhas de 'TOTAL' do Excel
+            # CORREÇÃO DA LINHA DO ERRO: Uso correto de .str.contains() do Pandas
             df_final = df_final[df_final["CATEGORIA_RAW"] != ""]
             df_final = df_final[~df_final["SETOR_RAW"].str.upper().str.contains("TOTAL|QUANTITATIVO|HOSPITAL", na=False)]
             df_final = df_final[~df_final["CATEGORIA_RAW"].str.upper().str.contains("TOTAL|QUANTITATIVO|HOSPITAL", na=False)]
@@ -132,7 +132,7 @@ if uploaded_file is not None:
             # Limpeza das expressões textuais das vagas ('4 por turno' -> 4)
             def limpar_vagas(valor):
                 if pd.isna(valor) or str(valor).strip() == "": 
-                    return None  # Retorna None temporariamente para aplicar o ffill inteligente
+                    return None  # Ffill inteligente herda a quantidade do setor pai
                 v_str = "".join(filter(str.isdigit, str(valor)))
                 return int(v_str) if v_str != "" else 0
             
@@ -140,12 +140,12 @@ if uploaded_file is not None:
             df_final["VAGAS_MANHA"] = df_aba.loc[df_final.index, df_aba.columns[idx_manha]].apply(limpar_vagas)
             df_final["VAGAS_TARDE"] = df_aba.loc[df_final.index, df_aba.columns[idx_tarde]].apply(limpar_vagas)
             
-            # Preenchimento automático inteligente (ffill) para alocar as vagas do setor pai nas sub-especialidades de baixo
+            # Preenchimento automático inteligente para alocar vagas do setor principal nas linhas de baixo
             df_final["VAGAS_MANHA"] = df_final["VAGAS_MANHA"].ffill().fillna(0).astype(int)
             df_final["VAGAS_TARDE"] = df_final["VAGAS_TARDE"].ffill().fillna(0).astype(int)
             df_final["VAGAS_TOTAL"] = df_final["VAGAS_MANHA"] + df_final["VAGAS_TARDE"]
             
-            # Construção elegante do eixo de subsetores combinados
+            # Construção do eixo de subsetores combinados
             df_final["LOCAL_COMBINADO"] = df_final.apply(
                 lambda r: f"{r['SETOR_RAW']} ➔ {r['SUB_SETOR_RAW']}" if (r['SUB_SETOR_RAW'] != "" and r['SETOR_RAW'].upper() != r['SUB_SETOR_RAW'].upper()) else f"{r['SETOR_RAW']}",
                 axis=1
@@ -206,3 +206,6 @@ st.markdown("<h2 style='color: #008080; border-bottom: 2px solid #008080;'>🏢 
 
 if not df_hcid.empty:
     m1, m2 = st.columns(2)
+    t_vagas_hcid = int(df_hcid["VAGAS_TOTAL"].sum())
+    t_setores_hcid = df_hcid["LOCAL_COMBINADO"].nunique()
+    
