@@ -1,100 +1,143 @@
 import os
+import zipfile
+import mailbox
+import io
+import re
 import pandas as pd
 from docx import Document
 from datetime import datetime, timedelta
+from email.utils import parsedate_to_datetime
 
-PASTA_TRABALHO = r"C:\Caminho\Para\Sua\Pasta\Do\Feriado"
-PLANILHA_OFICIAL = "Sua_Planilha_Oficial.xlsx"
-PLANILHA_EMAILS = "historico_emails.xlsx" 
-
-caminho_excel = os.path.join(PASTA_TRABALHO, PLANILHA_OFICIAL)
-caminho_emails = os.path.join(PASTA_TRABALHO, PLANILHA_EMAILS)
-
-df_oficial = pd.read_excel(caminho_excel, dtype=str)
-df_emails = pd.read_excel(caminho_emails)
-
-df_emails['Data de Recebimento'] = pd.to_datetime(df_emails['Data de Recebimento'], errors='coerce')
-df_emails = df_emails.sort_values(by='Data de Recebimento').dropna(subset=['Data de Recebimento'])
-
-df_oficial.columns = df_oficial.columns.str.strip()
-
-def extrair_data_aprovacao_interna(caminho_doc):
+def formatar_data_gmail(data_cabecalho):
     try:
-        doc = Document(caminho_doc)
+        if data_cabecalho:
+            dt = parsedate_to_datetime(data_cabecalho)
+            return dt.strftime("%d/%m/%Y")
+    except:
+        pass
+    return None
+
+def extrair_data_aprovacao_interna_memoria(conteudo_binario):
+    """Abre o Word direto da memória e lê a terceira linha do cabeçalho da Norma Zero"""
+    try:
+        doc = Document(io.BytesIO(conteudo_binario))
         for tabela in doc.tables:
             for linha in tabela.rows:
                 texto_linha = [celula.text.strip() for celula in linha.cells]
                 text_completo = " ".join(texto_linha)
                 if "Data aprovação:" in text_completo:
-                    # CORREÇÃO: Aplica .strip() no elemento da string, não na lista gerada pelo split
+                    # Isola a string após o rótulo
                     data = text_completo.split("Data aprovação:")[-1].split("Validade:")[0].strip()
+                    # Valida se é uma data preenchida real e não a máscara padrão
                     if data and "dd/mm" not in data.lower() and "/" in data:
                         return data
     except:
         return None
     return None
 
-for arquivo_word in os.listdir(PASTA_TRABALHO):
-    if arquivo_word.endswith(".docx") and not arquivo_word.startswith("~$"):
-        caminho_doc = os.path.join(PASTA_TRABALHO, arquivo_word)
-        
-        data_aprovacao_word = extrair_data_aprovacao_interna(caminho_doc)
-        cod_documento = arquivo_word.replace(".docx", "").strip() 
-        
-        historico_do_doc = df_emails[df_emails['Nome do Anexo'].str.contains(arquivo_word, na=False, case=False)]
-        
-        if historico_do_doc.empty:
-            continue
+def rodar_auditoria_hospital_inteligente(caminho_excel, caminho_zip):
+    df_oficial = pd.read_excel(caminho_excel, dtype=str)
+    df_oficial.columns = df_oficial.columns.str.strip()
+    
+    SEU_EMAIL = "documentos.soc2@gmail.com"
+    
+    # Abre o arquivo de 1,2 GB vindo do WhatsApp
+    with zipfile.ZipFile(caminho_zip, 'r') as z:
+        path_mbox = [f for f in z.namelist() if f.endswith('.mbox')]
+        if not path_mbox:
+            print("Erro: Arquivo .mbox não encontrado dentro do ZIP!")
+            return
             
-        filtro = df_oficial["CÓD. DO DOCUMENTO"].str.strip() == cod_documento if "CÓD. DO DOCUMENTO" in df_oficial.columns else pd.Series([False]*len(df_oficial))
-        
-        if filtro.any():
-            # CORREÇÃO: Pegamos o índice explicitamente como um número inteiro para evitar problemas com Series
-            idx = df_oficial[filtro].index[0]
+        with z.open(path_mbox[0]) as mbox_file:
+            mbox = mailbox.mbox(io.BytesIO(mbox_file.read()))
             
-            # --- CAPTURA DA 1ª VERIFICAÇÃO ---
-            if pd.isna(df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 1ª VERIFICAÇÃO"]) or str(df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 1ª VERIFICAÇÃO"]).strip() == "":
-                # CORREÇÃO: Adicionado .iloc[0] antes do .strftime para formatar a primeira linha encontrada
-                data_h = historico_do_doc['Data de Recebimento'].iloc[0].strftime('%d/%m/%Y')
-                df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 1ª VERIFICAÇÃO"] = data_h
+            for idx, linha in df_oficial.iterrows():
+                codigo_doc = str(linha["CÓD. DO DOCUMENTO"]).strip()
+                if pd.isna(codigo_doc) or codigo_doc in ["nan", ""]:
+                    continue
+                
+                # Agrupa todos os e-mails associados ao código do documento
+                emails_do_doc = []
+                for msg in mbox:
+                    if codigo_doc in str(msg["subject"]):
+                        emails_do_doc.append(msg)
+                
+                if not emails_do_doc:
+                    continue
+                
+                # -----------------------------------------------------------------
+                # FASE 1: ENTRADA DO FLUXO (1ª VERIFICAÇÃO)
+                # -----------------------------------------------------------------
+                primeiro_email = emails_do_doc[0]
+                
+                # Só preenche a data de recebimento se estiver em branco (Garantia de Segurança)
+                if pd.isna(df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 1ª VERIFICAÇÃO"]) or str(df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 1ª VERIFICAÇÃO"]).strip() == "":
+                    data_1v = formatar_data_gmail(primeiro_email["date"])
+                    df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 1ª VERIFICAÇÃO"] = data_1v
+                
+                # Garante o OK na sua coluna de controle
                 df_oficial.at[idx, "1ª VERIFICAÇÃO EZEQUIAS"] = "OK"
+                
+                # [TRATAMENTO DE GARGALO]: Se as meninas esqueceram o Início da 1ª Verificação
+                if pd.isna(df_oficial.at[idx, "INÍCIO DA 1ª VERIFICAÇÃO DO RESPONSÁVEL"]) or str(df_oficial.at[idx, "INÍCIO DA 1ª VERIFICAÇÃO DO RESPONSÁVEL"]).strip() == "":
+                    data_ref = df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 1ª VERIFICAÇÃO"]
+                    if pd.notna(data_ref):
+                        dt_ref = datetime.strptime(str(data_ref), '%d/%m/%Y')
+                        # Estima de forma inteligente para 1 dia após a sua entrega na pasta
+                        df_oficial.at[idx, "INÍCIO DA 1ª VERIFICAÇÃO DO RESPONSÁVEL"] = (dt_ref + timedelta(days=1)).strftime('%d/%m/%Y')
 
-            # ESTRATÉGIA DE RASTREAMENTO ESTIMADO (Se esqueceram o Início da 1ª)
-            if pd.isna(df_oficial.at[idx, "INÍCIO DA 1ª VERIFICAÇÃO DO RESPONSÁVEL"]) or str(df_oficial.at[idx, "INÍCIO DA 1ª VERIFICAÇÃO DO RESPONSÁVEL"]).strip() == "":
-                data_h_dt = pd.to_datetime(df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 1ª VERIFICAÇÃO"], format='%d/%m/%Y')
-                # Estima início como 1 dia útil após o recebimento
-                df_oficial.at[idx, "INÍCIO DA 1ª VERIFICAÇÃO DO RESPONSÁVEL"] = (data_h_dt + timedelta(days=1)).strftime('%d/%m/%Y')
-
-            # --- CAPTURA DA 2ª VERIFICAÇÃO ---
-            if pd.isna(df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 2ª VERIFICAÇÃO"]) or str(df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 2ª VERIFICAÇÃO"]).strip() == "":
-                data_1v_str = df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 1ª VERIFICAÇÃO"]
-                try:
-                    data_1v = pd.to_datetime(data_1v_str, format='%d/%m/%Y')
-                    proximos_envios = historico_do_doc[historico_do_doc['Data de Recebimento'] > data_1v]
-                    if not proximos_envios.empty:
-                        # CORREÇÃO: Adicionado .iloc[0] antes do .strftime
-                        segunda_data = proximos_envios['Data de Recebimento'].iloc[0].strftime('%d/%m/%Y')
-                        df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 2ª VERIFICAÇÃO"] = segunda_data
+                # -----------------------------------------------------------------
+                # FASE 2: RETORNO DO SETOR (2ª VERIFICAÇÃO)
+                # -----------------------------------------------------------------
+                # Filtra e-mails de entrada vindos do setor após o início do processo
+                emails_posteriores_entrada = [
+                    m for m in emails_do_doc 
+                    if SEU_EMAIL not in str(m["from"]) and m != primeiro_email
+                ]
+                
+                if emails_posteriores_entrada:
+                    segundo_email_entrada = emails_posteriores_entrada[0]
+                    
+                    if pd.isna(df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 2ª VERIFICAÇÃO"]) or str(df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 2ª VERIFICAÇÃO"]).strip() == "":
+                        data_2v = formatar_data_gmail(segundo_email_entrada["date"])
+                        df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 2ª VERIFICAÇÃO"] = data_2v
                         df_oficial.at[idx, "2ª VERIFICAÇÃO EZEQUIAS"] = "OK"
-                        
-                        # Estima início da 2ª verificação caso esquecido
-                        if pd.isna(df_oficial.at[idx, "INÍCIO DA 2ª VERIFICAÇÃO DO RESPONSÁVEL"]) or str(df_oficial.at[idx, "INÍCIO DA 2ª VERIFICAÇÃO DO RESPONSÁVEL"]).strip() == "":
-                            # CORREÇÃO: Adicionado .iloc[0] antes de somar a data
-                            df_oficial.at[idx, "INÍCIO DA 2ª VERIFICAÇÃO DO RESPONSÁVEL"] = (proximos_envios['Data de Recebimento'].iloc[0] + timedelta(days=1)).strftime('%d/%m/%Y')
-                except:
-                    pass
+                    
+                    # [TRATAMENTO DE GARGALO]: Se esqueceram o início da 2ª verificação
+                    if pd.isna(df_oficial.at[idx, "INÍCIO DA 2ª VERIFICAÇÃO DO RESPONSÁVEL"]) or str(df_oficial.at[idx, "INÍCIO DA 2ª VERIFICAÇÃO DO RESPONSÁVEL"]).strip() == "":
+                        data_ref_2v = df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 2ª VERIFICAÇÃO"]
+                        if pd.notna(data_ref_2v):
+                            dt_ref_2v = datetime.strptime(str(data_ref_2v), '%d/%m/%Y')
+                            df_oficial.at[idx, "INÍCIO DA 2ª VERIFICAÇÃO DO RESPONSÁVEL"] = (dt_ref_2v + timedelta(days=1)).strftime('%d/%m/%Y')
 
-            # --- TRATAMENTO DO GARGALO (SEM RETORNO DO SETOR) ---
-            if not pd.isna(df_oficial.at[idx, "FIM DA 1ª VERIFICAÇÃO DO RESPONSÁVEL"]) and str(df_oficial.at[idx, "FIM DA 1ª VERIFICAÇÃO DO RESPONSÁVEL"]).strip() != "":
-                if pd.isna(df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 2ª VERIFICAÇÃO"]) or str(df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 2ª VERIFICAÇÃO"]).strip() == "":
-                    df_oficial.at[idx, "APÓS 2ª VERIFICAÇÃO, ENVIADO PARA ALTERAÇÕES?"] = "AGUARDANDO SETOR"
-                    df_oficial.at[idx, "STATUS"] = "VERIFICADO AGUARDA DEVOLUÇÃO SETOR"
+                # -----------------------------------------------------------------
+                # FASE 3: ENGENHARIA DE STATUS E FECHAMENTO (APROVAÇÃO VS GARGALO)
+                # -----------------------------------------------------------------
+                ultimo_email = emails_do_doc[-1]
+                data_aprovacao_word = None
+                
+                # Tenta extrair a data real de dentro do último documento modificado
+                if ultimo_email.is_multipart():
+                    for part in ultimo_email.walk():
+                        filename = part.get_filename()
+                        if filename and filename.endswith(".docx") and codigo_doc in filename:
+                            data_aprovacao_word = extrair_data_aprovacao_interna_memoria(part.get_payload(decode=True))
+                
+                # Se achou a data preenchida dentro do Word -> Ciclo Concluído!
+                if data_aprovacao_word:
+                    if pd.isna(df_oficial.at[idx, "DATA DE APROVAÇÃO"]) or str(df_oficial.at[idx, "DATA DE APROVAÇÃO"]).strip() == "":
+                        df_oficial.at[idx, "DATA DE APROVAÇÃO"] = data_aprovacao_word
+                        df_oficial.at[idx, "STATUS"] = "APROVADO"
+                
+                # Se NÃO achou a data no Word -> O processo caiu no gargalo do setor externo
+                else:
+                    # Se as meninas já terminaram a 1ª verificação mas a 2ª ainda não chegou
+                    if not pd.isna(df_oficial.at[idx, "FIM DA 1ª VERIFICAÇÃO DO RESPONSÁVEL"]) and str(df_oficial.at[idx, "FIM DA 1ª VERIFICAÇÃO DO RESPONSÁVEL"]).strip() != "":
+                        if pd.isna(df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 2ª VERIFICAÇÃO"]) or str(df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 2ª VERIFICAÇÃO"]).strip() == "":
+                            df_oficial.at[idx, "APÓS 2ª VERIFICAÇÃO, ENVIADO PARA ALTERAÇÕES?"] = "AGUARDANDO SETOR"
+                            df_oficial.at[idx, "STATUS"] = "VERIFICADO AGUARDA DEVOLUÇÃO SETOR"
 
-            # --- DATA DE APROVAÇÃO FINAL DO ANEXO ---
-            if data_aprovacao_word:
-                if pd.isna(df_oficial.at[idx, "DATA DE APROVAÇÃO"]) or str(df_oficial.at[idx, "DATA DE APROVAÇÃO"]).strip() == "":
-                    df_oficial.at[idx, "DATA DE APROVAÇÃO"] = data_aprovacao_word
-                    df_oficial.at[idx, "STATUS"] = "APROVADO"
-
-df_oficial.to_excel(caminho_excel, index=False)
-print("Sincronização concluída com estimativas inteligentes de datas!")
+    # Salva as alterações na planilha local
+    df_oficial.to_excel(caminho_excel, index=False)
+    print("Mapeamento de estados e gargalos executado com sucesso!")
+    return df_oficial
