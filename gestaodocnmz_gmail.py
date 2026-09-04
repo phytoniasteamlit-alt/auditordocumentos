@@ -1,110 +1,95 @@
-import hashlib
 import os
-import json
-import base64
-from google.oauth2.credentials import Credentials
-from google.auth.transport.requests import Request
-from googleapiclient.discovery import build
+import pandas as pd
+from docx import Document
+from datetime import datetime, timedelta
 
-SCOPES = ['https://googleapis.com']
+PASTA_TRABALHO = r"C:\Caminho\Para\Sua\Pasta\Do\Feriado"
+PLANILHA_OFICIAL = "Sua_Planilha_Oficial.xlsx"
+PLANILHA_EMAILS = "historico_emails.xlsx" 
 
-def get_gmail_service():
-    # Puxa as credenciais das variáveis de ambiente do GitHub
-    creds_json = os.environ.get("GMAIL_CREDS_JSON")
-    token_json = os.environ.get("GMAIL_TOKEN_JSON")
-    
-    creds = None
-    if token_json:
-        creds = Credentials.from_authorized_user_info(json.loads(token_json), SCOPES)
-        
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            if creds_json:
-                # Usa as credenciais do aplicativo de computador (Desktop) que baixamos primeiro
-                from google_auth_oauthlib.flow import InstalledAppFlow
-                # Como o GitHub Actions roda sem tela, o token precisa ser gerado localmente uma vez.
-                # Para simplificar na nuvem sem precisar abrir navegador, vamos usar o token direto se já existir.
-                pass
-    return build('gmail', 'v1', credentials=creds)
+caminho_excel = os.path.join(PASTA_TRABALHO, PLANILHA_OFICIAL)
+caminho_emails = os.path.join(PASTA_TRABALHO, PLANILHA_EMAILS)
 
-def obter_ou_criar_marcador(service):
-    nome_marcador = "🚨 ANEXO DUPLICADO"
-    results = service.users().labels().list(userId='me').execute()
-    labels = results.get('labels', [])
-    for label in labels:
-        if label['name'] == nome_marcador:
-            return label['id']
-    label_object = {
-        "name": nome_marcador,
-        "labelListVisibility": "labelShow",
-        "messageListVisibility": "show"
-    }
-    created_label = service.users().labels().create(userId='me', body=label_object).execute()
-    return created_label['id']
+df_oficial = pd.read_excel(caminho_excel, dtype=str)
+df_emails = pd.read_excel(caminho_emails)
 
-def marcar_no_gmail(service, message_id, label_id):
-    service.users().messages().modify(
-        userId='me', 
-        id=message_id, 
-        body={"addLabelIds": [label_id, "STARRED"]}
-    ).execute()
+df_emails['Data de Recebimento'] = pd.to_datetime(df_emails['Data de Recebimento'], errors='coerce')
+df_emails = df_emails.sort_values(by='Data de Recebimento').dropna(subset=['Data de Recebimento'])
 
-def rodar_verificacao():
-    print("Iniciando verificação de anexos duplicados...")
+df_oficial.columns = df_oficial.columns.str.strip()
+
+def extrair_data_aprovacao_interna(caminho_doc):
     try:
-        service = get_gmail_service()
-        if not service:
-            print("Erro: Credenciais não encontradas ou inválidas.")
-            return
-            
-        label_id = obter_ou_criar_marcador(service)
-        
-        # Busca e-mails recentes com anexos (últimas 48h para garantir)
-        results = service.users().messages().list(userId='me', q="has:attachment", maxResults=30).execute()
-        messages = results.get('messages', [])
-        
-        if not messages:
-            print("Nenhum e-mail com anexo encontrado recentemente.")
-            return
-            
-        hashes_vistos = set()
-        
-        for msg in messages:
-            msg_data = service.users().messages().get(userId='me', id=msg['id']).execute()
-            payload = msg_data.get('payload', {})
-            
-            # Navega pelas partes do e-mail para achar os anexos
-            parts = [payload]
-            if 'parts' in payload:
-                parts = payload['parts']
-                
-            for part in parts:
-                filename = part.get('filename')
-                if filename and (filename.endswith('.pdf') or filename.endswith('.docx') or filename.endswith('.doc')):
-                    att_id = part['body'].get('attachmentId')
-                    if not att_id:
-                        continue
-                        
-                    attachment = service.users().messages().attachments().get(
-                        userId='me', messageId=msg['id'], id=att_id).execute()
-                    
-                    data = attachment.get('data')
-                    # Decodifica o anexo para gerar o hash real do arquivo
-                    file_bytes = base64.urlsafe_b64decode(data.encode('UTF-8'))
-                    file_hash = hashlib.md5(file_bytes).hexdigest()
-                    
-                    if file_hash in hashes_vistos:
-                        print(f"🚨 Duplicado detectado: {filename}. Marcando no Gmail...")
-                        marcar_no_gmail(service, msg['id'], label_id)
-                    else:
-                        hashes_vistos.add(file_hash)
-                        print(f"Arquivo original verificado: {filename}")
-                        
-        print("Verificação concluída com sucesso!")
-    except Exception as e:
-        print(f"Erro durante a execução: {e}")
+        doc = Document(caminho_doc)
+        for tabela in doc.tables:
+            for linha in tabela.rows:
+                texto_linha = [celula.text.strip() for celula in linha.cells]
+                text_completo = " ".join(texto_linha)
+                if "Data aprovação:" in text_completo:
+                    data = text_completo.split("Data aprovação:")[-1].split("Validade:").strip()
+                    if data and "dd/mm" not in data.lower() and "/" in data:
+                        return data
+    except:
+        return None
+    return None
 
-if __name__ == "__main__":
-    rodar_verificacao()
+for arquivo_word in os.listdir(PASTA_TRABALHO):
+    if arquivo_word.endswith(".docx") and not arquivo_word.startswith("~$"):
+        caminho_doc = os.path.join(PASTA_TRABALHO, arquivo_word)
+        
+        data_aprovacao_word = extrair_data_aprovacao_interna(caminho_doc)
+        cod_documento = arquivo_word.replace(".docx", "") 
+        
+        historico_do_doc = df_emails[df_emails['Nome do Anexo'].str.contains(arquivo_word, na=False, case=False)]
+        
+        if historico_do_doc.empty:
+            continue
+            
+        filtro = df_oficial["CÓD. DO DOCUMENTO"].str.strip() == cod_documento if "CÓD. DO DOCUMENTO" in df_oficial.columns else pd.Series([False]*len(df_oficial))
+        
+        if filtro.any():
+            idx = df_oficial[filtro].index
+            
+            # --- CAPTURA DA 1ª VERIFICAÇÃO ---
+            if pd.isna(df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 1ª VERIFICAÇÃO"]) or str(df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 1ª VERIFICAÇÃO"]).strip() == "":
+                data_h = historico_do_doc['Data de Recebimento'].iloc.strftime('%d/%m/%Y')
+                df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 1ª VERIFICAÇÃO"] = data_h
+                df_oficial.at[idx, "1ª VERIFICAÇÃO EZEQUIAS"] = "OK"
+
+            # ESTRATÉGIA DE RASTREAMENTO ESTIMADO (Se esqueceram o Início da 1ª)
+            if pd.isna(df_oficial.at[idx, "INÍCIO DA 1ª VERIFICAÇÃO DO RESPONSÁVEL"]) or str(df_oficial.at[idx, "INÍCIO DA 1ª VERIFICAÇÃO DO RESPONSÁVEL"]).strip() == "":
+                data_h_dt = pd.to_datetime(df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 1ª VERIFICAÇÃO"], format='%d/%m/%Y')
+                # Estima início como 1 dia útil após o recebimento
+                df_oficial.at[idx, "INÍCIO DA 1ª VERIFICAÇÃO DO RESPONSÁVEL"] = (data_h_dt + timedelta(days=1)).strftime('%d/%m/%Y')
+
+            # --- CAPTURA DA 2ª VERIFICAÇÃO ---
+            if pd.isna(df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 2ª VERIFICAÇÃO"]) or str(df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 2ª VERIFICAÇÃO"]).strip() == "":
+                data_1v_str = df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 1ª VERIFICAÇÃO"]
+                try:
+                    data_1v = pd.to_datetime(data_1v_str, format='%d/%m/%Y')
+                    proximos_envios = historico_do_doc[historico_do_doc['Data de Recebimento'] > data_1v]
+                    if not proximos_envios.empty:
+                        segunda_data = proximos_envios['Data de Recebimento'].iloc.strftime('%d/%m/%Y')
+                        df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 2ª VERIFICAÇÃO"] = segunda_data
+                        df_oficial.at[idx, "2ª VERIFICAÇÃO EZEQUIAS"] = "OK"
+                        
+                        # Estima início da 2ª verificação caso esquecido
+                        if pd.isna(df_oficial.at[idx, "INÍCIO DA 2ª VERIFICAÇÃO DO RESPONSÁVEL"]) or str(df_oficial.at[idx, "INÍCIO DA 2ª VERIFICAÇÃO DO RESPONSÁVEL"]).strip() == "":
+                            df_oficial.at[idx, "INÍCIO DA 2ª VERIFICAÇÃO DO RESPONSÁVEL"] = (proximos_envios['Data de Recebimento'].iloc + timedelta(days=1)).strftime('%d/%m/%Y')
+                except:
+                    pass
+
+            # --- TRATAMENTO DO GARGALO (SEM RETORNO DO SETOR) ---
+            if not pd.isna(df_oficial.at[idx, "FIM DA 1ª VERIFICAÇÃO DO RESPONSÁVEL"]) and str(df_oficial.at[idx, "FIM DA 1ª VERIFICAÇÃO DO RESPONSÁVEL"]).strip() != "":
+                if pd.isna(df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 2ª VERIFICAÇÃO"]) or str(df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 2ª VERIFICAÇÃO"]).strip() == "":
+                    df_oficial.at[idx, "APÓS 2ª VERIFICAÇÃO, ENVIADO PARA ALTERAÇÕES?"] = "AGUARDANDO SETOR"
+                    df_oficial.at[idx, "STATUS"] = "VERIFICADO AGUARDA DEVOLUÇÃO SETOR"
+
+            # --- DATA DE APROVAÇÃO FINAL DO ANEXO ---
+            if data_aprovacao_word:
+                if pd.isna(df_oficial.at[idx, "DATA DE APROVAÇÃO"]) or str(df_oficial.at[idx, "DATA DE APROVAÇÃO"]).strip() == "":
+                    df_oficial.at[idx, "DATA DE APROVAÇÃO"] = data_aprovacao_word
+                    df_oficial.at[idx, "STATUS"] = "APROVADO"
+
+df_oficial.to_excel(caminho_excel, index=False)
+print("Sincronização concluída com estimativas inteligentes de datas!")
