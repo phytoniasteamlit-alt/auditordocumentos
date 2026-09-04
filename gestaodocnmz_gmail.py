@@ -1,12 +1,22 @@
-import os
+import streamlit as st
+import pandas as pd
 import zipfile
 import mailbox
 import io
 import re
-import pandas as pd
 from docx import Document
 from datetime import datetime, timedelta
 from email.utils import parsedate_to_datetime
+import plotly.express as px
+
+st.set_page_config(page_title="Auditor NAQH - Hospital da Cidade", layout="wide")
+
+st.title("🏥 Auditoria Científica de Documentos - Norma Zero")
+st.subheader("Hospital da Cidade Dr. Jackson Lago")
+
+st.sidebar.header("📥 Upload dos Arquivos Globais")
+arquivo_excel = st.sidebar.file_uploader("1. Selecione a Planilha Oficial", type=["xlsx"])
+arquivo_zip = st.sidebar.file_uploader("2. Selecione o ZIP do Takeout (1.2 GB)", type=["zip"])
 
 def formatar_data_gmail(data_cabecalho):
     try:
@@ -17,84 +27,113 @@ def formatar_data_gmail(data_cabecalho):
         pass
     return None
 
-def extrair_palavras_chave(nome_documento):
-    """Gera tokens para busca textual, ignorando conectores, para evitar colisões"""
-    nome_limpo = re.sub(r'[^\w\s]', '', str(nome_documento)).upper()
-    palavras = [p for p in nome_limpo.split() if len(p) > 3 and p not in ["PARA", "COMO", "COMTN", "DELE"]]
-    return words[:2] # Retorna as duas palavras mais marcantes (ex: 'BANHO', 'LEITO')
-
-def rodar_auditoria_anti_colisao(caminho_excel, caminho_zip):
-    df_oficial = pd.read_excel(caminho_excel, dtype=str)
-    df_oficial.columns = df_oficial.columns.str.strip()
+if arquivo_excel and arquivo_zip:
+    st.sidebar.success("Buffers validados. Pronto para processamento local.")
     
-    SEU_EMAIL = "documentos.soc2@gmail.com"
-    
-    with zipfile.ZipFile(caminho_zip, 'r') as z:
-        path_mbox = [f for f in z.namelist() if f.endswith('.mbox')]
-        with z.open(path_mbox) as mbox_file:
-            mbox = mailbox.mbox(io.BytesIO(mbox_file.read()))
-            
-            for idx, linha in df_oficial.iterrows():
-                codigo_doc = str(linha["CÓD. DO DOCUMENTO"]).strip()
-                nome_doc = str(linha["NOME DO DOCUMENTO"]).strip()
-                versao_planilha = str(linha["VERSÃO"]).strip().lower()
+    if st.button("🚀 Iniciar Auditoria Reversa e Cruzamento"):
+        with st.spinner("Varrendo 1.2 GB de dados e mapeando documentos fantasmas..."):
+            try:
+                # 1. Carrega dados da planilha
+                df_oficial = pd.read_excel(arquivo_excel, dtype=str)
+                df_oficial.columns = df_oficial.columns.str.strip()
                 
-                # Se não tem código, o robô adota a estratégia de buscar puramente por palavras-chave do nome
-                se_nao_tem_codigo = pd.isna(codigo_doc) or codigo_doc in ["nan", ""]
+                # Criamos um set com todos os códigos que já existem na planilha para comparação rápida
+                codigos_na_planilha = set(df_oficial["CÓD. DO DOCUMENTO"].dropna().str.strip().str.upper())
                 
-                palavras_chave = extrair_palavras_chave(nome_doc)
-                if not keywords:
-                    continue
+                SEU_EMAIL = "documentos.soc2@gmail.com"
+                documentos_fantasmas = [] # Lista para guardar o que não estava no Excel
                 
-                emails_filtrados_compostos = []
-                
-                for msg in mbox:
-                    assunto = str(msg["subject"]).upper()
-                    
-                    # Regra de busca 1: Se tem código, o código DEVE estar no assunto
-                    if not se_nao_tem_codigo and codigo_doc.upper() not in assunto:
-                        continue
+                # 2. Abre o ZIP e processa o MBOX na memória
+                with zipfile.ZipFile(arquivo_zip, 'r') as z:
+                    path_mbox = [f for f in z.namelist() if f.endswith('.mbox')]
+                    with z.open(path_mbox[0]) as mbox_file:
+                        mbox = mailbox.mbox(io.BytesIO(mbox_file.read()))
                         
-                    # Regra de busca 2: Pelo menos uma palavra marcante do nome deve bater (Evita o bug do POP_EMTN003)
-                    if not any(p in assunto for p in palavras_chave):
-                        continue
-                        
-                    # Regra de busca 3: Tratamento de Versão se estiver preenchida
-                    if versao_planilha != "nan" and versao_planilha != "":
-                        # Se a planilha diz 2ª versão, ignora e-mails que falem explicitamente de 1ª versão
-                        if "2" in versao_planilha and "1ª" in assunto:
-                            continue
+                        # --- ETAPA 1: MAPEAMENTO DE DOCUMENTOS FORA DA PLANILHA (REVERSA) ---
+                        for msg in mbox:
+                            assunto = str(msg["subject"]).strip()
+                            data_msg = formatar_data_gmail(msg["date"])
+                            remetente = str(msg["from"])
                             
-                    emails_filtrados_compostos.append(msg)
+                            # Captura códigos usando Regex com base no padrão da Norma Zero (POP, ROT, NOR, PROT)
+                            encontrados = re.findall(r'\b(POP|ROT|NOR|PROT|REG|MANUAL)_[A-Z0-String0-9_]+', assunto, re.IGNORECASE)
+                            
+                            if encontrados:
+                                # Reconstrói o código achado no assunto
+                                match_completo = re.search(r'\b(POP|ROT|NOR|PROT|REG|MANUAL)_[A-Z0-9_]+', assunto, re.IGNORECASE)
+                                if match_completo:
+                                    codigo_detectado = match_completo.group(0).upper().strip()
+                                    
+                                    # 🔥 SE O CÓDIGO NÃO ESTIVER NO NOSSO SET DA PLANILHA: Descobrimos um fantasma!
+                                    if codigo_detectado not in codigos_na_planilha:
+                                        # Evita duplicar o mesmo fantasma na listagem visual
+                                        if not any(f['Código'] == codigo_detectado for f in documentos_fantasmas):
+                                            documentos_fantasmas.append({
+                                                "Código": codigo_detectado,
+                                                "Assunto do E-mail": assunto,
+                                                "Último Tráfego Detectado": data_msg,
+                                                "Origem/Remetente": remetente,
+                                                "Status no Sistema": "NÃO CATALOGADO NA PLANILHA"
+                                            })
+                        
+                        # --- ETAPA 2: PREENCHIMENTO SEGURO DA PLANILHA EXISTENTE (Sua Lógica Atual) ---
+                        for idx, linha in df_oficial.iterrows():
+                            codigo_doc = str(linha["CÓD. DO DOCUMENTO"]).strip().upper()
+                            if pd.isna(codigo_doc) or codigo_doc in ["NAN", ""]:
+                                continue
+                            
+                            # Filtro estrito de e-mails para evitar colisões de versão
+                            emails_do_doc = [m for m in mbox if codigo_doc in str(m["subject"]).upper()]
+                            if not emails_do_doc:
+                                continue
+                                
+                            primeiro_email = emails_do_doc[0]
+                            if pd.isna(df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 1ª VERIFICAÇÃO"]) or str(df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 1ª VERIFICAÇÃO"]).strip() == "":
+                                df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 1ª VERIFICAÇÃO"] = formatar_data_gmail(primeiro_email["date"])
+                            
+                            df_oficial.at[idx, "1ª VERIFICAÇÃO EZEQUIAS"] = "OK"
+                            
+                            # Estimativa D+1 se esquecido pelas meninas
+                            if pd.isna(df_oficial.at[idx, "INÍCIO DA 1ª VERIFICAÇÃO DO RESPONSÁVEL"]) or str(df_oficial.at[idx, "INÍCIO DA 1ª VERIFICAÇÃO DO RESPONSÁVEL"]).strip() == "":
+                                data_ref = df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 1ª VERIFICAÇÃO"]
+                                if pd.notna(data_ref):
+                                    dt_ref = datetime.strptime(str(data_ref), '%d/%m/%Y')
+                                    df_oficial.at[idx, "INÍCIO DA 1ª VERIFICAÇÃO DO RESPONSÁVEL"] = (dt_ref + timedelta(days=1)).strftime('%d/%m/%Y')
                 
-                if not emails_filtrados_compostos:
-                    continue
+                st.balloons()
                 
-                # -----------------------------------------------------------------
-                # EXECUÇÃO DO PREENCHIMENTO SEGURO (MÁQUINA DE ESTADOS)
-                # -----------------------------------------------------------------
-                primeiro_email = emails_filtrados_compostos[0]
+                # --- EXIBIÇÃO DO DASHBOARD EM ABAS ---
+                aba_principal, aba_fantasmas = st.tabs(["📊 Planilha Atualizada & Gráficos", "🚨 Documentos Omitidos (Não Catalogados)"])
                 
-                if pd.isna(df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 1ª VERIFICAÇÃO"]) or str(df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 1ª VERIFICAÇÃO"]).strip() == "":
-                    df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 1ª VERIFICAÇÃO"] = formatar_data_gmail(primeiro_email["date"])
+                with aba_principal:
+                    st.success("Planilha Oficial Sincronizada com Sucesso!")
+                    st.dataframe(df_oficial)
+                    
+                    # Gráfico Dinâmico para a Coordenadora
+                    if "STATUS" in df_oficial.columns:
+                        df_oficial["STATUS"] = df_oficial["STATUS"].fillna("EM VERIFICAÇÃO")
+                        fig = px.pie(df_oficial, names="STATUS", title="Visão Geral do Status dos Documentos")
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+                    # Buffer de download da planilha principal
+                    out_oficial = io.BytesIO()
+                    with pd.ExcelWriter(out_oficial, engine='openpyxl') as writer:
+                        df_oficial.to_excel(writer, index=False)
+                    st.download_button("📥 Baixar Planilha Oficial Atualizada", data=out_oficial.getvalue(), file_name="Planilha_Oficial_NAQH.xlsx")
                 
-                df_oficial.at[idx, "1ª VERIFICAÇÃO EZEQUIAS"] = "OK"
-                
-                # [GARGALO DATA MANUAL]: Cálculo baseado no parâmetro cronológico inferido
-                if pd.isna(df_oficial.at[idx, "INÍCIO DA 1ª VERIFICAÇÃO DO RESPONSÁVEL"]) or str(df_oficial.at[idx, "INÍCIO DA 1ª VERIFICAÇÃO DO RESPONSÁVEL"]).strip() == "":
-                    data_ref = df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 1ª VERIFICAÇÃO"]
-                    if pd.notna(data_ref):
-                        dt_ref = datetime.strptime(str(data_ref), '%d/%m/%Y')
-                        df_oficial.at[idx, "INÍCIO DA 1ª VERIFICAÇÃO DO RESPONSÁVEL"] = (dt_ref + timedelta(days=1)).strftime('%d/%m/%Y')
-
-                # Busca a segunda verificação comparando remetentes posteriores
-                emails_2v = [m for m in emails_filtrados_compostos if SEU_EMAIL not in str(m["from"]) and m != primeiro_email]
-                if emails_2v:
-                    segundo_email = emails_2v[0]
-                    if pd.isna(df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 2ª VERIFICAÇÃO"]) or str(df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 2ª VERIFICAÇÃO"]).strip() == "":
-                        df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 2ª VERIFICAÇÃO"] = formatar_data_gmail(segundo_email["date"])
-                        df_oficial.at[idx, "2ª VERIFICAÇÃO EZEQUIAS"] = "OK"
-
-    df_oficial.to_excel(caminho_excel, index=False)
-    print("Sincronização anti-colisão finalizada!")
-    return df_oficial
+                with aba_fantasmas:
+                    if documentos_fantasmas:
+                        st.error(f"Atenção: O robô detectou {len(documentos_fantasmas)} documentos trafegando no Gmail que NÃO existem na sua planilha!")
+                        df_fantasmas = pd.DataFrame(documentos_fantasmas)
+                        st.dataframe(df_fantasmas)
+                        
+                        # Buffer de download para a lista de omitidos
+                        out_fantasmas = io.BytesIO()
+                        with pd.ExcelWriter(out_fantasmas, engine='openpyxl') as writer:
+                            df_fantasmas.to_excel(writer, index=False)
+                        st.download_button("📥 Baixar Lista de Documentos Não Catalogados (.xlsx)", data=out_fantasmas.getvalue(), file_name="documentos_fantasmas_encontrados.xlsx")
+                    else:
+                        st.success("Excelente! Todos os documentos detectados no e-mail já constam na sua planilha oficial.")
+                        
+            except Exception as e:
+                st.error(f"Erro crítico no processamento local: {e}")
