@@ -26,7 +26,8 @@ def extrair_data_aprovacao_interna(caminho_doc):
                 texto_linha = [celula.text.strip() for celula in linha.cells]
                 text_completo = " ".join(texto_linha)
                 if "Data aprovação:" in text_completo:
-                    data = text_completo.split("Data aprovação:")[-1].split("Validade:").strip()
+                    # CORREÇÃO: Aplica .strip() no elemento da string, não na lista gerada pelo split
+                    data = text_completo.split("Data aprovação:")[-1].split("Validade:")[0].strip()
                     if data and "dd/mm" not in data.lower() and "/" in data:
                         return data
     except:
@@ -38,7 +39,7 @@ for arquivo_word in os.listdir(PASTA_TRABALHO):
         caminho_doc = os.path.join(PASTA_TRABALHO, arquivo_word)
         
         data_aprovacao_word = extrair_data_aprovacao_interna(caminho_doc)
-        cod_documento = arquivo_word.replace(".docx", "") 
+        cod_documento = arquivo_word.replace(".docx", "").strip() 
         
         historico_do_doc = df_emails[df_emails['Nome do Anexo'].str.contains(arquivo_word, na=False, case=False)]
         
@@ -48,11 +49,13 @@ for arquivo_word in os.listdir(PASTA_TRABALHO):
         filtro = df_oficial["CÓD. DO DOCUMENTO"].str.strip() == cod_documento if "CÓD. DO DOCUMENTO" in df_oficial.columns else pd.Series([False]*len(df_oficial))
         
         if filtro.any():
-            idx = df_oficial[filtro].index
+            # CORREÇÃO: Pegamos o índice explicitamente como um número inteiro para evitar problemas com Series
+            idx = df_oficial[filtro].index[0]
             
             # --- CAPTURA DA 1ª VERIFICAÇÃO ---
             if pd.isna(df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 1ª VERIFICAÇÃO"]) or str(df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 1ª VERIFICAÇÃO"]).strip() == "":
-                data_h = historico_do_doc['Data de Recebimento'].iloc.strftime('%d/%m/%Y')
+                # CORREÇÃO: Adicionado .iloc[0] antes do .strftime para formatar a primeira linha encontrada
+                data_h = historico_do_doc['Data de Recebimento'].iloc[0].strftime('%d/%m/%Y')
                 df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 1ª VERIFICAÇÃO"] = data_h
                 df_oficial.at[idx, "1ª VERIFICAÇÃO EZEQUIAS"] = "OK"
 
@@ -69,13 +72,15 @@ for arquivo_word in os.listdir(PASTA_TRABALHO):
                     data_1v = pd.to_datetime(data_1v_str, format='%d/%m/%Y')
                     proximos_envios = historico_do_doc[historico_do_doc['Data de Recebimento'] > data_1v]
                     if not proximos_envios.empty:
-                        segunda_data = proximos_envios['Data de Recebimento'].iloc.strftime('%d/%m/%Y')
+                        # CORREÇÃO: Adicionado .iloc[0] antes do .strftime
+                        segunda_data = proximos_envios['Data de Recebimento'].iloc[0].strftime('%d/%m/%Y')
                         df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 2ª VERIFICAÇÃO"] = segunda_data
                         df_oficial.at[idx, "2ª VERIFICAÇÃO EZEQUIAS"] = "OK"
                         
                         # Estima início da 2ª verificação caso esquecido
                         if pd.isna(df_oficial.at[idx, "INÍCIO DA 2ª VERIFICAÇÃO DO RESPONSÁVEL"]) or str(df_oficial.at[idx, "INÍCIO DA 2ª VERIFICAÇÃO DO RESPONSÁVEL"]).strip() == "":
-                            df_oficial.at[idx, "INÍCIO DA 2ª VERIFICAÇÃO DO RESPONSÁVEL"] = (proximos_envios['Data de Recebimento'].iloc + timedelta(days=1)).strftime('%d/%m/%Y')
+                            # CORREÇÃO: Adicionado .iloc[0] antes de somar a data
+                            df_oficial.at[idx, "INÍCIO DA 2ª VERIFICAÇÃO DO RESPONSÁVEL"] = (proximos_envios['Data de Recebimento'].iloc[0] + timedelta(days=1)).strftime('%d/%m/%Y')
                 except:
                     pass
 
