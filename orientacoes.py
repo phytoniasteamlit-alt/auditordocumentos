@@ -89,8 +89,7 @@ if arquivo_word:
         
     st.write(f"📋 **Tipo de Documento Identificado:** `{tipo_detectado}`")
     
-    # --- ETAPA 2: MAPEAMENTO DE REQUISITOS DA NORMA ZERO (CÉLULAS LIVRES DE ERRO) ---
-    # Dicionário mestre contendo as palavras-chave mapeadas para cada tipo documental
+    # --- ETAPA 2: MAPEAMENTO DE REQUISITOS DA NORMA ZERO ---
     requisitos_mapa = {
         "PROTOCOLO": ["OBJETIVO", "APLICABILIDADE", "REFERENCIAL", "MONITORAMENTO", "REFERÊNCIAS"],
         "POP": ["DEFINIÇÃO", "APLICABILIDADE", "RESPONSÁVEL", "MATERIAIS", "TAREFA", "CRÍTICAS", "PROIBIDOS", "REFERÊNCIAS"],
@@ -103,11 +102,9 @@ if arquivo_word:
         "PROGRAMA": ["REFERENCIAL", "PADRONIZAÇÃO", "MONITORAMENTO", "DESCRIÇÃO DO PROGRAMA", "EDUCACIONAIS", "REFERÊNCIAS"]
     }
 
-    # Obter os termos obrigatórios correspondentes ao tipo identificado
     termos_obrigatorios = requisitos_mapa.get(tipo_detectado, [])
     erros_gravissimos = []
 
-    # Validar se cada termo obrigatório está contido no texto consolidado
     for termo in termos_obrigatorios:
         if termo not in texto_total_validacao:
             erros_gravissimos.append(f"⚠️ **OMISSÃO DE SEÇÃO CRÍTICA (Modelo {tipo_detectado}):** A seção contendo o termo obrigatório **'{termo}'** não foi localizada no arquivo.")
@@ -199,3 +196,10 @@ if arquivo_word:
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
     else:
+        st.error("### 🛑 O documento possui inconformidades estruturais:")
+        for erro in erros_gravissimos:
+            st.markdown(erro)
+
+st.divider()
+st.subheader("📊 Histórico Dinâmico da Lista Mestra (Excel)")
+st.dataframe(st.session_state.historico_lista_mestra, use_container_width=True)
