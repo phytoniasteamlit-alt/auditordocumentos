@@ -7,27 +7,21 @@ from docx.oxml.ns import qn
 import pandas as pd
 from io import BytesIO
 from datetime import datetime
-import re
 
 # --- 1. CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="Triagem & Lista Mestra NAQH", page_icon="📊", layout="wide")
-
-# Menu Lateral - Identificação do Operador
-with st.sidebar:
-    st.markdown("### 🧑‍💻 Operador do Sistema")
-    st.markdown("**Ezequias Santos**\n*Agt Administrativo*")
-    st.divider()
-
 st.title("Triagem Avançada & Gerador de Lista Mestra - NAQH")
 st.markdown("""
 ### 🧠 Inteligência Multidocumento e Controle de Atualizações
-O sistema realiza a triagem dinâmica identificando o tipo de documento, validando as seções obrigatórias e capturando de forma inteligente os dados de identificação.
+O sistema agora valida **Protocolos, POPs e Manuais**, corrigindo o layout automaticamente. 
+Abaixo, o sistema gerencia a **Lista Mestra em Excel**, impedindo duplicidades de documentos, 
+exceto quando houver atualização de versão (1ª, 2ª, 3ª, etc.).
 """)
 
 # Inicializa o banco de dados do Histórico de Validações (Lista Mestra) na memória do servidor
 if "historico_lista_mestra" not in st.session_state:
     st.session_state.historico_lista_mestra = pd.DataFrame(columns=[
-        "Código do Documento", "Título do Documento", "Tipo", "Versão Atual",
+        "Código do Documento", "Título do Documento", "Tipo", "Versão Atual", 
         "Status", "Data de Triagem", "Situação"
     ])
 
@@ -52,15 +46,23 @@ def set_cell_margins(cell, top=100, bottom=100, left=150, right=150):
 arquivo_word = st.file_uploader("Arraste o documento WORD (.docx) aqui para Triagem e Formatação", type=["docx"])
 
 if arquivo_word:
-    # Leitura rápida de triagem em memória estruturada
-    doc_triagem = docx.Document(arquivo_word)
+    doc = docx.Document(arquivo_word)
     
-    texto_corpo_raw = " ".join([p.text.strip() for p in doc_triagem.paragraphs])
-    texto_tabelas_raw = " ".join([cell.text.strip() for t in doc_triagem.tables for r in t.rows for cell in r.cells])
-    texto_total_raw = texto_corpo_raw + " " + texto_tabelas_raw
-    texto_total_validacao = texto_total_raw.upper()
-    
-    # --- ETAPA 1: IDENTIFICAÇÃO DINÂMICA DO TIPO (9 MODELOS DO MANUAL) ---
+    # Limpeza de Parágrafos Fantasmas (Espaços em Branco)
+    p_indices_remover = []
+    for i, p in enumerate(doc.paragraphs):
+        if not p.text.strip():
+            p_indices_remover.append(i)
+    for index in sorted(p_indices_remover, reverse=True):
+        p_element = doc.paragraphs[index]._element
+        p_element.getparent().remove(p_element)
+
+    # Consolidação de Texto para Varredura
+    texto_corpo_completo = "".join([p.text.strip().upper() for p in doc.paragraphs])
+    texto_tabelas_completo = "".join([cell.text.strip().upper() for t in doc.tables for r in t.rows for cell in r.cells])
+    texto_total_validacao = texto_corpo_completo + texto_tabelas_completo
+
+    # --- ETAPA 1: IDENTIFICAÇÃO DINÂMICA DO TIPO (EXPANDIDA) ---
     tipo_detectado = "NORMA"
     if "PROTOCOLO" in texto_total_validacao or "PROT_" in texto_total_validacao:
         tipo_detectado = "PROTOCOLO"
@@ -70,108 +72,115 @@ if arquivo_word:
         tipo_detectado = "MANUAL"
     elif "ROTINA" in texto_total_validacao or "ROT_" in texto_total_validacao:
         tipo_detectado = "ROTINA"
-    elif "REGIMENTO" in texto_total_validacao or "REG_" in texto_total_validacao:
-        tipo_detectado = "REGIMENTO"
-    elif "POLÍTICA INSTITUCIONAL" in texto_total_validacao or "POL_" in texto_total_validacao:
-        tipo_detectado = "POLÍTICA INSTITUCIONAL"
-    elif "PLANO DE CONTINGÊNCIA" in texto_total_validacao or "PLANC_" in texto_total_validacao:
-        tipo_detectado = "PLANO DE CONTINGÊNCIA"
-    elif "PROGRAMA" in texto_total_validacao or "PROG_" in texto_total_validacao:
-        tipo_detectado = "PROGRAMA"
-        
-    st.write(f"📋 **Tipo de Documento Identificado:** `{tipo_detectado}`")
+
+    st.write(f"📊 **Tipo de Documento Identificado:** {tipo_detectado}")
+
+    # --- ETAPA 2: DEFINIÇÃO DE REQUISITOS SEGUNDO O QUADRO 1 DA NORMA ZERO ---
+    secoes_obrigatorias = {}
     
-    # --- ETAPA 2: MAPEAMENTO DE REQUISITOS DA NORMA ZERO ---
-    requisitos_mapa = {
-        "PROTOCOLO": ["OBJETIVO", "APLICABILIDADE", "REFERENCIAL", "MONITORAMENTO", "REFERÊNCIAS"],
-        "POP": ["DEFINIÇÃO", "APLICABILIDADE", "RESPONSÁVEL", "MATERIAIS", "TAREFA", "CRÍTICAS", "PROIBIDOS", "REFERÊNCIAS"],
-        "MANUAL": ["CAPA", "ELABORADORES", "COLABORADORES", "SUMÁRIO", "APRESENTAÇÃO", "DESCRIÇÃO", "REFERÊNCIAS"],
-        "NORMA": ["INTRODUÇÃO", "OBJETIVO", "APLICABILIDADE", "DESCRIÇÃO DA NORMA", "RESPONSÁVEL", "CUMPRIMENTO", "REFERÊNCIAS"],
-        "ROTINA": ["DEFINIÇÃO", "OBJETIVO", "APLICABILIDADE", "DESCRIÇÃO DA ROTINA"],
-        "REGIMENTO": ["FINALIDADE", "COMPOSIÇÃO", "MANDATO", "FUNCIONAMENTO", "COMPETÊNCIAS", "ATRIBUIÇÕES", "FINAIS"],
-        "POLÍTICA INSTITUCIONAL": ["INTRODUÇÃO", "OBJETIVO", "PRINCÍPIOS", "DIRETRIZES", "RESPONSABILIDADES", "MONITORAMENTO", "REFERÊNCIAS"],
-        "PLANO DE CONTINGÊNCIA": ["OBJETIVO", "APLICABILIDADE", "DEFINIÇÃO DE TERMOS", "SITUAÇÃO ATUAL", "CONTINGÊNCIA", "REFERÊNCIAS"],
-        "PROGRAMA": ["REFERENCIAL", "PADRONIZAÇÃO", "MONITORAMENTO", "DESCRIÇÃO DO PROGRAMA", "EDUCACIONAIS", "REFERÊNCIAS"]
-    }
+    if tipo_detectado == "PROTOCOLO":
+        secoes_obrigatorias = {
+            "OBJETIVO": "OBJETIVO" in texto_total_validacao,
+            "APLICABILIDADE": "APLICABILIDADE" in texto_total_validacao,
+            "REFERENCIAL TEÓRICO": "REFERENCIAL" in texto_total_validacao or "TEÓRICO" in texto_total_validacao,
+            "ESTRATÉGIAS DE MONITORAMENTO": "MONITORAMENTO" in texto_total_validacao,
+            "REFERÊNCIAS": "REFERÊNCIAS" in texto_total_validacao or "REFERENCIA" in texto_total_validacao
+        }
+    elif tipo_detectado == "POP":
+        # Conforme Quadro 1 - POP exige Definição, Aplicabilidade, Responsável, Materiais, Atividades Críticas, etc.
+        secoes_obrigatorias = {
+            "DEFINIÇÃO": "DEFINIÇÃO" in texto_total_validacao or "DEFINICAO" in texto_total_validacao,
+            "APLICABILIDADE": "APLICABILIDADE" in texto_total_validacao,
+            "RESPONSÁVEL PELA EXECUÇÃO": "RESPONSÁVEL" in texto_total_validacao or "RESPONSAVEL" in texto_total_validacao,
+            "MATERIAIS UTILIZADOS": "MATERIAIS" in texto_total_validacao,
+            "ATIVIDADES CRÍTICAS": "CRÍTICAS" in texto_total_validacao or "CRITICAS" in texto_total_validacao,
+            "REFERÊNCIAS": "REFERÊNCIAS" in texto_total_validacao or "REFERENCIA" in texto_total_validacao
+        }
+    elif tipo_detectado == "MANUAL":
+        # Conforme Quadro 1 - Manual exige Capa, Sumário, Apresentação, Descrição, etc.
+        secoes_obrigatorias = {
+            "SUMÁRIO": "SUMÁRIO" in texto_total_validacao or "SUMARIO" in texto_total_validacao,
+            "APRESENTAÇÃO": "APRESENTAÇÃO" in texto_total_validacao or "APRESENTACAO" in texto_total_validacao,
+            "DESCRIÇÃO DO MANUAL": "DESCRIÇÃO" in texto_total_validacao or "DESCRICAO" in texto_total_validacao,
+            "REFERÊNCIAS": "REFERÊNCIAS" in texto_total_validacao or "REFERENCIA" in texto_total_validacao
+        }
+    elif tipo_detectado == "NORMA":
+        secoes_obrigatorias = {
+            "INTRODUÇÃO": "INTRODUÇÃO" in texto_total_validacao,
+            "OBJETIVO": "OBJETIVO" in texto_total_validacao,
+            "APLICABILIDADE": "APLICABILIDADE" in texto_total_validacao,
+            "DESCRIÇÃO DA NORMA": "DESCRIÇÃO" in texto_total_validacao,
+            "RESPONSÁVEL": "RESPONSÁVEL" in texto_total_validacao,
+            "REFERÊNCIAS": "REFERÊNCIAS" in texto_total_validacao
+        }
 
-    termos_obrigatorios = requisitos_mapa.get(tipo_detectado, [])
-    erros_gravissimos = []
-
-    for termo in termos_obrigatorios:
-        if termo not in texto_total_validacao:
-            erros_gravissimos.append(f"⚠️ **OMISSÃO DE SEÇÃO CRÍTICA (Modelo {tipo_detectado}):** A seção contendo o termo obrigatório **'{termo}'** não foi localizada no arquivo.")
-
-    # --- ETAPA 3: EXTRAÇÃO INTELIGENTE DE CÓDIGO E VERSÃO ---
+    # --- ETAPA 3: EXTRAÇÃO E EXTRA-ABRANGÊNCIA DE CÓDIGO E VERSÃO ---
+    # Extrai o código sugerido do arquivo de forma inteligente para checar duplicidade
     codigo_doc = "NÃO IDENTIFICADO"
-    for table in doc_triagem.tables:
+    for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
                 txt = cell.text.strip()
                 if "CÓDIGO:" in txt.upper() or "CODIGO:" in txt.upper():
                     codigo_doc = txt.split(":")[-1].strip()
-                    break
 
-    if codigo_doc == "NÃO IDENTIFICADO" or len(codigo_doc) <= 2:
-        match_codigo = re.search(r'\b(PROT|POP|MAN|NOR|ROT|REG|POL|PLANC|PROG)_[A-Z0-9_\s-]+\b', texto_total_raw, re.IGNORECASE)
-        if match_codigo:
-            codigo_doc = match_codigo.group(0).strip()
-
-    versao_doc = "NÃO IDENTIFICADA"
-    for table in doc_triagem.tables:
+    versao_doc = "1ª"
+    for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
                 txt = cell.text.strip()
                 if "VERSÃO:" in txt.upper() or "VERSAO:" in txt.upper():
                     versao_doc = txt.split(":")[-1].strip()
-                    break
-
-    if versao_doc == "NÃO IDENTIFICADA" or not any(char.isdigit() for char in versao_doc):
-        match_versao = re.findall(r'\b(\d+ª|\d+ª\s*VERSÃO|\d+\.\d+)\b', texto_total_raw, re.IGNORECASE)
-        if match_versao:
-            versao_doc = match_versao[-1].strip()
 
     possui_codigo = codigo_doc != "NÃO IDENTIFICADO" and len(codigo_doc) > 2
-    possui_versao = versao_doc != "NÃO IDENTIFICADA" and any(char.isdigit() for char in versao_doc)
+    possui_versao = any(char.isdigit() for char in versao_doc)
 
-    if not possui_codigo: 
-        erros_gravissimos.append("❌ **CABEÇALHO INCOMPLETO:** Não foi possível extrair um 'CÓDIGO' válido da estrutura padrão.")
-    if not possui_versao: 
-        erros_gravissimos.append("❌ **CABEÇALHO INCOMPLETO:** Não foi possível determinar a 'VERSÃO' atualizada do documento.")
+    erros_gravissimos = []
+    if not possui_codigo: erros_gravissimos.append("❌ **CABEÇALHO INCOMPLETO:** O campo 'CÓDIGO' está ausente.")
+    if not possui_versao: erros_gravissimos.append("❌ **CABEÇALHO INCOMPLETO:** O campo 'VERSÃO' está ausente.")
+    
+    for secao, encontrada in secoes_obrigatorias.items():
+        if not encontrada: 
+            erros_gravissimos.append(f"❌ **OMISSÃO DE SEÇÃO CRÍTICA (Modelo {tipo_detectado}):** A seção obrigatória **'{secao}'** não foi localizada.")
 
-    # --- ETAPA 4: GERENCIADOR DE DUPLICIDADE ---
+    # --- ETAPA 4: GERENCIADOR DE DUPLICIDADE E VERSÕES DA LISTA MESTRA ---
     df_atual = st.session_state.historico_lista_mestra
+    
+    # Regra estrita solicitada: Evita duplicidade (Bloqueia se já existir o MESMO Código na MESMA Versão)
     is_duplicado = not df_atual[(df_atual["Código do Documento"] == codigo_doc) & (df_atual["Versão Atual"] == versao_doc)].empty
-
+    
     if is_duplicado:
-        erros_gravissimos.append(f"🚫 **BLOQUEIO DE DUPLICIDADE:** O documento **{codigo_doc}** já foi validado na versão **{versao_doc}**.")
+        erros_gravissimos.append(f"⛔ **BLOQUEIO DE DUPLICIDADE:** O documento **{codigo_doc}** já foi validado na versão **{versao_doc}**. Mude a versão no arquivo se isto for uma atualização!")
 
-    # --- ETAPA 5: PROCESSAMENTO GEOMÉTRICO E SAÍDA DE DOWNLOAD ---
+    # --- ETAPA 5: FORMATAÇÃO ESTÉTICA (SE APROVADO) ---
     if not erros_gravissimos:
-        # Atualização em tempo real do banco de dados na memória do servidor
-        if df_atual[(df_atual["Código do Documento"] == codigo_doc) & (df_atual["Versão Atual"] == versao_doc)].empty:
-            nova_linha = {
-                "Código do Documento": codigo_doc,
-                "Título do Documento": f"{tipo_detectado.capitalize()} de {codigo_doc}",
-                "Tipo": tipo_detectado,
-                "Versão Atual": versao_doc,
-                "Status": "Aprovado na Triagem",
-                "Data de Triagem": datetime.now().strftime("%d/%m/%Y %H:%M"),
-                "Situação": "Ativo"
-            }
-            st.session_state.historico_lista_mestra = pd.concat([df_atual, pd.DataFrame([nova_linha])], ignore_index=True)
+        st.success("✅ **TRIAGEM CONCLUÍDA COM SUCESSO!** Layout liberado.")
 
-        # Aplicar correções de layout em lote diretamente na estrutura do documento ativo
-        for section in doc_triagem.sections:
-            section.top_margin = Cm(2.0)
-            section.bottom_margin = Cm(2.0)
-            section.left_margin = Cm(2.0)
-            section.right_margin = Cm(3.0)
+        # 1. Registro Automático no Histórico da Lista Mestra
+        nova_linha = {
+            "Código do Documento": codigo_doc,
+            "Título do Documento": f"Protocolo/Diretriz de {tipo_detectado}",
+            "Tipo": tipo_detectado,
+            "Versão Atual": versao_doc,
+            "Status": "Aprovado na Triagem",
+            "Data de Triagem": datetime.now().strftime("%d/%m/%Y %H:%M"),
+            "Situação": "Ativo"
+        }
+        st.session_state.historico_lista_mestra = pd.concat([df_atual, pd.DataFrame([nova_linha])], ignore_index=True)
 
-        # Laço otimizado para formatação textual rápida (Calibri 11, Espaçamento 1.5, Justificado)
-        for paragraph in doc_triagem.paragraphs:
+        # 2. Configuração Geométrica das Margens (3x3x2x2)
+        for section in doc.sections:
+            section.top_margin = Cm(3.0)     
+            section.left_margin = Cm(3.0)    
+            section.bottom_margin = Cm(2.0)  
+            section.right_margin = Cm(2.0)   
+
+        # 3. Formatação do Corpo do Texto e Listas Numéricas (Calibri 11)
+        for paragraph in doc.paragraphs:
             texto_limpo = paragraph.text.strip()
             if "REFERÊNCIAS" in texto_limpo.upper() or "REFERENCIA" in texto_limpo.upper():
                 continue
+                
             paragraph.paragraph_format.space_before = Pt(4)
             paragraph.paragraph_format.space_after = Pt(4)
             paragraph.paragraph_format.line_spacing = 1.5
@@ -185,12 +194,4 @@ if arquivo_word:
                 paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
                 paragraph.paragraph_format.left_indent = Cm(0)
                 paragraph.paragraph_format.first_line_indent = Cm(1.25)
-
-        # Gravação binária isolada (EVITA SINTAXE QUEBRADA)
-        conteudo_saida = BytesIO()
-        doc_triagem.save(conteudo_saida)
-        conteudo_saida.seek(0)
-        dados_finais_word = conteudo_saida.getvalue()
-
-        # Botão limpo sem funções embutidas como parâmetro
-        st.download_button(
+            
