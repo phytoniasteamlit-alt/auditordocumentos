@@ -3,6 +3,7 @@ import pandas as pd
 import zipfile
 import mailbox
 import io
+import os
 import re
 from docx import Document
 from datetime import datetime, timedelta
@@ -56,7 +57,7 @@ if arquivo_excel and arquivo_zip:
                 
                 codigos_na_planilha = set(df_oficial["CÓD. DO DOCUMENTO"].dropna().str.strip().str.upper())
                 SEU_EMAIL = "documentos.soc2@gmail.com"
-                documentos_fantasmas = [] 
+                documentos_fantasmas = []
                 
                 # 2. Abre o giga-arquivo local na memória do Ryzen 5
                 with zipfile.ZipFile(arquivo_zip, 'r') as z:
@@ -73,13 +74,11 @@ if arquivo_excel and arquivo_zip:
                                 data_msg = formatar_data_gmail(msg["date"])
                                 remetente = str(msg["from"])
                                 
-                                # TRAVA REGEX ESTRITA: Só captura se seguir a padronização exata de siglas da Norma Zero
+                                # TRAVA REGEX ESTRITA
                                 match_codigo = re.search(r'\b(POP|ROT|NOR|PROT|REG|MANUAL)_[A-Z0-9_]+', assunto)
-                                
                                 if match_codigo:
                                     codigo_detectado = match_codigo.group(0).strip()
                                     
-                                    # Valida se possui anexo Word legítimo antes de catalogar como documento omitido
                                     possui_docx = False
                                     if msg.is_multipart():
                                         for part in msg.walk():
@@ -106,14 +105,12 @@ if arquivo_excel and arquivo_zip:
                                 if pd.isna(codigo_doc) or codigo_doc in ["NAN", ""]:
                                     continue
                                 
-                                # FILTRO CRÍTICO ANTI-CONFUSÃO: Isola apenas mensagens do código atual
+                                # FILTRO CRÍTICO ANTI-CONFUSÃO
                                 emails_do_doc = [m for m in mbox if codigo_doc in str(m["subject"]).upper()]
                                 if not emails_do_doc:
                                     continue
                                     
-                                # Se houver menção de versão na planilha, filtra e-mails de outras versões para evitar colisões
                                 if versao_doc != "nan" and versao_doc != "":
-                                    # Se a planilha busca a 1ª versão, descarta e-mails que tragam marcas explícitas de revisões futuras
                                     if "1" in versao_doc:
                                         emails_do_doc = [m for m in emails_do_doc if "2ª" not in str(m["subject"]).lower() and "3ª" not in str(m["subject"]).lower()]
                                     elif "2" in versao_doc:
@@ -122,31 +119,32 @@ if arquivo_excel and arquivo_zip:
                                 if not emails_do_doc:
                                     continue
                                     
-                                primeiro_email = emails_do_doc
+                                # CORREÇÃO TÉCNICA: Captura o primeiro e-mail indexado
+                                primeiro_email = emails_do_doc[0]
                                 
-                                # 🛡️ TRAVA DE SEGURANÇA MÁXIMA: pd.isna() garante que NUNCA vai apagar ou sobrescrever seus dados manuais
+                                # TRAVA DE SEGURANÇA MÁXIMA
                                 if pd.isna(df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 1ª VERIFICAÇÃO"]) or str(df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 1ª VERIFICAÇÃO"]).strip() == "":
                                     df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 1ª VERIFICAÇÃO"] = formatar_data_gmail(primeiro_email["date"])
                                 
                                 df_oficial.at[idx, "1ª VERIFICAÇÃO EZEQUIAS"] = "OK"
                                 
-                                # Parâmetro de estimativa inteligente para o início esquecido pelas meninas (D+1)
+                                # Estimativa inteligente (D+1)
                                 if pd.isna(df_oficial.at[idx, "INÍCIO DA 1ª VERIFICAÇÃO DO RESPONSÁVEL"]) or str(df_oficial.at[idx, "INÍCIO DA 1ª VERIFICAÇÃO DO RESPONSÁVEL"]).strip() == "":
                                     data_ref = df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 1ª VERIFICAÇÃO"]
-                                    if pd.notna(data_ref):
-                                        dt_ref = datetime.strptime(str(data_ref), '%d/%m/%Y')
-                                        df_oficial.at[idx, "INÍCIO DA 1ª VERIFICAÇÃO DO RESPONSÁVEL"] = (dt_ref + timedelta(days=1)).strftime('%d/%m/%Y')
+                                    if pd.notna(data_ref) and str(data_ref).strip() != "":
+                                        try:
+                                            dt_ref = datetime.strptime(str(data_ref), '%d/%m/%Y')
+                                            df_oficial.at[idx, "INÍCIO DA 1ª VERIFICAÇÃO DO RESPONSÁVEL"] = (dt_ref + timedelta(days=1)).strftime('%d/%m/%Y')
+                                        except:
+                                            pass
                                 
                                 # Rastreio da 2ª Verificação
                                 emails_2v = [m for m in emails_do_doc if SEU_EMAIL not in str(m["from"]) and m != primeiro_email]
                                 if emails_2v:
-                                    segundo_email = emails_2v
+                                    # CORREÇÃO TÉCNICA: Captura o primeiro e-mail indexado da 2a fase
+                                    segundo_email = emails_2v[0]
+                                    
                                     if pd.isna(df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 2ª VERIFICAÇÃO"]) or str(df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 2ª VERIFICAÇÃO"]).strip() == "":
                                         df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 2ª VERIFICAÇÃO"] = formatar_data_gmail(segundo_email["date"])
                                         df_oficial.at[idx, "2ª VERIFICAÇÃO EZEQUIAS"] = "OK"
                                         
-                                        if pd.isna(df_oficial.at[idx, "INÍCIO DA 2ª VERIFICAÇÃO DO RESPONSÁVEL"]) or str(df_oficial.at[idx, "INÍCIO DA 2ª VERIFICAÇÃO DO RESPONSÁVEL"]).strip() == "":
-                                            dt_2v = datetime.strptime(df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 2ª VERIFICAÇÃO"], '%d/%m/%Y')
-                                            df_oficial.at[idx, "INÍCIO DA 2ª VERIFICAÇÃO DO RESPONSÁVEL"] = (dt_2v + timedelta(days=1)).strftime('%d/%m/%Y')
-
-                                # Análise do Fechamento de Ciclo por Leitura Interna do Anexo Word
