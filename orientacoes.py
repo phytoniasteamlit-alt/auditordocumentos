@@ -48,52 +48,11 @@ def set_cell_margins(cell, top=100, bottom=100, left=150, right=150):
         tcMar.append(node)
     tcPr.append(tcMar)
 
-# --- 3. FUNÇÃO DE PROCESSAMENTO PESADO (RODA SÓ NO CLIQUE DO BOTÃO) ---
-def formatar_documento_pesado(documento_carregado):
-    doc = docx.Document(documento_carregado)
-    
-    # Limpeza de Parágrafos Fantasmas
-    p_indices_remover = [i for i, p in enumerate(doc.paragraphs) if not p.text.strip()]
-    for index in sorted(p_indices_remover, reverse=True):
-        p_element = doc.paragraphs[index]._element
-        p_element.getparent().remove(p_element)
-        
-    # Configuração Geométrica Oficial (Quadro 4: Sup 2 / Inf 2 / Esquer 2 / Dir 3)
-    for section in doc.sections:
-        section.top_margin = Cm(2.0)
-        section.bottom_margin = Cm(2.0)
-        section.left_margin = Cm(2.0)
-        section.right_margin = Cm(3.0)
-
-    # Formatação do Corpo de Texto (Calibri 11, Espaçamento 1.5, Justificado)
-    for paragraph in doc.paragraphs:
-        texto_limpo = paragraph.text.strip()
-        if "REFERÊNCIAS" in texto_limpo.upper() or "REFERENCIA" in texto_limpo.upper():
-            continue
-            
-        paragraph.paragraph_format.space_before = Pt(4)
-        paragraph.paragraph_format.space_after = Pt(4)
-        paragraph.paragraph_format.line_spacing = 1.5
-        
-        primeiros_caracteres = texto_limpo[:8]
-        if primeiros_caracteres and (primeiros_caracteres.replace('.', '').isdigit() or ')' in primeiros_caracteres):
-            paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
-            paragraph.paragraph_format.left_indent = Cm(1.25)
-            paragraph.paragraph_format.first_line_indent = Cm(-1.25)
-        else:
-            paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-            paragraph.paragraph_format.left_indent = Cm(0)
-            paragraph.paragraph_format.first_line_indent = Cm(1.25)
-            
-    conteudo_saida = BytesIO()
-    doc.save(conteudo_saida)
-    conteudo_saida.seek(0)
-    return conteudo_saida
-
-# --- 4. FLUXO DE CARREGAMENTO DO ARQUIVO ---
+# --- 3. FLUXO DE CARREGAMENTO DO ARQUIVO ---
 arquivo_word = st.file_uploader("Arraste o documento WORD (.docx) aqui para Triagem e Formatação", type=["docx"])
 
 if arquivo_word:
+    # Leitura rápida de triagem em memória estruturada
     doc_triagem = docx.Document(arquivo_word)
     
     texto_corpo_raw = " ".join([p.text.strip() for p in doc_triagem.paragraphs])
@@ -101,7 +60,7 @@ if arquivo_word:
     texto_total_raw = texto_corpo_raw + " " + texto_tabelas_raw
     texto_total_validacao = texto_total_raw.upper()
     
-    # --- ETAPA 1: IDENTIFICAÇÃO DINÂMICA DO TIPO ---
+    # --- ETAPA 1: IDENTIFICAÇÃO DINÂMICA DO TIPO (9 MODELOS DO MANUAL) ---
     tipo_detectado = "NORMA"
     if "PROTOCOLO" in texto_total_validacao or "PROT_" in texto_total_validacao:
         tipo_detectado = "PROTOCOLO"
@@ -186,8 +145,9 @@ if arquivo_word:
     if is_duplicado:
         erros_gravissimos.append(f"🚫 **BLOQUEIO DE DUPLICIDADE:** O documento **{codigo_doc}** já foi validado na versão **{versao_doc}**.")
 
-    # --- ETAPA 5: EXIBIÇÃO DOS RESULTADOS ---
+    # --- ETAPA 5: PROCESSAMENTO GEOMÉTRICO E SAÍDA DE DOWNLOAD ---
     if not erros_gravissimos:
+        # Atualização em tempo real do banco de dados na memória do servidor
         if df_atual[(df_atual["Código do Documento"] == codigo_doc) & (df_atual["Versão Atual"] == versao_doc)].empty:
             nova_linha = {
                 "Código do Documento": codigo_doc,
@@ -200,3 +160,37 @@ if arquivo_word:
             }
             st.session_state.historico_lista_mestra = pd.concat([df_atual, pd.DataFrame([nova_linha])], ignore_index=True)
 
+        # Aplicar correções de layout em lote diretamente na estrutura do documento ativo
+        for section in doc_triagem.sections:
+            section.top_margin = Cm(2.0)
+            section.bottom_margin = Cm(2.0)
+            section.left_margin = Cm(2.0)
+            section.right_margin = Cm(3.0)
+
+        # Laço otimizado para formatação textual rápida (Calibri 11, Espaçamento 1.5, Justificado)
+        for paragraph in doc_triagem.paragraphs:
+            texto_limpo = paragraph.text.strip()
+            if "REFERÊNCIAS" in texto_limpo.upper() or "REFERENCIA" in texto_limpo.upper():
+                continue
+            paragraph.paragraph_format.space_before = Pt(4)
+            paragraph.paragraph_format.space_after = Pt(4)
+            paragraph.paragraph_format.line_spacing = 1.5
+            
+            primeiros_caracteres = texto_limpo[:8]
+            if primeiros_caracteres and (primeiros_caracteres.replace('.', '').isdigit() or ')' in primeiros_caracteres):
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                paragraph.paragraph_format.left_indent = Cm(1.25)
+                paragraph.paragraph_format.first_line_indent = Cm(-1.25)
+            else:
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+                paragraph.paragraph_format.left_indent = Cm(0)
+                paragraph.paragraph_format.first_line_indent = Cm(1.25)
+
+        # Gravação binária direta em bloco para contornar gargalos de Timeout
+        conteudo_saida = BytesIO()
+        doc_triagem.save(conteudo_saida)
+        conteudo_saida.seek(0)
+
+        # Botão de ação explícito fixado acima do aviso de sucesso
+        st.download_button(
+            label="📥 CLIQUE AQUI PARA BAIXAR O DOCUMENTO FORMATADO",
