@@ -11,7 +11,7 @@ from io import BytesIO
 # --- 1. CONFIGURAÇÃO DA PÁGINA STREAMLIT ---
 st.set_page_config(page_title="Formatador de Documentos NAQH", page_icon="📊", layout="wide")
 
-# Menu Lateral - Identificação Visual do Operador (Ezequias Santos Agt Administrativo)
+# Menu Lateral - Identificação Visual do Operador Garantida
 with st.sidebar:
     st.markdown("### 🧑‍💻 Operador")
     st.markdown("**Ezequias Santos**\n*Agt Administrativo*")
@@ -20,14 +20,14 @@ with st.sidebar:
 st.title("Triagem Avançada & Formatador Automático - NAQH")
 st.markdown("""
 ### 🧠 Inteligência XML Avançada contra Vazamento de Cabeçalho
-O sistema isola as tabelas flutuantes superiores, impedindo que o texto do corpo invada o cabeçalho e **eliminando de forma definitiva todas as páginas em branco**.
+O sistema isola de forma estrita as tabelas estruturais de cabeçalho flutuante, impedindo o vazamento de texto do corpo e **eliminando em 100% as páginas em branco artificiais**.
 """)
 
-# --- 2. MOTOR DE CORREÇÃO TEXTUAL E SELEÇÃO DE TABELAS DE CONTEÚDO ---
+# --- 2. MOTOR DE CORREÇÃO TEXTUAL COM PROTEÇÃO DE TABELAS ---
 def formatar_corpo_com_seguranca(doc):
-    """Aplica recuos da Norma Zero apenas no texto livre, protegendo tabelas estruturais"""
+    """Garante recuos simétricos no texto e blinda as caixas do cabeçalho institucional"""
     
-    # REGRA 1: AJUSTE DE TEXTO E LISTAS GRUDADAS
+    # 1. Ajuste e Alinhamento de Parágrafos
     for paragraph in doc.paragraphs:
         texto_limpo = paragraph.text.strip()
         
@@ -37,7 +37,6 @@ def formatar_corpo_com_seguranca(doc):
         if "REFERÊNCIAS" in texto_limpo.upper() or "REFERENCIA" in texto_limpo.upper():
             continue
             
-        # Padrões obrigatórios: entrelinhas 1.5 e espaçamento vertical
         paragraph.paragraph_format.space_before = Pt(4)
         paragraph.paragraph_format.space_after = Pt(4)
         paragraph.paragraph_format.line_spacing = 1.5
@@ -47,7 +46,7 @@ def formatar_corpo_com_seguranca(doc):
                 run.font.name = 'Calibri'
                 run.font.size = Pt(11)
 
-        # Trata alinhamento de listas e letras (ex: g), h)) colando o texto na numeração
+        # Trata os subitens e marcadores de pontos para colarem nas letras de forma correta
         is_subitem_letra = re.match(r'^[a-z]\s*\)', texto_limpo, re.IGNORECASE)
         is_marcador_ponto = texto_limpo.startswith('•') or paragraph.style.name.startswith('List')
         is_numeracao_composta = re.match(r'^(\d+(\.\d+)*\.?)\s*', texto_limpo)
@@ -57,24 +56,25 @@ def formatar_corpo_com_seguranca(doc):
             paragraph.paragraph_format.left_indent = Cm(0.5)
             paragraph.paragraph_format.first_line_indent = Cm(0)
         else:
-            # Parágrafos normais longos (Objetivo, Referencial) recebem recuo americano de 1,25 cm
+            # Texto comum (Objetivo, Referencial Teórico) recebe recuo de primeira linha de 1,25 cm
             paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
             paragraph.paragraph_format.left_indent = Cm(0)
             paragraph.paragraph_format.first_line_indent = Cm(1.25)
 
-    # REGRA 2: FILTRO SELETIVO DE TABELAS (Garante o Quadro 1 perfeito e protege o cabeçalho)
+    # 2. Filtro de Isolamento de Cabeçalho (Evita o vazamento dos textos para as células superiores)
     for table in doc.tables:
-        # Pega o texto da primeira célula para identificar se é o cabeçalho institucional ou de assinaturas
         texto_primeira_celula = ""
-        if table.rows and table.rows[0].cells:
-            texto_primeira_celula = table.rows[0].cells[0].text.upper()
-            
-        # SE FOR CABEÇALHO INSTITUCIONAL OU BLOCO DE ASSINATURA, O SCRIPT PULA E NÃO MEXE
-        # Isso impede que o texto do corpo vaze para dentro da caixinha dos logos!
-        if "TIPO DE DOCUMENTO" in texto_primeira_celula or "SÃO LUÍS" in texto_primeira_celula or "ELABORAÇÃO" in texto_primeira_celula:
+        try:
+            if table.rows and table.rows[0].cells:
+                texto_primeira_celula = table.rows[0].cells[0].text.upper()
+        except Exception:
             continue
             
-        # Aplica alinhamento e unificação APENAS nas tabelas de dados (Quadro 1, Quadro 2 e Apêndices)
+        # SE FOR IDENTIFICADO COMO TABELA DE CABEÇALHO OU ASSINATURA, O ROBÔ NÃO TOCA NELA
+        if "TIPO DE DOCUMENTO" in texto_primeira_celula or "SÃO LUÍS" in texto_primeira_celula or "ELABORAÇÃO" in texto_primeira_celula or "CÓDIGO" in texto_primeira_celula:
+            continue
+            
+        # Aplica a unificação de linhas APENAS em tabelas de dados reais (Quadro 1, Quadro 2, etc.)
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
         for row in table.rows:
             trPr = row._element.get_or_add_trPr()
@@ -83,11 +83,12 @@ def formatar_corpo_com_seguranca(doc):
             if not row._element.xpath('w:trPr/w:keepNext'):
                 trPr.append(OxmlElement('w:keepNext'))
 
-# --- 3. MOTOR XML DIRETO (FORÇA GEOMETRIA DE MARGENS DA NORMA ZERO) ---
+# --- 3. MOTOR XML DIRETO (FORÇA GEOMETRIA DE MARGENS 2x2x2x3 CM) ---
 def processar_layout_xml_blindado(arquivo_bytes):
+    # Dimensões exatas da Norma Zero convertidas para dxa: 2.0cm = 1134 dxa / 3.0cm = 1701 dxa
     top_dxa, bottom_dxa, left_dxa, right_dxa = "1134", "1134", "1134", "1701"
     
-    # 1. Roda a formatação e proteção seletiva de tabelas na biblioteca estrutural
+    # Executa as correções de estrutura e isolamento primeiro
     stream_temp = BytesIO(arquivo_bytes)
     doc_alinhado = docx.Document(stream_temp)
     formatar_corpo_com_seguranca(doc_alinhado)
@@ -96,7 +97,7 @@ def processar_layout_xml_blindado(arquivo_bytes):
     doc_alinhado.save(buffer_intermediario)
     bytes_limpos = buffer_intermediario.getvalue()
     
-    # 2. Injeta as margens direto no documento XML nativo preservando imagens e mídias originais
+    # Gravação direta no arquivo XML nativo para manter as imagens e logos intocados
     zip_original = zipfile.ZipFile(BytesIO(bytes_limpos))
     buffer_saida = BytesIO()
     
@@ -107,7 +108,7 @@ def processar_layout_xml_blindado(arquivo_bytes):
             if item.filename == "word/document.xml":
                 xml_texto = conteudo.decode("utf-8")
                 
-                # Injeção das Margens Oficiais (2.0 cm Superior/Inferior/Esquerda e 3.0 cm Direita)
+                # Injeta a configuração geométrica de margens na página
                 xml_texto = re.sub(r'w:top="[^"]*"', f'w:top="{top_dxa}"', xml_texto)
                 xml_texto = re.sub(r'w:bottom="[^"]*"', f'w:bottom="{bottom_dxa}"', xml_texto)
                 xml_texto = re.sub(r'w:left="[^"]*"', f'w:left="{left_dxa}"', xml_texto)
@@ -141,7 +142,7 @@ if arquivo_word:
     if match_codigo:
         codigo_doc = match_codigo.group(0).strip().upper().replace(" ", "")
 
-    # Processamento seguro com isolamento de cabeçalho
+    # Processa o documento ativando as travas de proteção contra vazamentos
     dados_finais = processar_layout_xml_blindado(dados_brutos)
 
     st.download_button(
@@ -150,4 +151,4 @@ if arquivo_word:
         file_name=f"{codigo_doc}_Formatado_Homologado.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
-    st.success(f"✅ **TRIAGEM CONCLUÍDA COM SUCESSO!** Tabela superior isolada, vazamento de texto bloqueado e páginas em branco eliminadas.")
+    st.success(f"✅ **TRIAGEM CONCLUÍDA COM SUCESSO!** Vazamento de células bloqueado, textos de subseções alinhados e páginas vazias eliminadas.")
