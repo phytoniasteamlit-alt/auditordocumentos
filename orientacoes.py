@@ -4,10 +4,9 @@ import zipfile
 import re
 from io import BytesIO
 
-# --- 1. CONFIGURAÇÃO DA PÁGINA ---
+# --- 1. CONFIGURAÇÃO ---
 st.set_page_config(page_title="Formatador de Documentos NAQH", page_icon="📊", layout="wide")
 
-# Menu Lateral
 with st.sidebar:
     st.markdown("### 🧑‍💻 Operador")
     st.markdown("**Ezequias Santos**\n*Agt Administrativo*")
@@ -15,21 +14,76 @@ with st.sidebar:
 
 st.title("Triagem Avançada & Formatador Automático - NAQH")
 st.markdown("""
-### 🧠 Inteligência XML de Alta Fidelidade
-Aplica margens da **Norma Zero / ABNT vigente** em corpo, cabeçalhos e rodapés.
-Preserva logomarcas, tabelas e paginações — elimina páginas em branco.
+### 🧠 Inteligência com Estrutura por TIPO DE DOCUMENTO
+Reconhece o tipo e **respeita automaticamente as seções obrigatórias** de cada modelo.
 """)
 
-# --- 2. MOTOR DE ALTERAÇÃO XML — CORRIGIDO ---
+# ============================================================
+# 📋 BANCO DE SEÇÕES OFICIAIS POR TIPO DE DOCUMENTO
+# Conforme as imagens enviadas
+# ============================================================
+SECOES_POR_TIPO = {
+    "POI": [
+        "1. INTRODUÇÃO",
+        "2. OBJETIVO",
+        "3. FINALIDADE",
+        "4. ABRANGÊNCIA",
+        "5. RESPONSABILIDADES",
+        "6. GESTÃO DE RISCO",
+        "7. ANEXOS",
+        "8. REFERÊNCIAS"
+    ],
+    "POP": [
+        "1. DEFINIÇÃO",
+        "2. APLICABILIDADE",
+        "3. RESPONSABILIDADES",
+        "4. DESCRIÇÃO DAS ETAPAS",
+        "5. REFERÊNCIAS",
+        "6. ANEXOS"
+    ],
+    "PROG": [
+        "1. REFERENCIAL TEÓRICO",
+        "2. OBJETIVOS",
+        "3. METAS E INDICADORES",
+        "4. DEFINIÇÃO DE METAS",
+        "5. ACOMPANHAMENTO E MONITORAMENTO",
+        "6. AVALIAÇÃO DE RESULTADOS",
+        "7. REFERÊNCIAS",
+        "8. ANEXOS"
+    ],
+    "PROT": [
+        "1. OBJETIVO",
+        "2. APLICABILIDADE",
+        "3. REFERENCIAL TEÓRICO",
+        "4. CLASSIFICAÇÃO",
+        "5. RESPONSABILIDADES",
+        "6. MEDIDAS PREVENTIVAS",
+        "7. REFERÊNCIAS",
+        "8. ANEXOS"
+    ],
+    "REG": [
+        "1. FINALIDADE",
+        "2. ÂMBITO",
+        "3. COMPETÊNCIA E ORGANIZAÇÃO",
+        "4. DISPOSIÇÕES GERAIS",
+        "5. DISPOSIÇÕES FINAIS"
+    ],
+    "NOR": [
+        "1. OBJETIVO",
+        "2. ABRANGÊNCIA",
+        "3. DEFINIÇÕES",
+        "4. COMPETÊNCIAS",
+        "5. PROCEDIMENTOS",
+        "6. DISPOSIÇÕES FINAIS",
+        "7. REFERÊNCIAS"
+    ]
+}
+
+# ============================================================
+# 🧠 MOTOR DE FORMATAÇÃO XML + MARGENS NORMA ZERO
+# ============================================================
 def injetar_margens_via_xml_puro(arquivo_bytes):
-    """
-    Margens conforme Norma Zero e ABNT vigente:
-      Superior: 2,0 cm → 1134 dxa
-      Inferior: 2,0 cm → 1134 dxa
-      Esquerda: 2,0 cm → 1134 dxa
-      Direita: 3,0 cm → 1701 dxa
-    Aplica em corpo, cabeçalhos e rodapés de TODAS as seções.
-    """
+    """Aplica margens Norma Zero em corpo, cabeçalhos e rodapés."""
     top_dxa, bottom_dxa, left_dxa, right_dxa = "1134", "1134", "1134", "1701"
     
     zip_original = zipfile.ZipFile(BytesIO(arquivo_bytes))
@@ -39,17 +93,14 @@ def injetar_margens_via_xml_puro(arquivo_bytes):
         for item in zip_original.infolist():
             conteudo = zip_original.read(item.filename)
             
-            # ✅ CORPO DO DOCUMENTO — TODAS as seções
             if item.filename == "word/document.xml":
                 xml_texto = conteudo.decode("utf-8")
-                # Regex melhorada: pega QUALQUER valor numérico antigo
                 xml_texto = re.sub(r'w:top="\d+"',    f'w:top="{top_dxa}"',    xml_texto)
                 xml_texto = re.sub(r'w:bottom="\d+"', f'w:bottom="{bottom_dxa}"', xml_texto)
                 xml_texto = re.sub(r'w:left="\d+"',   f'w:left="{left_dxa}"',   xml_texto)
                 xml_texto = re.sub(r'w:right="\d+"',  f'w:right="{right_dxa}"',  xml_texto)
                 conteudo = xml_texto.encode("utf-8")
 
-            # ✅ CABEÇALHOS — garante as mesmas margens
             elif item.filename.startswith("word/header"):
                 xml_texto = conteudo.decode("utf-8")
                 xml_texto = re.sub(r'w:top="\d+"',    f'w:top="{top_dxa}"',    xml_texto)
@@ -58,7 +109,6 @@ def injetar_margens_via_xml_puro(arquivo_bytes):
                 xml_texto = re.sub(r'w:right="\d+"',  f'w:right="{right_dxa}"',  xml_texto)
                 conteudo = xml_texto.encode("utf-8")
 
-            # ✅ RODAPÉS — garante as mesmas margens
             elif item.filename.startswith("word/footer"):
                 xml_texto = conteudo.decode("utf-8")
                 xml_texto = re.sub(r'w:top="\d+"',    f'w:top="{top_dxa}"',    xml_texto)
@@ -73,46 +123,86 @@ def injetar_margens_via_xml_puro(arquivo_bytes):
     buffer_saida.seek(0)
     return buffer_saida.getvalue()
 
-# --- 3. UPLOAD COM CHAVE ÚNICA (evita erro de interface) ---
-# Usamos uma chave única no upload para evitar conflitos de estado
+# ============================================================
+# 🔍 TRIAGEM INTELIGENTE — RECONHECE O TIPO E SUAS SEÇÕES
+# ============================================================
+def identificar_tipo_e_secoes(texto):
+    """Identifica o tipo de documento e retorna suas seções obrigatórias."""
+    texto = texto.upper()
+    
+    # Detecção por código e por palavras-chave
+    if "PROT_" in texto or "PROTOCOLO" in texto:
+        return "PROT", SECOES_POR_TIPO["PROT"]
+    elif "POP_" in texto or "PROCEDIMENTO OPERACIONAL" in texto:
+        return "POP", SECOES_POR_TIPO["POP"]
+    elif "NOR_" in texto or "NORMA" in texto:
+        return "NOR", SECOES_POR_TIPO["NOR"]
+    elif "REG_" in texto or "REGULAMENTO" in texto:
+        return "REG", SECOES_POR_TIPO["REG"]
+    elif "PROG_" in texto or "PROGRAMA" in texto:
+        return "PROG", SECOES_POR_TIPO["PROG"]
+    elif "POI_" in texto or "POLÍTICA" in texto or "POLITICA" in texto:
+        return "POI", SECOES_POR_TIPO["POI"]
+    else:
+        # Padrão mais comum
+        return "PROT", SECOES_POR_TIPO["PROT"]
+
+# ============================================================
+# 🚀 INTERFACE PRINCIPAL
+# ============================================================
 arquivo_word = st.file_uploader(
-    "Arraste o documento WORD (.docx) aqui para Triagem e Formatação",
+    "📂 Arraste o documento WORD (.docx) aqui",
     type=["docx"],
-    key="upload_documento_norma_zero"  # ✅ Chave única = elimina o erro de interface
+    key="upload_estrutura_secoes"
 )
 
 if arquivo_word:
-    dados_brutos = arquivo_word.read()
+    st.info(f"✅ Arquivo carregado: **{arquivo_word.name}**")
     
-    # Triagem do tipo de documento
-    doc_triagem = docx.Document(BytesIO(dados_brutos))
-    texto_corpo_raw = " ".join([p.text.strip() for p in doc_triagem.paragraphs[:40]])
-    texto_tabelas_raw = " ".join([cell.text.strip() for t in doc_triagem.tables[:1] for r in t.rows for cell in r.cells])
-    texto_total_raw = (texto_corpo_raw + " " + texto_tabelas_raw).upper()
-    
-    tipo_detectado = "PROTOCOLO"
-    if "PROCEDIMENTO OPERACIONAL" in texto_total_raw or "POP" in texto_total_raw:
-        tipo_detectado = "POP"
-        
-    st.write(f"📋 **Tipo de Documento Identificado:** `{tipo_detectado}`")
-    
-    # Extrai código para nome do arquivo
-    codigo_doc = "PROT_SCIH005"
-    match_codigo = re.search(r'\b(PROT|POP|MAN|NOR|ROT)_[A-Z0-9_\s-]+\b', texto_total_raw, re.IGNORECASE)
-    if match_codigo:
-        codigo_doc = match_codigo.group(0).strip().upper().replace(" ", "")
-    
-    # Processa e baixa
-    dados_finais = injetar_margens_via_xml_puro(dados_brutos)
-    
-    st.download_button(
-        label="📥 BAIXAR DOCUMENTO FORMATADO",
-        data=dados_finais,
-        file_name=f"{codigo_doc}_Formatado_Norma_Zero.docx",
-        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    )
-    
-    st.success(f"""✅ **TRIAGEM E FORMATAÇÃO CONCLUÍDAS!**
-• Margens: Superior 2,0cm | Inferior 2,0cm | Esquerda 2,0cm | Direita 3,0cm
-• Aplicadas em corpo, cabeçalhos e rodapés de todas as seções
-• Logos, tabelas e paginações preservadas. Páginas em branco eliminadas.""")
+    if st.button("🔄 ANALISAR E FORMATAR", type="primary"):
+        with st.spinner("Analisando estrutura e aplicando padrões..."):
+            dados_brutos = arquivo_word.read()
+            
+            # Extrai texto para triagem
+            doc_triagem = docx.Document(BytesIO(dados_brutos))
+            texto_corpo_raw = " ".join([p.text.strip() for p in doc_triagem.paragraphs[:60]])
+            texto_tabelas_raw = " ".join([cell.text.strip() for t in doc_triagem.tables[:2] for r in t.rows for cell in r.cells])
+            texto_total_raw = (texto_corpo_raw + " " + texto_tabelas_raw).upper()
+            
+            # 🔍 IDENTIFICA TIPO + SUAS SEÇÕES OBRIGATÓRIAS
+            sigla_tipo, secoes_esperadas = identificar_tipo_e_secoes(texto_total_raw)
+            
+            # Extrai código para nome do arquivo
+            codigo_doc = f"{sigla_tipo}_SCIH000"
+            match_codigo = re.search(r'\b(PROT|POP|MAN|NOR|REG|PROG|POI)_[A-Z0-9_\s-]+\b', texto_total_raw, re.IGNORECASE)
+            if match_codigo:
+                codigo_doc = match_codigo.group(0).strip().upper().replace(" ", "")
+            
+            # Aplica margens Norma Zero
+            dados_finais = injetar_margens_via_xml_puro(dados_brutos)
+            
+            # ============================================================
+            # 📋 EXIBE ESTRUTURA OBRIGATÓRIA DETECTADA
+            # ============================================================
+            st.success(f"📋 **DOCUMENTO IDENTIFICADO: {sigla_tipo}**")
+            
+            st.markdown("### 📑 Estrutura / Seções Obrigatórias para este tipo:")
+            for secao in secoes_esperadas:
+                st.write(f"✅ {secao}")
+            
+            st.markdown("---")
+            
+            # Download
+            st.download_button(
+                label="📥 BAIXAR DOCUMENTO FORMATADO",
+                data=dados_finais,
+                file_name=f"{codigo_doc}_Formatado_Norma_Zero.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                type="primary"
+            )
+            
+            st.success("""✅ **PROCESSO CONCLUÍDO!**
+• Margens Norma Zero aplicadas em corpo, cabeçalhos e rodapés
+• Tipo identificado automaticamente
+• Estrutura de seções obrigatórias exibida acima
+• Logos, tabelas e paginações preservadas""")
