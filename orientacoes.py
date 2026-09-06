@@ -95,4 +95,4 @@ if arquivo_word:
         file_name=f"{codigo_doc}_Formatado_Homologado.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
-    st.success(f"✅ **TRIAGEM CONCLUÍDA COM SUCESSO!** As margens de {tipo_detectado.capitalize()} foram atualizadas para o padrão institucional (2x2x2x3 cm) com preservação absoluta de cabeçalhos, logos e paginações nativas.")
+    st.success(f"✅ **TRIAGEM CONCLUÍDA COM SUCESSO!** As margens foram atualizadas para o padrão institucional (2x2x2x3 cm) com preservação absoluta de cabeçalhos, logos e sem gerar páginas vazias.")
