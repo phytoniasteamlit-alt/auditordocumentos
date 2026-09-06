@@ -3,7 +3,6 @@ import docx
 import zipfile
 import re
 from io import BytesIO
-import time
 
 # --- 1. CONFIGURAÇÃO ---
 st.set_page_config(page_title="Formatador de Documentos NAQH", page_icon="📊", layout="wide")
@@ -15,9 +14,10 @@ with st.sidebar:
 
 st.title("Triagem Avançada & Formatador Automático - NAQH")
 st.markdown("""
-### 🧠 CORRIGIDO — Margens ABNT + Recuo 1,25cm + RÁPIDO
-✅ Superior: 3,0cm • Esquerda: 3,0cm • Inferior: 2,0cm • Direita: 2,0cm
-✅ Recuo de 1,25cm na 1ª linha • Títulos/listas SEM recuo
+### 🧠 SEU Cabeçalho Correto = Padrão para Todo o Documento
+✅ Copia o cabeçalho já ajustado por você para TODAS as páginas
+✅ Margens: Sup 3,0cm • Esq 3,0cm • Inf 2,0cm • Dir 2,0cm
+✅ Recuo 1,25cm na 1ª linha • Títulos/listas SEM recuo
 """)
 
 # ============================================================
@@ -32,7 +32,6 @@ SECOES_POR_TIPO = {
     "NOR": ["1. OBJETIVO", "2. ABRANGÊNCIA", "3. DEFINIÇÕES", "4. COMPETÊNCIAS", "5. PROCEDIMENTOS", "6. DISPOSIÇÕES FINAIS", "7. REFERÊNCIAS"]
 }
 
-# Termos que NÃO devem ter recuo
 NAO_RECUAR = [
     "OBJETIVO", "APLICABILIDADE", "REFERENCIAL TEÓRICO", "CLASSIFICAÇÃO",
     "RESPONSABILIDADES", "MEDIDAS PREVENTIVAS", "REFERÊNCIAS", "ANEXOS",
@@ -42,12 +41,13 @@ NAO_RECUAR = [
 ]
 
 # ============================================================
-# 🧠 MOTOR SIMPLIFICADO — SEM LOOP, SEM TRAVAMENTO
+# 🧠 MOTOR — REPLICA SEU CABEÇALHO CORRIGIDO + MARGENS + RECUO
 # ============================================================
-def formatar_documento_completo(arquivo_bytes):
+def aplicar_padrao_completo(arquivo_bytes):
     """
-    Margens: Sup 3,0cm Esq 3,0cm Inf 2,0cm Dir 2,0cm
-    Recuo 1,25cm na 1ª linha — forma SIMPLES e RÁPIDA
+    ✅ LÊ o cabeçalho que VOCÊ já ajustou → REPLICA para TODAS as páginas
+    ✅ Aplica margens corretas no corpo e rodapé
+    ✅ Recuo de 1,25cm nos parágrafos • Títulos SEM recuo
     """
     top_dxa, bottom_dxa, left_dxa, right_dxa = "1701", "1134", "1701", "1134"
     recuo = "709"  # 1,25cm
@@ -55,38 +55,59 @@ def formatar_documento_completo(arquivo_bytes):
     zip_original = zipfile.ZipFile(BytesIO(arquivo_bytes))
     buffer_saida = BytesIO()
     
+    # ✅ EXTRAI O CABEÇALHO JÁ CORRIGIDO (modelo de ouro)
+    cabecalho_padrao = None
+    rodape_padrao = None
+    
+    for info in zip_original.infolist():
+        if info.filename == "word/header1.xml":
+            cabecalho_padrao = zip_original.read(info.filename).decode("utf-8")
+        if info.filename == "word/footer1.xml":
+            rodape_padrao = zip_original.read(info.filename).decode("utf-8")
+    
+    zip_original.close()
+    
+    # ✅ Reabre para processar
+    zip_original = zipfile.ZipFile(BytesIO(arquivo_bytes))
+    
     with zipfile.ZipFile(buffer_saida, "w", zipfile.ZIP_DEFLATED) as zip_novo:
         for item in zip_original.infolist():
             conteudo = zip_original.read(item.filename)
             
+            # ======================================
+            # CORPO DO DOCUMENTO — margens + recuo
+            # ======================================
             if item.filename == "word/document.xml":
                 xml = conteudo.decode("utf-8")
                 
-                # ✅ Aplica margens — RÁPIDO
+                # ✅ Aplica margens corretas
                 xml = re.sub(r'w:top="\d+"',    f'w:top="{top_dxa}"',    xml)
                 xml = re.sub(r'w:bottom="\d+"', f'w:bottom="{bottom_dxa}"', xml)
                 xml = re.sub(r'w:left="\d+"',   f'w:left="{left_dxa}"',   xml)
                 xml = re.sub(r'w:right="\d+"',  f'w:right="{right_dxa}"',  xml)
                 
-                # ✅ Zera espaçamentos — ELIMINA BURACOS
+                # ✅ Zera espaçamentos → sem buracos
                 xml = re.sub(r'w:spaceBefore="\d+"', 'w:spaceBefore="0"', xml)
                 xml = re.sub(r'w:spaceAfter="\d+"',  'w:spaceAfter="240"', xml)
                 
                 # ✅ Remove recuos antigos
                 xml = re.sub(r'<w:ind[^>]+/?>', '', xml)
                 
-                # ✅ Aplica recuo de forma SIMPLES: adiciona <w:ind w:firstLine="709"/>
-                # Depois de cada <w:pPr> que NÃO seja título/lista
+                # ✅ Aplica recuo de 1,25cm na 1ª linha
                 xml = re.sub(
-                    r'(<w:pPr>)((?:(?!<w:numPr>|<w:pStyle w:val="Título").){0,150}</w:pPr>)',
+                    r'(<w:pPr>)((?:(?!<w:numPr>|<w:pStyle).){0,150}</w:pPr>)',
                     rf'\1\2<w:ind w:firstLine="{recuo}"/>',
                     xml
                 )
                 
-                # ✅ Remove recuo de títulos e listas
+                # ✅ Remove recuo de títulos
                 for termo in NAO_RECUAR:
-                    padrao = rf'<w:ind w:firstLine="{recuo}"/>([^<]*?{re.escape(termo)}[^<]*?)</w:pPr>'
-                    xml = re.sub(padrao, r'\1</w:pPr>', xml, flags=re.IGNORECASE)
+                    xml = re.sub(
+                        rf'<w:ind w:firstLine="{recuo}"/>([^<]*?{re.escape(termo)}[^<]*?)</w:pPr>',
+                        r'\1</w:pPr>',
+                        xml,
+                        flags=re.IGNORECASE
+                    )
                 
                 # ✅ Remove quebras problemáticas
                 xml = re.sub(r'<w:br w:type="page"/>', '', xml)
@@ -94,8 +115,32 @@ def formatar_documento_completo(arquivo_bytes):
                 
                 conteudo = xml.encode("utf-8")
 
-            # ✅ CABEÇALHOS e RODAPÉS — mesmas margens
-            elif item.filename.startswith("word/header") or item.filename.startswith("word/footer"):
+            # ======================================
+            # ✅ CABEÇALHOS — REPLICA SEU PADRÃO!
+            # ======================================
+            elif item.filename.startswith("word/header"):
+                if cabecalho_padrao and "header1.xml" not in item.filename:
+                    # ✅ Usa o cabeçalho que VOCÊ ajustou manualmente como modelo
+                    xml = cabecalho_padrao
+                    # Garante margens corretas
+                    xml = re.sub(r'w:top="\d+"',    f'w:top="{top_dxa}"',    xml)
+                    xml = re.sub(r'w:bottom="\d+"', f'w:bottom="{bottom_dxa}"', xml)
+                    xml = re.sub(r'w:left="\d+"',   f'w:left="{left_dxa}"',   xml)
+                    xml = re.sub(r'w:right="\d+"',  f'w:right="{right_dxa}"',  xml)
+                    conteudo = xml.encode("utf-8")
+                else:
+                    # Aplica margens no cabeçalho que você já ajustou
+                    xml = conteudo.decode("utf-8")
+                    xml = re.sub(r'w:top="\d+"',    f'w:top="{top_dxa}"',    xml)
+                    xml = re.sub(r'w:bottom="\d+"', f'w:bottom="{bottom_dxa}"', xml)
+                    xml = re.sub(r'w:left="\d+"',   f'w:left="{left_dxa}"',   xml)
+                    xml = re.sub(r'w:right="\d+"',  f'w:right="{right_dxa}"',  xml)
+                    conteudo = xml.encode("utf-8")
+
+            # ======================================
+            # ✅ RODAPÉS — mesmas margens padronizadas
+            # ======================================
+            elif item.filename.startswith("word/footer"):
                 xml = conteudo.decode("utf-8")
                 xml = re.sub(r'w:top="\d+"',    f'w:top="{top_dxa}"',    xml)
                 xml = re.sub(r'w:bottom="\d+"', f'w:bottom="{bottom_dxa}"', xml)
@@ -130,20 +175,20 @@ def identificar_tipo_e_secoes(texto):
         return "PROT", SECOES_POR_TIPO["PROT"]
 
 # ============================================================
-# 🚀 INTERFACE — SEM TRAVAMENTO
+# 🚀 INTERFACE
 # ============================================================
-with st.form("form_final_rapido"):
+with st.form("form_seu_padrao"):
     arquivo_word = st.file_uploader(
         "📂 Arraste o documento WORD (.docx) aqui",
         type=["docx"],
-        key="upload_rapido"
+        key="upload_seu_padrao"
     )
-    enviado = st.form_submit_button("🔄 ANALISAR E FORMATAR", type="primary")
+    enviado = st.form_submit_button("🔄 APLICAR SEU PADRÃO EM TODO O DOCUMENTO", type="primary")
 
 if enviado and arquivo_word:
     st.info(f"✅ Arquivo carregado: **{arquivo_word.name}**")
     
-    with st.spinner("Processando... aplicando margens e recuo..."):
+    with st.spinner("Copiar seu cabeçalho ajustado para todas as páginas... aplicando margens e recuo..."):
         dados_brutos = arquivo_word.read()
         
         doc_triagem = docx.Document(BytesIO(dados_brutos))
@@ -158,8 +203,7 @@ if enviado and arquivo_word:
         if match_codigo:
             codigo_doc = match_codigo.group(0).strip().upper().replace(" ", "")
         
-        # ✅ Processamento RÁPIDO
-        dados_finais = formatar_documento_completo(dados_brutos)
+        dados_finais = aplicar_padrao_completo(dados_brutos)
         
         st.success(f"📋 **DOCUMENTO IDENTIFICADO: {sigla_tipo}**")
         
@@ -170,14 +214,15 @@ if enviado and arquivo_word:
         st.markdown("---")
         
         st.download_button(
-            label="📥 BAIXAR DOCUMENTO FORMATADO",
+            label="📥 BAIXAR DOCUMENTO COM SEU PADRÃO APLICADO",
             data=dados_finais,
-            file_name=f"{codigo_doc}_Formatado_Norma_Zero.docx",
+            file_name=f"{codigo_doc}_Padrao_Aplicado_Norma_Zero.docx",
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             type="primary"
         )
         
-        st.success("""✅ **CONCLUÍDO!**
+        st.success("""✅ **CONCLUÍDO — SEU PADRÃO APLICADO EM TODO O DOCUMENTO!**
+• ✅ Cabeçalho que VOCÊ ajustou → copiado para TODAS as páginas
 • ✅ Margens: Sup 3,0cm | Esq 3,0cm | Inf 2,0cm | Dir 2,0cm
-• ✅ Recuo 1,25cm na 1ª linha • Títulos SEM recuo
+• ✅ Recuo 1,25cm na 1ª linha • Títulos/listas SEM recuo
 • ✅ Espaçamentos normalizados • Sem páginas em branco""")
