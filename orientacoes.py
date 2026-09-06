@@ -50,7 +50,6 @@ def set_cell_margins(cell, top=100, bottom=100, left=150, right=150):
 
 # --- 3. FUNÇÃO DE PROCESSAMENTO PESADO (RODA SÓ NO CLIQUE DO BOTÃO) ---
 def formatar_documento_pesado(documento_carregado):
-    # Recarrega o documento de forma limpa
     doc = docx.Document(documento_carregado)
     
     # Limpeza de Parágrafos Fantasmas
@@ -95,7 +94,6 @@ def formatar_documento_pesado(documento_carregado):
 arquivo_word = st.file_uploader("Arraste o documento WORD (.docx) aqui para Triagem e Formatação", type=["docx"])
 
 if arquivo_word:
-    # Lemos o documento uma vez de forma rápida apenas para extrair textos para triagem
     doc_triagem = docx.Document(arquivo_word)
     
     texto_corpo_raw = " ".join([p.text.strip() for p in doc_triagem.paragraphs])
@@ -188,9 +186,8 @@ if arquivo_word:
     if is_duplicado:
         erros_gravissimos.append(f"🚫 **BLOQUEIO DE DUPLICIDADE:** O documento **{codigo_doc}** já foi validado na versão **{versao_doc}**.")
 
-    # --- ETAPA 5: EXIBIÇÃO IMEDIATA DOS RESULTADOS E DOWNLOAD CONTRA TRAVAMENTOS ---
+    # --- ETAPA 5: EXIBIÇÃO DOS RESULTADOS ---
     if not erros_gravissimos:
-        # Atualiza a tabela na memória apenas se não estiver listado ainda
         if df_atual[(df_atual["Código do Documento"] == codigo_doc) & (df_atual["Versão Atual"] == versao_doc)].empty:
             nova_linha = {
                 "Código do Documento": codigo_doc,
@@ -198,3 +195,9 @@ if arquivo_word:
                 "Tipo": tipo_detectado,
                 "Versão Atual": versao_doc,
                 "Status": "Aprovado na Triagem",
+                "Data de Triagem": datetime.now().strftime("%d/%m/%Y %H:%M"),
+                "Situação": "Ativo"
+            }
+            st.session_state.historico_lista_mestra = pd.concat([df_atual, pd.DataFrame([nova_linha])], ignore_index=True)
+
+        st.download_button(
