@@ -89,84 +89,113 @@ if arquivo_word:
         
     st.write(f"📋 **Tipo de Documento Identificado:** `{tipo_detectado}`")
     
-    # --- ETAPA 2: DEFINIÇÃO DE SEÇÕES SEGUNDO O QUADRO 1 DA NORMA ZERO ---
-    secoes_obrigatorias = {}
-    
-    if tipo_detectado == "PROTOCOLO":
-        secoes_obrigatorias = {
-            "OBJETIVO": "OBJETIVO" in texto_total_validacao,
-            "APLICABILIDADE": "APLICABILIDADE" in texto_total_validacao,
-            "REFERENCIAL TEÓRICO": "REFERENCIAL" in texto_total_validacao or "TEÓRICO" in texto_total_validacao,
-            "DESCRIÇÃO DO PROTOCOLO": "DESCRIÇÃO DO PROTOCOLO" in texto_total_validacao or "DESCRICAO DO PROTOCOLO" in texto_total_validacao,
-            "ESTRATÉGIAS DE MONITORAMENTO": "MONITORAMENTO" in texto_total_validacao,
-            "REFERÊNCIAS": "REFERÊNCIAS" in texto_total_validacao or "REFERENCIA" in texto_total_validacao
+    # --- ETAPA 2: MAPEAMENTO DE REQUISITOS DA NORMA ZERO (CÉLULAS LIVRES DE ERRO) ---
+    # Dicionário mestre contendo as palavras-chave mapeadas para cada tipo documental
+    requisitos_mapa = {
+        "PROTOCOLO": ["OBJETIVO", "APLICABILIDADE", "REFERENCIAL", "MONITORAMENTO", "REFERÊNCIAS"],
+        "POP": ["DEFINIÇÃO", "APLICABILIDADE", "RESPONSÁVEL", "MATERIAIS", "TAREFA", "CRÍTICAS", "PROIBIDOS", "REFERÊNCIAS"],
+        "MANUAL": ["CAPA", "ELABORADORES", "COLABORADORES", "SUMÁRIO", "APRESENTAÇÃO", "DESCRIÇÃO", "REFERÊNCIAS"],
+        "NORMA": ["INTRODUÇÃO", "OBJETIVO", "APLICABILIDADE", "DESCRIÇÃO DA NORMA", "RESPONSÁVEL", "CUMPRIMENTO", "REFERÊNCIAS"],
+        "ROTINA": ["DEFINIÇÃO", "OBJETIVO", "APLICABILIDADE", "DESCRIÇÃO DA ROTINA"],
+        "REGIMENTO": ["FINALIDADE", "COMPOSIÇÃO", "MANDATO", "FUNCIONAMENTO", "COMPETÊNCIAS", "ATRIBUIÇÕES", "FINAIS"],
+        "POLÍTICA INSTITUCIONAL": ["INTRODUÇÃO", "OBJETIVO", "PRINCÍPIOS", "DIRETRIZES", "RESPONSABILIDADES", "MONITORAMENTO", "REFERÊNCIAS"],
+        "PLANO DE CONTINGÊNCIA": ["OBJETIVO", "APLICABILIDADE", "DEFINIÇÃO DE TERMOS", "SITUAÇÃO ATUAL", "CONTINGÊNCIA", "REFERÊNCIAS"],
+        "PROGRAMA": ["REFERENCIAL", "PADRONIZAÇÃO", "MONITORAMENTO", "DESCRIÇÃO DO PROGRAMA", "EDUCACIONAIS", "REFERÊNCIAS"]
+    }
+
+    # Obter os termos obrigatórios correspondentes ao tipo identificado
+    termos_obrigatorios = requisitos_mapa.get(tipo_detectado, [])
+    erros_gravissimos = []
+
+    # Validar se cada termo obrigatório está contido no texto consolidado
+    for termo in termos_obrigatorios:
+        if termo not in texto_total_validacao:
+            erros_gravissimos.append(f"⚠️ **OMISSÃO DE SEÇÃO CRÍTICA (Modelo {tipo_detectado}):** A seção contendo o termo obrigatório **'{termo}'** não foi localizada no arquivo.")
+
+    # --- ETAPA 3: EXTRAÇÃO DE CÓDIGO E VERSÃO DOS CABEÇALHOS ---
+    codigo_doc = "NÃO IDENTIFICADO"
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                txt = cell.text.strip()
+                if "CÓDIGO:" in txt.upper() or "CODIGO:" in txt.upper():
+                    codigo_doc = txt.split(":")[-1].strip()
+
+    versao_doc = "1ª"
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                txt = cell.text.strip()
+                if "VERSÃO:" in txt.upper() or "VERSAO:" in txt.upper():
+                    versao_doc = txt.split(":")[-1].strip()
+
+    possui_codigo = codigo_doc != "NÃO IDENTIFICADO" and len(codigo_doc) > 2
+    possui_versao = any(char.isdigit() for char in versao_doc)
+
+    if not possui_codigo: 
+        erros_gravissimos.append("❌ **CABEÇALHO INCOMPLETO:** O campo 'CÓDIGO' está ausente nas tabelas estruturais.")
+    if not possui_versao: 
+        erros_gravissimos.append("❌ **CABEÇALHO INCOMPLETO:** O campo 'VERSÃO' está ausente ou mal formatado.")
+
+    # --- ETAPA 4: GERENCIADOR DE DUPLICIDADE ---
+    df_atual = st.session_state.historico_lista_mestra
+    is_duplicado = not df_atual[(df_atual["Código do Documento"] == codigo_doc) & (df_atual["Versão Atual"] == versao_doc)].empty
+
+    if is_duplicado:
+        erros_gravissimos.append(f"🚫 **BLOQUEIO DE DUPLICIDADE:** O documento **{codigo_doc}** já foi validado na versão **{versao_doc}**.")
+
+    # --- ETAPA 5: FORMATAÇÃO ESTÉTICA E GERAÇÃO DE SAÍDA ---
+    if not erros_gravissimos:
+        st.success("✅ **TRIAGEM CONCLUÍDA COM SUCESSO!** Layout validado e liberado para arquivamento.")
+        
+        # 1. Registro Automático no Histórico da Lista Mestra
+        nova_linha = {
+            "Código do Documento": codigo_doc,
+            "Título do Documento": f"{tipo_detectado.capitalize()} de {codigo_doc}",
+            "Tipo": tipo_detectado,
+            "Versão Atual": versao_doc,
+            "Status": "Aprovado na Triagem",
+            "Data de Triagem": datetime.now().strftime("%d/%m/%Y %H:%M"),
+            "Situação": "Ativo"
         }
-    elif tipo_detectado == "POP":
-        secoes_obrigatorias = {
-            "DEFINIÇÃO": "DEFINIÇÃO" in texto_total_validacao or "DEFINICAO" in texto_total_validacao,
-            "APLICABILIDADE": "APLICABILIDADE" in texto_total_validacao,
-            "RESPONSÁVEL PELA EXECUÇÃO": "RESPONSÁVEL PELA EXECUÇÃO" in texto_total_validacao or "RESPONSAVEL PELA EXECUCAO" in texto_total_validacao,
-            "MATERIAIS UTILIZADOS": "MATERIAIS UTILIZADOS" in texto_total_validacao or "MATERIAIS UTILIZADOS NA REALIZAÇÃO" in texto_total_validacao,
-            "DESCRIÇÃO DA TAREFA/ATIVIDADE": "DESCRIÇÃO DA TAREFA" in texto_total_validacao or "DESCRICAO DA TAREFA" in texto_total_validacao,
-            "ATIVIDADES CRÍTICAS": "CRÍTICAS" in texto_total_validacao or "CRITICAS" in texto_total_validacao,
-            "PONTOS PROIBIDOS NA EXECUÇÃO": "PONTOS PROIBIDOS" in texto_total_validacao,
-            "REFERÊNCIAS": "REFERÊNCIAS" in texto_total_validacao or "REFERENCIA" in texto_total_validacao
-        }
-    elif tipo_detectado == "MANUAL":
-        secoes_obrigatorias = {
-            "CAPA": "CAPA" in texto_total_validacao,
-            "ELABORADORES": "ELABORADORES" in texto_total_validacao,
-            "COLABORADORES": "COLABORADORES" in texto_total_validacao,
-            "SUMÁRIO": "SUMÁRIO" in texto_total_validacao or "SUMARIO" in texto_total_validacao,
-            "APRESENTAÇÃO": "APRESENTAÇÃO" in texto_total_validacao or "APRESENTACAO" in texto_total_validacao,
-            "DESCRIÇÃO": "DESCRIÇÃO" in texto_total_validacao or "DESCRICAO" in texto_total_validacao,
-            "REFERÊNCIAS": "REFERÊNCIAS" in texto_total_validacao or "REFERENCIA" in texto_total_validacao
-        }
-    elif tipo_detectado == "NORMA":
-        secoes_obrigatorias = {
-            "INTRODUÇÃO": "INTRODUÇÃO" in texto_total_validacao or "INTRODUCAO" in texto_total_validacao,
-            "OBJETIVO": "OBJETIVO" in texto_total_validacao,
-            "APLICABILIDADE": "APLICABILIDADE" in texto_total_validacao,
-            "DESCRIÇÃO DA NORMA": "DESCRIÇÃO" in texto_total_validacao or "DESCRICAO" in texto_total_validacao,
-            "RESPONSÁVEL": "RESPONSÁVEL" in texto_total_validacao or "RESPONSAVEL" in texto_total_validacao,
-            "EFEITOS DO NÃO CUMPRIMENTO": "EFEITOS DO NÃO CUMPRIMENTO" in texto_total_validacao or "CUMPRIMENTO DA NORMA" in texto_total_validacao,
-            "REFERÊNCIAS": "REFERÊNCIAS" in texto_total_validacao or "REFERENCIA" in texto_total_validacao
-        }
-    elif tipo_detectado == "ROTINA":
-        secoes_obrigatorias = {
-            "DEFINIÇÃO": "DEFINIÇÃO" in texto_total_validacao or "DEFINICAO" in texto_total_validacao,
-            "OBJETIVO": "OBJETIVO" in texto_total_validacao,
-            "APLICABILIDADE": "APLICABILIDADE" in texto_total_validacao,
-            "DESCRIÇÃO DA ROTINA": "DESCRIÇÃO" in texto_total_validacao or "DESCRICAO" in texto_total_validacao
-        }
-    elif tipo_detectado == "REGIMENTO":
-        secoes_obrigatorias = {
-            "DA FINALIDADE": "FINALIDADE" in texto_total_validacao,
-            "DA COMPOSIÇÃO - MEMBROS": "COMPOSIÇÃO" in texto_total_validacao or "COMPOSICAO" in texto_total_validacao,
-            "DO MANDATO": "MANDATO" in texto_total_validacao,
-            "DO FUNCIONAMENTO E ORGANIZAÇÃO": "FUNCIONAMENTO" in texto_total_validacao,
-            "DAS COMPETÊNCIAS": "COMPETÊNCIAS" in texto_total_validacao or "COMPETENCIAS" in texto_total_validacao,
-            "DAS ATRIBUIÇÕES": "ATRIBUIÇÕES" in texto_total_validacao or "ATRIBUICOES" in texto_total_validacao,
-            "DISPOSIÇÕES FINAIS": "FINAIS" in texto_total_validacao
-        }
-    elif tipo_detectado == "POLÍTICA INSTITUCIONAL":
-        secoes_obrigatorias = {
-            "INTRODUÇÃO": "INTRODUÇÃO" in texto_total_validacao or "INTRODUCAO" in texto_total_validacao,
-            "OBJETIVO": "OBJETIVO" in texto_total_validacao,
-            "PRINCÍPIOS": "PRINCÍPIOS" in texto_total_validacao or "PRINCIPIOS" in texto_total_validacao,
-            "DIRETRIZES": "DIRETRIZES" in texto_total_validacao,
-            "RESPONSABILIDADES": "RESPONSABILIDADES" in texto_total_validacao,
-            "ESTRATÉGIA DE MONITORAMENTO": "MONITORAMENTO" in texto_total_validacao,
-            "REFERÊNCIAS": "REFERÊNCIAS" in texto_total_validacao or "REFERENCIA" in texto_total_validacao
-        }
-    elif tipo_detectado == "PLANO DE CONTINGÊNCIA":
-        secoes_obrigatorias = {
-            "OBJETIVO": "OBJETIVO" in texto_total_validacao,
-            "APLICABILIDADE": "APLICABILIDADE" in texto_total_validacao,
-            "DEFINIÇÃO DE TERMOS": "DEFINIÇÃO DE TERMOS" in texto_total_validacao or "DEFINICAO DE TERMOS" in texto_total_validacao,
-            "IDENTIFICAÇÃO DA SITUAÇÃO ATUAL": "SITUAÇÃO ATUAL" in texto_total_validacao or "SITUACAO ATUAL" in texto_total_validacao,
-            "MEDIDAS DE CONTINGÊNCIA": "MEDIDAS DE CONTINGÊNCIA" in texto_total_validacao or "MEDIDAS DE CONTINGENCIA" in texto_total_validacao,
-            "REFERÊNCIAS": "REFERÊNCIAS" in texto_total_validacao or "REFERENCIA" in texto_total_validacao
-        }
-    elif tipo_detectado == "PROGRAMA":
-        secoes_obrigatorias = {
+        st.session_state.historico_lista_mestra = pd.concat([df_atual, pd.DataFrame([nova_linha])], ignore_index=True)
+        
+        # 2. Configuração Geométrica Oficial (Quadro 4: Sup 2 / Inf 2 / Esquer 2 / Dir 3)
+        for section in doc.sections:
+            section.top_margin = Cm(2.0)
+            section.bottom_margin = Cm(2.0)
+            section.left_margin = Cm(2.0)
+            section.right_margin = Cm(3.0)
+
+        # 3. Formatação do Corpo de Texto (Calibri 11, Espaçamento 1.5, Justificado)
+        for paragraph in doc.paragraphs:
+            texto_limpo = paragraph.text.strip()
+            if "REFERÊNCIAS" in texto_limpo.upper() or "REFERENCIA" in texto_limpo.upper():
+                continue
+                
+            paragraph.paragraph_format.space_before = Pt(4)
+            paragraph.paragraph_format.space_after = Pt(4)
+            paragraph.paragraph_format.line_spacing = 1.5
+            
+            primeiros_caracteres = texto_limpo[:8]
+            if primeiros_caracteres and (primeiros_caracteres.replace('.', '').isdigit() or ')' in primeiros_caracteres):
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                paragraph.paragraph_format.left_indent = Cm(1.25)
+                paragraph.paragraph_format.first_line_indent = Cm(-1.25)
+            else:
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+                paragraph.paragraph_format.left_indent = Cm(0)
+                paragraph.paragraph_format.first_line_indent = Cm(1.25)
+
+        # Preparar arquivo de download em memória
+        conteudo_saida = BytesIO()
+        doc.save(conteudo_saida)
+        conteudo_saida.seek(0)
+        
+        st.download_button(
+            label="📥 Baixar Documento Formatado e Homologado",
+            data=conteudo_saida,
+            file_name=f"{codigo_doc}_Formatado.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+    else:
