@@ -1,8 +1,8 @@
 import streamlit as st
 import docx
-from docx.shared import Cm
-from io import BytesIO
+import zipfile
 import re
+from io import BytesIO
 
 # --- 1. CONFIGURAÇÃO DA PÁGINA STREAMLIT ---
 st.set_page_config(page_title="Formatador de Documentos NAQH", page_icon="📊", layout="wide")
@@ -15,46 +15,58 @@ with st.sidebar:
 
 st.title("Triagem Avançada & Formatador Automático - NAQH")
 st.markdown("""
-### 🧠 Inteligência Multidocumento e Controle de Atualizações
-O sistema realiza a triagem dinâmica identificando o tipo de documento de forma segura, **preservando 100% o alinhamento nativo de listas, cabeçalhos e subseções do arquivo original**.
+### 🧠 Inteligência XML de Alta Fidelidade
+O sistema aplica as margens oficiais da Norma Zero alterando diretamente o código estrutural do arquivo, **garantindo a permanência absoluta de logomarcas, cabeçalhos e paginações**.
 """)
 
-# --- 2. MOTOR DE PRESERVAÇÃO INTEGRAL (PRESERVA TEXTOS E ESTILOS NATIVOS) ---
-def aplicar_formatacao_protegida(arquivo_bytes):
-    # Abre o documento mantendo todas as suas estruturas originais intactas
-    doc = docx.Document(arquivo_bytes)
+# --- 2. MOTOR DE ALTERAÇÃO XML DIRETA (PRESERVAÇÃO ABSOLUTA DE IMAGENS E CABEÇALHOS) ---
+def forcar_margens_via_xml(arquivo_bytes):
+    # Converte os centímetros oficiais em dxa (unidade padrão do XML do Word: 1 cm = 567 dxa)
+    # Norma Zero: Sup 2.0cm (1134), Inf 2.0cm (1134), Esq 2.0cm (1134), Dir 3.0cm (1701)
+    top_dxa, bottom_dxa, left_dxa, right_dxa = "1134", "1134", "1134", "1701"
     
-    # ATUALIZAÇÃO GEOMÉTRICA DE MARGENS (Norma Zero: Sup 2 / Inf 2 / Esq 2 / Dir 3)
-    # Altera os limites da página diretamente no XML estrutural sem reformatar o texto corrido
-    for section in doc.sections:
-        section.top_margin = Cm(2.0)
-        section.bottom_margin = Cm(2.0)
-        section.left_margin = Cm(2.0)
-        section.right_margin = Cm(3.0)
-
-    # Nota: Removemos qualquer alteração forçada de parágrafos ou loops cegos sobre doc.paragraphs.
-    # Isso garante que as tabelas de cabeçalho flutuantes, numerações e marcadores nativos
-    # permaneçam exatamente na mesma posição em que foram criados no arquivo original.
-
-    conteudo_saida = BytesIO()
-    doc.save(conteudo_saida)
-    conteudo_saida.seek(0)
-    return conteudo_saida.getvalue()
+    # Abre o arquivo original como um pacote ZIP em memória
+    zip_original = zipfile.ZipFile(BytesIO(arquivo_bytes))
+    buffer_saida = BytesIO()
+    zip_novo = zipfile.ZipFile(buffer_saida, "w", zipfile.ZIP_DEFLATED)
+    
+    for item in zip_original.infolist():
+        conteudo = zip_original.read(item.filename)
+        
+        # Altera apenas o arquivo principal que controla a geometria e layout da folha
+        if item.filename == "word/document.xml":
+            xml_texto = conteudo.decode("utf-8")
+            
+            # Substitui as margens via expressões regulares no XML estrutural do arquivo
+            xml_texto = re.sub(r'w:top="[^"]*"', f'w:top="{top_dxa}"', xml_texto)
+            xml_texto = re.sub(r'w:bottom="[^"]*"', f'w:bottom="{bottom_dxa}"', xml_texto)
+            xml_texto = re.sub(r'w:left="[^"]*"', f'w:left="{left_dxa}"', xml_texto)
+            xml_texto = re.sub(r'w:right="[^"]*"', f'w:right="{right_dxa}"', xml_texto)
+            
+            conteudo = xml_texto.encode("utf-8")
+            
+        zip_novo.writestr(item, conteudo)
+        
+    zip_original.close()
+    zip_novo.close()
+    buffer_saida.seek(0)
+    return buffer_saida.getvalue()
 
 # --- 3. FLUXO DE PROCESSAMENTO ---
 arquivo_word = st.file_uploader("Arraste o documento WORD (.docx) aqui para Triagem e Formatação", type=["docx"])
 
 if arquivo_word:
-    doc_triagem = docx.Document(arquivo_word)
+    # Lemos os bytes brutos uma única vez
+    dados_brutos = arquivo_word.read()
     
-    # Varredura veloz e superficial para triagem de metadados
+    # Varredura superficial e rápida apenas para coletar metadados de identificação
+    doc_triagem = docx.Document(BytesIO(dados_brutos))
     texto_corpo_raw = " ".join([p.text.strip() for p in doc_triagem.paragraphs[:30]])
     texto_tabelas_raw = " ".join([cell.text.strip() for t in doc_triagem.tables[:1] for r in t.rows for cell in r.cells])
-    texto_total_raw = texto_corpo_raw + " " + texto_tabelas_raw
-    texto_total_validacao = texto_total_raw.upper()
+    texto_total_raw = (texto_corpo_raw + " " + texto_tabelas_raw).upper()
     
     tipo_detectado = "PROTOCOLO"
-    if "PROCEDIMENTO OPERACIONAL" in texto_total_validacao or "POP" in texto_total_validacao:
+    if "PROCEDIMENTO OPERACIONAL" in texto_total_raw or "POP" in texto_total_raw:
         tipo_detectado = "POP"
         
     st.write(f"📋 **Tipo de Documento Identificado:** `{tipo_detectado}`")
@@ -64,8 +76,8 @@ if arquivo_word:
     if match_codigo:
         codigo_doc = match_codigo.group(0).strip().upper().replace(" ", "")
 
-    # Gera a saída preservando a integridade original de cabeçalhos e textos
-    dados_finais = aplicar_formatacao_protegida(arquivo_word)
+    # Executa a alteração blindada de margens via XML
+    dados_finais = forcar_margens_via_xml(dados_brutos)
 
     st.download_button(
         label="📥 CLIQUE AQUI PARA BAIXAR O DOCUMENTO FORMATADO",
@@ -73,4 +85,4 @@ if arquivo_word:
         file_name=f"{codigo_doc}_Formatado_Homologado.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
-    st.success(f"✅ **TRIAGEM CONCLUÍDA COM SUCESSO!** Margens ajustadas para o padrão institucional com preservação total de textos, logos e cabeçalhos.")
+    st.success(f"✅ **TRIAGEM CONCLUÍDA COM SUCESSO!** Margens injetadas diretamente no XML da página. Cabeçalhos, logomarcas e paginação originais preservados com 100% de integridade.")
