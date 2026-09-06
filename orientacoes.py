@@ -30,17 +30,19 @@ if arquivo_word:
             for cell in row.cells:
                 texto_tabelas_completo += " " + cell.text.strip().upper()
 
+    # União de todos os textos para evitar falhas de leitura por quebra de células
+    texto_total_validacao = texto_corpo_completo + texto_tabelas_completo
+
     # --- ETAPA 1: IDENTIFICAÇÃO AUTOMÁTICA DO TIPO DE DOCUMENTO ---
     tipo_detectado = "NORMA"  # Padrão genérico
-    texto_busca_tipo = texto_corpo_completo + texto_tabelas_completo
     
-    if "PROTOCOLO" in texto_busca_tipo or "PROT_" in texto_busca_tipo:
+    if "PROTOCOLO" in texto_total_validacao or "PROT_" in texto_total_validacao:
         tipo_detectado = "PROTOCOLO"
-    elif "PROCEDIMENTO OPERACIONAL PADRÃO" in texto_busca_tipo or "POP" in texto_busca_tipo:
+    elif "PROCEDIMENTO OPERACIONAL PADRÃO" in texto_total_validacao or "POP" in texto_total_validacao:
         tipo_detectado = "POP"
-    elif "ROTINA" in texto_busca_tipo or "ROT_" in texto_busca_tipo:
+    elif "ROTINA" in texto_total_validacao or "ROT_" in texto_total_validacao:
         tipo_detectado = "ROTINA"
-    elif "REGIMENTO" in texto_busca_tipo or "REG_" in texto_busca_tipo:
+    elif "REGIMENTO" in texto_total_validacao or "REG_" in texto_total_validacao:
         tipo_detectado = "REGIMENTO"
 
     st.write(f"📊 **Tipo de Documento Identificado:** {tipo_detectado}")
@@ -50,27 +52,32 @@ if arquivo_word:
     
     if tipo_detectado == "PROTOCOLO":
         secoes_obrigatorias = {
-            "OBJETIVO": "OBJETIVO" in texto_corpo_completo,
-            "APLICABILIDADE": "APLICABILIDADE" in texto_corpo_completo,
-            "REFERENCIAL TEÓRICO": "REFERENCIAL TEÓRICO" in texto_corpo_completo or "REFERENCIAL TEORICO" in texto_corpo_completo,
-            "ESTRATÉGIAS DE MONITORAMENTO": "MONITORAMENTO" in texto_corpo_completo,
-            "REFERÊNCIAS": "REFERÊNCIAS" in texto_corpo_completo or "REFERENCIA" in texto_corpo_completo
+            "OBJETIVO": "OBJETIVO" in texto_total_validacao,
+            "APLICABILIDADE": "APLICABILIDADE" in texto_total_validacao,
+            "REFERENCIAL TEÓRICO": "REFERENCIAL TEÓRICO" in texto_total_validacao or "REFERENCIAL TEORICO" in texto_total_validacao or "TEÓRICO" in texto_total_validacao,
+            "ESTRATÉGIAS DE MONITORAMENTO": "MONITORAMENTO" in texto_total_validacao or "ESTRATÉGIAS" in texto_total_validacao,
+            "REFERÊNCIAS": "REFERÊNCIAS" in texto_total_validacao or "REFERENCIA" in texto_total_validacao
         }
     elif tipo_detectado == "NORMA":
         secoes_obrigatorias = {
-            "INTRODUÇÃO": "INTRODUÇÃO" in texto_corpo_completo or "INTRODUCAO" in texto_corpo_completo,
-            "OBJETIVO": "OBJETIVO" in texto_corpo_completo,
-            "APLICABILIDADE": "APLICABILIDADE" in texto_corpo_completo,
-            "DESCRIÇÃO DA NORMA": "DESCRIÇÃO" in texto_corpo_completo or "DESCRICAO" in texto_corpo_completo,
-            "RESPONSÁVEL": "RESPONSÁVEL" in texto_corpo_completo or "RESPONSAVEL" in texto_corpo_completo,
-            "REFERÊNCIAS": "REFERÊNCIAS" in texto_corpo_completo or "REFERENCIA" in texto_corpo_completo
+            "INTRODUÇÃO": "INTRODUÇÃO" in texto_total_validacao or "INTRODUCAO" in texto_total_validacao,
+            "OBJETIVO": "OBJETIVO" in texto_total_validacao,
+            "APLICABILIDADE": "APLICABILIDADE" in texto_total_validacao,
+            "DESCRIÇÃO DA NORMA": "DESCRIÇÃO" in texto_total_validacao or "DESCRICAO" in texto_total_validacao,
+            "RESPONSÁVEL": "RESPONSÁVEL" in texto_total_validacao or "RESPONSAVEL" in texto_total_validacao,
+            "REFERÊNCIAS": "REFERÊNCIAS" in texto_total_validacao or "REFERENCIA" in texto_total_validacao
         }
-    # (Adicione outras variações de regras do Quadro 1 se achar necessário)
 
-    # --- ETAPA 3: VALIDAÇÃO DE CÓDIGO E VERSÃO NO CABEÇALHO ---
-    # Busca robusta que limpa espaços extras para capturar os dados do seu print 2
-    possui_codigo = ("CÓDIGO:" in texto_tabelas_completo or "CODIGO:" in texto_tabelas_completo) and ("_SCIH" in texto_tabelas_completo or len(texto_tabelas_completo) > 10)
-    possui_versao = ("VERSÃO:" in texto_tabelas_completo or "VERSAO:" in texto_tabelas_completo) and any(char.isdigit() for char in texto_tabelas_completo)
+    # --- ETAPA 3: VALIDAÇÃO DE CÓDIGO E VERSÃO NO CABEÇALHO (ALTAMENTE ABRANGENTE) ---
+    possui_termo_codigo = "CÓDIGO:" in texto_total_validacao or "CODIGO:" in texto_total_validacao or "CÓDIGO" in texto_total_validacao
+    possui_estrutura_sigla = "PROT_" in texto_total_validacao or "NOR_" in texto_total_validacao or "POP_" in texto_total_validacao or "ROT_" in texto_total_validacao or "SCIH" in texto_total_validacao
+    
+    # Validação inteligente do código
+    possui_codigo = possui_termo_codigo or possui_estrutura_sigla
+    
+    # Validação inteligente da versão
+    possui_termo_versao = "VERSÃO:" in texto_total_validacao or "VERSAO:" in texto_total_validacao or "VERSÃO" in texto_total_validacao
+    possui_versao = possui_termo_versao and any(char.isdigit() for char in texto_total_validacao)
 
     erros_gravissimos = []
     
@@ -81,13 +88,13 @@ if arquivo_word:
         
     for secao, encontrada in secoes_obrigatorias.items():
         if not encontrada:
-            erros_gravissimos.append(f"❌ **OMISSÃO DE SEÇÃO CRÍTICA (Modelo {tipo_detectado}):** A seção obrigatória **'{secao}'** não foi localizada no corpo.")
+            erros_gravissimos.append(f"❌ **OMISSÃO DE SEÇÃO CRÍTICA (Modelo {tipo_detectado}):** A seção obrigatória **'{secao}'** não foi localizada no corpo do documento.")
 
     # --- ETAPA 4: FORMATAÇÃO AUTOMÁTICA (SE APROVADO NA TRIAGEM) ---
     if not erros_gravissimos:
         st.success("✅ **TRIAGEM CONCLUÍDA COM SUCESSO!** Arquivo validado e liberado para formatação estética.")
 
-        # 1. Ajuste das Margens (3x3x2x2)
+        # 1. Ajuste das Margens (Padrão Atualizado: 3x3x2x2)
         for section in doc.sections:
             section.top_margin = Cm(3.0)     
             section.left_margin = Cm(3.0)    
@@ -128,7 +135,7 @@ if arquivo_word:
                                 run.font.size = Pt(9)
                                 run.font.bold = False
 
-        # 4. Ajuste de Referências (Calibri 10, Esquerda)
+        # 4. Ajuste de Referências (Calibri 10, Esquerda, Sem recuo)
         capturar_referencias = False
         for paragraph in doc.paragraphs:
             if "REFERÊNCIAS" in paragraph.text.upper().strip():
@@ -141,7 +148,7 @@ if arquivo_word:
                     run.font.name = 'Calibri'
                     run.font.size = Pt(10)
 
-        # 5. Redimensionamento de Imagens
+        # 5. Redimensionamento Proporcional de Imagens (Largura máxima útil de 16cm)
         largura_maxima_util = Cm(16.0)
         for shape in doc.inline_shapes:
             if shape.width > largura_maxima_util:
