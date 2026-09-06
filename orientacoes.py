@@ -4,23 +4,23 @@ import re
 from io import BytesIO
 
 # --- 1. CONFIGURAÇÃO ---
-st.set_page_config(page_title="AUDITORIA CORRIGIDA — Nomes Exatos", page_icon="🔍", layout="wide")
+st.set_page_config(page_title="AUDITORIA — NOMES REAIS DO SEU DOCUMENTO", page_icon="🔍", layout="wide")
 
 with st.sidebar:
     st.markdown("### 🧑‍💻 Operador")
     st.markdown("**Ezequias Santos**\n*Agt Administrativo / Auditor*")
     st.divider()
 
-st.title("🔍 AUDITORIA — NOMES EXATOS DO SEU DOCUMENTO")
+st.title("🔍 AUDITORIA — NOMES EXATOS DO SEU PADRÃO")
 st.markdown("""
-### ✅ Lista de seções AJUSTADA conforme o seu padrão real
-✅ Busca pelo INÍCIO do título → encontra mesmo com complementos
-✅ Verifica CÓDIGO, VERSÃO e VALIDADE no cabeçalho
-✅ APROVA se encontrar TODAS as seções
+### ✅ Nomes das seções COPIADOS do SEU documento real
+✅ Código e Versão lidos da TABELA do cabeçalho
+✅ Data de aprovação → NÃO é obrigatória
+✅ Busca pelo INÍCIO do título → encontra mesmo com texto maior
 """)
 
 # ============================================================
-# 📋 SEÇÕES OBRIGATÓRIAS — NOMES EXATOS CONFORME SEU PADRÃO
+# 📋 SEÇÕES OBRIGATÓRIAS — NOMES EXATOS CONFORME SEU DOCUMENTO
 # ============================================================
 SECOES_OBRIGATORIAS = {
     "PROT": [
@@ -30,7 +30,7 @@ SECOES_OBRIGATORIAS = {
         "4. CLASSIFICAÇÃO",
         "5. RESPONSABILIDADES",
         "6. MEDIDAS OBRIGATÓRIAS",
-        "7. ESTRATÉGIAS DE MONITORAMENTO",
+        "7. ESTRATÉGIAS",
         "8. REFERÊNCIAS"
     ],
     "POP": [
@@ -80,23 +80,21 @@ SECOES_OBRIGATORIAS = {
 }
 
 # ============================================================
-# 🧠 ESCANEAR — Busca pelo INÍCIO do título
+# 🧠 ESCANEAR — Busca inteligente + Cabeçalho em TABELA
 # ============================================================
 def escanear_documento_completo(arquivo_bytes):
     doc = docx.Document(BytesIO(arquivo_bytes))
     
-    # 📖 LER TODO O CONTEÚDO
+    # 📖 LER TODO O CONTEÚDO — parágrafos e TABELAS (cabeçalho é tabela!)
     texto_paragrafos = []
     for p in doc.paragraphs:
-        if p.text.strip():
-            texto_paragrafos.append(p.text.strip().upper())
+        texto_paragrafos.append(p.text.strip().upper())
     
     texto_tabelas = []
     for tabela in doc.tables:
         for linha in tabela.rows:
-            for celula in linha.cells:
-                if celula.text.strip():
-                    texto_tabelas.append(celula.text.strip().upper())
+            texto_linha = " ".join([celula.text.strip() for celula in linha.cells])
+            texto_tabelas.append(texto_linha.upper())
     
     texto_completo = "\n".join(texto_paragrafos + texto_tabelas)
     
@@ -121,30 +119,34 @@ def escanear_documento_completo(arquivo_bytes):
     else:
         tipo_detectado = "PROT"
     
-    # 🔍 EXTRAIR CÓDIGO, VERSÃO, VALIDADE
-    match_codigo = re.search(r'CÓDIGO[:\s]*([A-Z]{3,}_[A-Z0-9_]+)', texto_completo)
+    # 🔍 EXTRAIR CÓDIGO — busca no formato da TABELA do cabeçalho
+    # Ex: "Código: PROT_SCIH005"
+    match_codigo = re.search(r'CÓDIGO[:\s]*[:]?\s*([A-Z]{3,}_[A-Z0-9_]+)', texto_completo)
     if match_codigo:
         codigo_detectado = match_codigo.group(1).strip()
     
-    match_versao = re.search(r'VERSÃO[:\s]*[Vv]?(\d+[./]?\d*)', texto_completo)
+    # 🔍 EXTRAIR VERSÃO — busca no formato da TABELA
+    # Ex: "Versão: 5.1"
+    match_versao = re.search(r'VERSÃO[:\s]*[:]?\s*[Vv]?(\d+[./]?\d*)', texto_completo)
     if match_versao:
         versao_detectada = match_versao.group(1).strip()
     
-    match_validade = re.search(r'VALIDADE[:\s]*([\d/]+)', texto_completo)
+    # 🔍 EXTRAIR VALIDADE (não é obrigatória)
+    match_validade = re.search(r'VALIDADE[:\s]*[:]?\s*([\d/]+)', texto_completo)
     if match_validade:
         validade_detectada = match_validade.group(1).strip()
     
-    # 🔍 VERIFICAR SEÇÕES — Busca pelo INÍCIO do título!
+    # 🔍 VERIFICAR SEÇÕES — Busca pelo INÍCIO do número + nome
     secoes_esperadas = SECOES_OBRIGATORIAS.get(tipo_detectado, SECOES_OBRIGATORIAS["PROT"])
     secoes_encontradas = []
     secoes_faltantes = []
     
     for secao in secoes_esperadas:
         secao_upper = secao.upper().strip()
-        # ✅ Busca se o título COMEÇA com o padrão → encontra mesmo com complementos
-        padrao = rf'^{re.escape(secao_upper)}(\s|$|[:—–-])'
-        encontrada = False
+        # ✅ Busca se QUALQUER linha COMEÇA com o número + nome da seção
+        padrao = rf'^{re.escape(secao_upper)}'
         
+        encontrada = False
         for linha in texto_paragrafos:
             if re.search(padrao, linha.strip()):
                 encontrada = True
@@ -160,7 +162,8 @@ def escanear_documento_completo(arquivo_bytes):
         else:
             secoes_faltantes.append(secao)
     
-    # ✅ APROVADO se tem tudo
+    # ✅ APROVADO = Tem TUDO obrigatório: Código + Versão + Todas as seções
+    # ⚠️ Data de aprovação NÃO é obrigatória!
     aprovado = len(secoes_faltantes) == 0 and codigo_detectado and versao_detectada
     
     return {
@@ -177,18 +180,18 @@ def escanear_documento_completo(arquivo_bytes):
 # ============================================================
 # 🚀 INTERFACE
 # ============================================================
-with st.form("form_auditoria_corrigida"):
+with st.form("form_auditoria_final"):
     arquivo_word = st.file_uploader(
-        "📂 Arraste o documento WORD (.docx) AQUI para AUDITORIA",
+        "📂 Arraste o documento WORD (.docx) AQUI",
         type=["docx"],
-        key="upload_auditoria_corrigida"
+        key="upload_auditoria_final"
     )
-    enviado = st.form_submit_button("🔍 EXECUTAR AUDITORIA", type="primary")
+    enviado = st.form_submit_button("🔍 EXECUTAR AUDITORIA COMPLETA", type="primary")
 
 if enviado and arquivo_word:
     st.info(f"✅ Arquivo carregado: **{arquivo_word.name}**")
     
-    with st.spinner("Escaneando... verificando seções com nomes corretos..."):
+    with st.spinner("Escaneando... buscando código da tabela do cabeçalho... verificando seções..."):
         dados_brutos = arquivo_word.read()
         relatorio = escanear_documento_completo(dados_brutos)
         
@@ -198,10 +201,13 @@ if enviado and arquivo_word:
         col1, col2 = st.columns(2)
         with col1:
             st.info(f"**Tipo de Documento:** {relatorio['tipo']}")
-            st.info(f"**Código:** {relatorio['codigo'] or '❌ NÃO ENCONTRADO'}")
+            st.success(f"**Código:** {relatorio['codigo'] or '❌ NÃO ENCONTRADO'}")
         with col2:
-            st.info(f"**Versão:** {relatorio['versao'] or '❌ NÃO ENCONTRADA'}")
-            st.info(f"**Validade:** {relatorio['validade'] or '⚠️ Não verificada'}")
+            st.success(f"**Versão:** {relatorio['versao'] or '❌ NÃO ENCONTRADA'}")
+            if relatorio['validade']:
+                st.info(f"**Validade:** {relatorio['validade']}")
+            else:
+                st.info("**Validade:** ⚠️ Não obrigatória / não encontrada")
         
         st.markdown("---")
         
@@ -228,4 +234,4 @@ if enviado and arquivo_word:
             if not relatorio["versao"]:
                 st.error("• ❌ Falta VERSÃO no cabeçalho")
             if relatorio["secoes_faltantes"]:
-                st.error(f"• ❌ Faltam {len(relatorio['secoes_faltantes'])} seção(ões)")
+                st.error(f"• ❌ Faltam {len(relatorio['secoes_faltantes'])} seção(ões) obrigatória(s)")
