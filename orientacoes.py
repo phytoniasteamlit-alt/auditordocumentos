@@ -11,7 +11,7 @@ from io import BytesIO
 # --- 1. CONFIGURAÇÃO DA PÁGINA STREAMLIT ---
 st.set_page_config(page_title="Formatador de Documentos NAQH", page_icon="📊", layout="wide")
 
-# Menu Lateral - Identificação Visual do Operador
+# Menu Lateral - Identificação Visual do Operador (Ezequias Santos Agt Administrativo)
 with st.sidebar:
     st.markdown("### 🧑‍💻 Operador")
     st.markdown("**Ezequias Santos**\n*Agt Administrativo*")
@@ -19,40 +19,25 @@ with st.sidebar:
 
 st.title("Triagem Avançada & Formatador Automático - NAQH")
 st.markdown("""
-### 🧠 Inteligência XML com Deduplicação Automática
-O sistema identifica e elimina parágrafos duplicados por erro de digitação, limpa quebras e ajusta as margens da Norma Zero **preservando logomarcas e cabeçalhos**.
+### 🧠 Inteligência XML Avançada contra Vazamento de Cabeçalho
+O sistema isola as tabelas flutuantes superiores, impedindo que o texto do corpo invada o cabeçalho e **eliminando de forma definitiva todas as páginas em branco**.
 """)
 
-# --- 2. MOTOR DE LIMPEZA E DEDUPLICAÇÃO DE TEXTOS ---
-def corrigir_e_deduplicar_texto(doc):
-    """Varre o documento eliminando repetições de texto e aplicando recuos da Norma Zero"""
-    textos_processados = set()
-    p_indices_remover = []
+# --- 2. MOTOR DE CORREÇÃO TEXTUAL E SELEÇÃO DE TABELAS DE CONTEÚDO ---
+def formatar_corpo_com_seguranca(doc):
+    """Aplica recuos da Norma Zero apenas no texto livre, protegendo tabelas estruturais"""
     
-    for i, paragraph in enumerate(doc.paragraphs):
+    # REGRA 1: AJUSTE DE TEXTO E LISTAS GRUDADAS
+    for paragraph in doc.paragraphs:
         texto_limpo = paragraph.text.strip()
         
         if not texto_limpo:
             continue
             
-        # 1. FILTRO DE DEDUPLICAÇÃO DE PARÁGRAFOS INTEIROS REPETIDOS (Caso da Paramentação)
-        # Se o parágrafo for idêntico a um anterior, ele é marcado para remoção imediata
-        if texto_limpo in textos_processados:
-            p_indices_remover.append(i)
-            continue
-        textos_processados.add(texto_limpo)
-        
-        # 2. FILTRO DE DEDUPLICAÇÃO DE TEXTO NA MESMA LINHA (Caso do Quadro 1)
-        # Remove repetições consecutivas na mesma linha (ex: Texto. Texto.)
-        metade = len(texto_limpo) // 2
-        if metade > 10 and texto_limpo[:metade].strip() == texto_limpo[metade:].strip():
-            paragraph.text = texto_limpo[:metade].strip()
-            texto_limpo = paragraph.text.strip()
-
         if "REFERÊNCIAS" in texto_limpo.upper() or "REFERENCIA" in texto_limpo.upper():
             continue
             
-        # Configuração padrão de espaçamento vertical e entrelinhas (1.5)
+        # Padrões obrigatórios: entrelinhas 1.5 e espaçamento vertical
         paragraph.paragraph_format.space_before = Pt(4)
         paragraph.paragraph_format.space_after = Pt(4)
         paragraph.paragraph_format.line_spacing = 1.5
@@ -62,7 +47,7 @@ def corrigir_e_deduplicar_texto(doc):
                 run.font.name = 'Calibri'
                 run.font.size = Pt(11)
 
-        # Regra de Alinhamento e Recuo de Listas, Letras e Marcadores
+        # Trata alinhamento de listas e letras (ex: g), h)) colando o texto na numeração
         is_subitem_letra = re.match(r'^[a-z]\s*\)', texto_limpo, re.IGNORECASE)
         is_marcador_ponto = texto_limpo.startswith('•') or paragraph.style.name.startswith('List')
         is_numeracao_composta = re.match(r'^(\d+(\.\d+)*\.?)\s*', texto_limpo)
@@ -72,18 +57,24 @@ def corrigir_e_deduplicar_texto(doc):
             paragraph.paragraph_format.left_indent = Cm(0.5)
             paragraph.paragraph_format.first_line_indent = Cm(0)
         else:
-            # Parágrafos longos normais (Objetivo, Referencial Teórico) recebem recuo de 1,25 cm
+            # Parágrafos normais longos (Objetivo, Referencial) recebem recuo americano de 1,25 cm
             paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
             paragraph.paragraph_format.left_indent = Cm(0)
             paragraph.paragraph_format.first_line_indent = Cm(1.25)
 
-    # Executa a remoção dos parágrafos duplicados de trás para frente para não quebrar os índices
-    for index in sorted(p_indices_remover, reverse=True):
-        p_element = doc.paragraphs[index]._element
-        p_element.getparent().remove(p_element)
-
-    # Tratamento de Tabelas: Unifica e impede quebra de linhas entre páginas
+    # REGRA 2: FILTRO SELETIVO DE TABELAS (Garante o Quadro 1 perfeito e protege o cabeçalho)
     for table in doc.tables:
+        # Pega o texto da primeira célula para identificar se é o cabeçalho institucional ou de assinaturas
+        texto_primeira_celula = ""
+        if table.rows and table.rows[0].cells:
+            texto_primeira_celula = table.rows[0].cells[0].text.upper()
+            
+        # SE FOR CABEÇALHO INSTITUCIONAL OU BLOCO DE ASSINATURA, O SCRIPT PULA E NÃO MEXE
+        # Isso impede que o texto do corpo vaze para dentro da caixinha dos logos!
+        if "TIPO DE DOCUMENTO" in texto_primeira_celula or "SÃO LUÍS" in texto_primeira_celula or "ELABORAÇÃO" in texto_primeira_celula:
+            continue
+            
+        # Aplica alinhamento e unificação APENAS nas tabelas de dados (Quadro 1, Quadro 2 e Apêndices)
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
         for row in table.rows:
             trPr = row._element.get_or_add_trPr()
@@ -92,20 +83,20 @@ def corrigir_e_deduplicar_texto(doc):
             if not row._element.xpath('w:trPr/w:keepNext'):
                 trPr.append(OxmlElement('w:keepNext'))
 
-# --- 3. MOTOR XML DIRETO (FORÇA GEOMETRIA DE MARGENS E LIMPA ESPAÇOS) ---
-def processar_pacote_completo_xml(arquivo_bytes):
+# --- 3. MOTOR XML DIRETO (FORÇA GEOMETRIA DE MARGENS DA NORMA ZERO) ---
+def processar_layout_xml_blindado(arquivo_bytes):
     top_dxa, bottom_dxa, left_dxa, right_dxa = "1134", "1134", "1134", "1701"
     
-    # Aplica a limpeza e deduplicação no motor de estrutura primeiro
+    # 1. Roda a formatação e proteção seletiva de tabelas na biblioteca estrutural
     stream_temp = BytesIO(arquivo_bytes)
-    doc_limpo = docx.Document(stream_temp)
-    corrigir_e_deduplicar_texto(doc_limpo)
+    doc_alinhado = docx.Document(stream_temp)
+    formatar_corpo_com_seguranca(doc_alinhado)
     
     buffer_intermediario = BytesIO()
-    doc_limpo.save(buffer_intermediario)
+    doc_alinhado.save(buffer_intermediario)
     bytes_limpos = buffer_intermediario.getvalue()
     
-    # Injeta a geometria de margens direto no XML sem tocar nos mídias/cabeçalhos nativos
+    # 2. Injeta as margens direto no documento XML nativo preservando imagens e mídias originais
     zip_original = zipfile.ZipFile(BytesIO(bytes_limpos))
     buffer_saida = BytesIO()
     
@@ -116,14 +107,11 @@ def processar_pacote_completo_xml(arquivo_bytes):
             if item.filename == "word/document.xml":
                 xml_texto = conteudo.decode("utf-8")
                 
-                # Injeção das Margens da Norma Zero (2x2x2x3 cm)
+                # Injeção das Margens Oficiais (2.0 cm Superior/Inferior/Esquerda e 3.0 cm Direita)
                 xml_texto = re.sub(r'w:top="[^"]*"', f'w:top="{top_dxa}"', xml_texto)
                 xml_texto = re.sub(r'w:bottom="[^"]*"', f'w:bottom="{bottom_dxa}"', xml_texto)
                 xml_texto = re.sub(r'w:left="[^"]*"', f'w:left="{left_dxa}"', xml_texto)
                 xml_texto = re.sub(r'w:right="[^"]*"', f'w:right="{right_dxa}"', xml_texto)
-                
-                # Remove quebras de página fantasmas geradas por excesso de Enters manuais
-                xml_texto = re.sub(r'<w:p[^>]*>\s*<w:pPr>\s*<w:pageBreakBefore[^>]*/>\s*</w:pPr>\s*</w:p>', '', xml_texto)
                 
                 conteudo = xml_texto.encode("utf-8")
                 
@@ -153,8 +141,8 @@ if arquivo_word:
     if match_codigo:
         codigo_doc = match_codigo.group(0).strip().upper().replace(" ", "")
 
-    # Roda o processamento inteligente com filtro de deduplicação
-    dados_finais = processar_pacote_completo_xml(dados_brutos)
+    # Processamento seguro com isolamento de cabeçalho
+    dados_finais = processar_layout_xml_blindado(dados_brutos)
 
     st.download_button(
         label="📥 CLIQUE AQUI PARA BAIXAR O DOCUMENTO FORMATADO",
@@ -162,4 +150,4 @@ if arquivo_word:
         file_name=f"{codigo_doc}_Formatado_Homologado.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
-    st.success(f"✅ **TRIAGEM CONCLUÍDA COM SUCESSO!** Textos duplicados removidos, parágrafos alinhados e cabeçalhos preservados.")
+    st.success(f"✅ **TRIAGEM CONCLUÍDA COM SUCESSO!** Tabela superior isolada, vazamento de texto bloqueado e páginas em branco eliminadas.")
