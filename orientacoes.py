@@ -18,53 +18,62 @@ with st.sidebar:
 
 st.title("Triagem Avançada & Formatador Automático - NAQH")
 st.markdown("""
-### 🧠 Inteligência Multidocumento
-O sistema realiza a triagem dinâmica identificando o tipo de documento, validando as seções obrigatórias e aplicando a formatação geométrica da Norma Zero de forma segura, sem travar ou reter seus dados.
+### 🧠 Inteligência Multidocumento e Controle de Atualizações
+O sistema realiza a triagem dinâmica identificando o tipo de documento e aplicando a formatação geométrica da Norma Zero de forma segura, **preservando o alinhamento nativo de listas e subseções**.
 """)
 
-# --- 2. MOTOR DE FORMATACÃO PROTEGIDA ---
+# --- 2. MOTOR DE FORMATACÃO GEOMÉTRICA CALIBRADO (ANTI-QUEBRAS) ---
 def aplicar_formatacao_protegida(arquivo_bytes):
     doc = docx.Document(arquivo_bytes)
     
-    # REGRA 1: MARGENS OFICIAIS (Superior: 2cm, Inferior: 2cm, Esquerda: 2cm, Direita: 3cm)
+    # REGRA 1: CONFIGURAÇÃO GEOMÉTRICA DE MARGENS (Norma Zero: Sup 2 / Inf 2 / Esq 2 / Dir 3)
     for section in doc.sections:
         section.top_margin = Cm(2.0)
         section.bottom_margin = Cm(2.0)
         section.left_margin = Cm(2.0)
         section.right_margin = Cm(3.0)
 
-    # REGRA 2: TRATAMENTO EXCLUSIVO DO CORPO DE TEXTO CORRIDO
+    # REGRA 2: TRATAMENTO DO CORPO DE TEXTO CORRIDO
     for paragraph in doc.paragraphs:
         texto_limpo = paragraph.text.strip()
         
+        # Pula parágrafos vazios
         if not texto_limpo:
             continue
             
+        # Preserva a integridade visual da seção de referências bibliográficas
         if "REFERÊNCIAS" in texto_limpo.upper() or "REFERENCIA" in texto_limpo.upper():
             continue
             
+        # Aplica os padrões obrigatórios de espaçamento vertical e entrelinhas (1.5)
         paragraph.paragraph_format.space_before = Pt(4)
         paragraph.paragraph_format.space_after = Pt(4)
         paragraph.paragraph_format.line_spacing = 1.5
         
+        # Padroniza a família tipográfica para Calibri 11
         for run in paragraph.runs:
             if not paragraph.style.name.startswith('Heading'):
                 run.font.name = 'Calibri'
                 run.font.size = Pt(11)
 
-        # Regra de Alinhamento de Listas e Subitens (Ex: 5.4.1, 5.4.3 ou 1.)
-        match_numeracao = re.match(r'^(\d+(\.\d+)*\.?)\s*', texto_limpo)
-        if match_numeracao or (texto_limpo[:4] and ')' in texto_limpo[:4]):
+        # --- FILTRO PROTETOR DE ALINHAMENTO ---
+        # Detecta se o parágrafo já é um título numerado, subitem com parêntese ou marcador de ponto
+        # Se for, o script APENAS formata o texto e não mexe nas tabulações originais para não quebrar
+        is_subitem_letra = re.match(r'^[a-z]\s*\)', texto_limpo, re.IGNORECASE)
+        is_numeracao_composta = re.match(r'^(\d+(\.\d+)*\.?)\s*', texto_limpo)
+        is_marcador_ponto = texto_limpo.startswith('•') or paragraph.style.name.startswith('List')
+        
+        if is_subitem_letra or is_numeracao_composta or is_marcador_ponto:
+            # Mantém o alinhamento à esquerda nativo do arquivo, impedindo que as letras fiquem soltas
             paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
-            paragraph.paragraph_format.left_indent = Cm(1.25)
-            paragraph.paragraph_format.first_line_indent = Cm(-1.25)
         else:
-            # Correção do Referencial Teórico (Recuo de primeira linha de 1,25 cm)
+            # Parágrafos de texto convencional longo (Como o Objetivo e Referencial Teórico)
             paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-            paragraph.paragraph_format.left_indent = Cm(0)
-            paragraph.paragraph_format.first_line_indent = Cm(1.25)
+            # Aplica o recuo clássico de parágrafo de 1,25 cm apenas onde não for lista
+            if paragraph.paragraph_format.first_line_indent is None or paragraph.paragraph_format.first_line_indent == Cm(0):
+                paragraph.paragraph_format.first_line_indent = Cm(1.25)
 
-    # REGRA 3: NORMALIZAÇÃO DE TABELAS
+    # REGRA 3: MANUTENÇÃO ESTÁVEL DE TABELAS (Garante que fiquem perfeitas como o Quadro 1)
     for table in doc.tables:
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
         for row in table.rows:
@@ -82,7 +91,7 @@ def aplicar_formatacao_protegida(arquivo_bytes):
     conteudo_saida.seek(0)
     return conteudo_saida.getvalue()
 
-# --- 3. FLUXO DE COMPILAÇÃO E TRIAGEM ---
+# --- 3. FLUXO DE PROCESSAMENTO ---
 arquivo_word = st.file_uploader("Arraste o documento WORD (.docx) aqui para Triagem e Formatação", type=["docx"])
 
 if arquivo_word:
@@ -104,7 +113,7 @@ if arquivo_word:
     if match_codigo:
         codigo_doc = match_codigo.group(0).strip().upper().replace(" ", "")
 
-    # Processa os dados diretamente sem checar duplicidades
+    # Gera a saída de alta fidelidade visual
     dados_finais = aplicar_formatacao_protegida(arquivo_word)
 
     st.download_button(
@@ -113,4 +122,4 @@ if arquivo_word:
         file_name=f"{codigo_doc}_Formatado_Homologado.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
-    st.success(f"✅ **TRIAGEM CONCLUÍDA COM SUCESSO!** Parágrafos e listas alinhados. Cabeçalho e paginação preservados.")
+    st.success(f"✅ **TRIAGEM CONCLUÍDA COM SUCESSO!** Documento reajustado para as margens institucionais com proteção de listas e tabelas.")
