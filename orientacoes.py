@@ -7,11 +7,12 @@ from docx.oxml.ns import qn
 import pandas as pd
 from io import BytesIO
 from datetime import datetime
+import re
 
 # --- 1. CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="Triagem & Lista Mestra NAQH", page_icon="📊", layout="wide")
 
-# Menu Lateral - Identificação do Operador
+# Menu Lateral - Identificação do Operador (Solicitado)
 with st.sidebar:
     st.markdown("### 🧑‍💻 Operador do Sistema")
     st.markdown("**Ezequias Santos**\n*Agt Administrativo*")
@@ -20,7 +21,7 @@ with st.sidebar:
 st.title("Triagem Avançada & Gerador de Lista Mestra - NAQH")
 st.markdown("""
 ### 🧠 Inteligência Multidocumento e Controle de Atualizações
-O sistema agora realiza a triagem dinâmica identificando o tipo de documento e validando se todas as **seções obrigatórias exigidas pela Norma Zero** estão presentes.
+O sistema realiza a triagem dinâmica identificando o tipo de documento, validando as seções obrigatórias e capturando de forma inteligente os dados de identificação.
 """)
 
 # Inicializa o banco de dados do Histórico de Validações (Lista Mestra) na memória do servidor
@@ -64,9 +65,10 @@ if arquivo_word:
         p_element.getparent().remove(p_element)
         
     # Consolidação de Texto para Varredura Completa (Corpo e Tabelas)
-    texto_corpo_completo = "".join([p.text.strip().upper() for p in doc.paragraphs])
-    texto_tabelas_completo = "".join([cell.text.strip().upper() for t in doc.tables for r in t.rows for cell in r.cells])
-    texto_total_validacao = texto_corpo_completo + texto_tabelas_completo
+    texto_corpo_raw = " ".join([p.text.strip() for p in doc.paragraphs])
+    texto_tabelas_raw = " ".join([cell.text.strip() for t in doc.tables for r in t.rows for cell in r.cells])
+    texto_total_raw = texto_corpo_raw + " " + texto_tabelas_raw
+    texto_total_validacao = texto_total_raw.upper()
     
     # --- ETAPA 1: IDENTIFICAÇÃO DINÂMICA DO TIPO (9 MODELOS DO MANUAL) ---
     tipo_detectado = "NORMA"
@@ -109,30 +111,47 @@ if arquivo_word:
         if termo not in texto_total_validacao:
             erros_gravissimos.append(f"⚠️ **OMISSÃO DE SEÇÃO CRÍTICA (Modelo {tipo_detectado}):** A seção contendo o termo obrigatório **'{termo}'** não foi localizada no arquivo.")
 
-    # --- ETAPA 3: EXTRAÇÃO DE CÓDIGO E VERSÃO DOS CABEÇALHOS ---
+    # --- ETAPA 3: EXTRAÇÃO INTELIGENTE (TABELAS + MÉTODOS DE CONTINGÊNCIA NO TEXTO) ---
     codigo_doc = "NÃO IDENTIFICADO"
+    # Método 1: Busca em tabelas padrões do cabeçalho
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
                 txt = cell.text.strip()
                 if "CÓDIGO:" in txt.upper() or "CODIGO:" in txt.upper():
                     codigo_doc = txt.split(":")[-1].strip()
+                    break
 
-    versao_doc = "1ª"
+    # Método 2 (Contingência): Busca por padrões regex comuns de codificação (Ex: PROT_SCIH 0018)
+    if codigo_doc == "NÃO IDENTIFICADO" or len(codigo_doc) <= 2:
+        match_codigo = re.search(r'\b(PROT|POP|MAN|NOR|ROT|REG|POL|PLANC|PROG)_[A-Z0-9_\s-]+\b', texto_total_raw, re.IGNORECASE)
+        if match_codigo:
+            codigo_doc = match_codigo.group(0).strip()
+
+    versao_doc = "NÃO IDENTIFICADA"
+    # Método 1: Busca em tabelas padrões do cabeçalho
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
                 txt = cell.text.strip()
                 if "VERSÃO:" in txt.upper() or "VERSAO:" in txt.upper():
                     versao_doc = txt.split(":")[-1].strip()
+                    break
 
+    # Método 2 (Contingência): Busca por números ordinais de versão na tabela de registro histórico
+    if versao_doc == "NÃO IDENTIFICADA" or not any(char.isdigit() for char in versao_doc):
+        match_versao = re.findall(r'\b(\d+ª|\d+ª\s*VERSÃO|\d+\.\d+)\b', texto_total_raw, re.IGNORECASE)
+        if match_versao:
+            versao_doc = match_versao[-1].strip()  # Captura a última versão mapeada (geralmente a mais atual no histórico)
+
+    # Validações finais de integridade
     possui_codigo = codigo_doc != "NÃO IDENTIFICADO" and len(codigo_doc) > 2
-    possui_versao = any(char.isdigit() for char in versao_doc)
+    possui_versao = versao_doc != "NÃO IDENTIFICADA" and any(char.isdigit() for char in versao_doc)
 
     if not possui_codigo: 
-        erros_gravissimos.append("❌ **CABEÇALHO INCOMPLETO:** O campo 'CÓDIGO' está ausente nas tabelas estruturais.")
+        erros_gravissimos.append("❌ **CABEÇALHO INCOMPLETO:** Não foi possível extrair um 'CÓDIGO' válido da estrutura padrão.")
     if not possui_versao: 
-        erros_gravissimos.append("❌ **CABEÇALHO INCOMPLETO:** O campo 'VERSÃO' está ausente ou mal formatado.")
+        erros_gravissimos.append("❌ **CABEÇALHO INCOMPLETO:** Não foi possível determinar a 'VERSÃO' atualizada do documento.")
 
     # --- ETAPA 4: GERENCIADOR DE DUPLICIDADE ---
     df_atual = st.session_state.historico_lista_mestra
@@ -143,7 +162,7 @@ if arquivo_word:
 
     # --- ETAPA 5: FORMATAÇÃO ESTÉTICA E GERAÇÃO DE SAÍDA ---
     if not erros_gravissimos:
-        st.success("✅ **TRIAGEM CONCLUÍDA COM SUCESSO!** Layout validado e liberado para arquivamento.")
+        st.success(f"✅ **TRIAGEM CONCLUÍDA COM SUCESSO!** Mapeado: Código `{codigo_doc}` | Versão `{versao_doc}`.")
         
         # 1. Registro Automático no Histórico da Lista Mestra
         nova_linha = {
@@ -176,30 +195,3 @@ if arquivo_word:
             
             primeiros_caracteres = texto_limpo[:8]
             if primeiros_caracteres and (primeiros_caracteres.replace('.', '').isdigit() or ')' in primeiros_caracteres):
-                paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
-                paragraph.paragraph_format.left_indent = Cm(1.25)
-                paragraph.paragraph_format.first_line_indent = Cm(-1.25)
-            else:
-                paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-                paragraph.paragraph_format.left_indent = Cm(0)
-                paragraph.paragraph_format.first_line_indent = Cm(1.25)
-
-        # Preparar arquivo de download em memória
-        conteudo_saida = BytesIO()
-        doc.save(conteudo_saida)
-        conteudo_saida.seek(0)
-        
-        st.download_button(
-            label="📥 Baixar Documento Formatado e Homologado",
-            data=conteudo_saida,
-            file_name=f"{codigo_doc}_Formatado.docx",
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        )
-    else:
-        st.error("### 🛑 O documento possui inconformidades estruturais:")
-        for erro in erros_gravissimos:
-            st.markdown(erro)
-
-st.divider()
-st.subheader("📊 Histórico Dinâmico da Lista Mestra (Excel)")
-st.dataframe(st.session_state.historico_lista_mestra, use_container_width=True)
