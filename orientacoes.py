@@ -3,6 +3,7 @@ import docx
 from docx.shared import Cm, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
+from docx.oxml import OxmlElement  # Garante a importação correta
 import pandas as pd
 from io import BytesIO
 from datetime import datetime
@@ -11,9 +12,9 @@ import re
 # --- 1. CONFIGURAÇÃO DA PÁGINA STREAMLIT ---
 st.set_page_config(page_title="Triagem & Lista Mestra NAQH", page_icon="📊", layout="wide")
 
-# Menu Lateral - Identificação Visual do Operador (Solicitado)
+# Menu Lateral - Identificação Visual do Operador Correta
 with st.sidebar:
-    st.markdown("### 🧑‍💻 Operador Hudson")
+    st.markdown("### 🧑‍💻 Operador")
     st.markdown("**Ezequias Santos**\n*Agt Administrativo*")
     st.divider()
 
@@ -29,7 +30,7 @@ if "historico_lista_mestra" not in st.session_state:
         "Status", "Data de Triagem", "Situação"
     ])
 
-# --- 2. MOTOR DE FORMATACÃO PROTEGIDA (PRESERVA CABEÇALHOS, RODAPÉS E TABELAS) ---
+# --- 2. MOTOR DE FORMATACÃO PROTEGIDA ---
 def aplicar_formatacao_protegida(arquivo_bytes):
     doc = docx.Document(arquivo_bytes)
     
@@ -41,53 +42,45 @@ def aplicar_formatacao_protegida(arquivo_bytes):
         section.right_margin = Cm(3.0)
 
     # REGRA 2: TRATAMENTO EXCLUSIVO DO CORPO DE TEXTO CORRIDO
-    # Usamos o laço ignorando cabeçalhos e tabelas para não sumir com logos ou números de páginas
     for paragraph in doc.paragraphs:
         texto_limpo = paragraph.text.strip()
         
-        # Pula linhas totalmente vazias sem quebrar o documento
         if not texto_limpo:
             continue
             
-        # Ignora a seção de referências para manter formatação própria
         if "REFERÊNCIAS" in texto_limpo.upper() or "REFERENCIA" in texto_limpo.upper():
             continue
             
-        # Aplica espaçamentos oficiais da Norma Zero
         paragraph.paragraph_format.space_before = Pt(4)
         paragraph.paragraph_format.space_after = Pt(4)
         paragraph.paragraph_format.line_spacing = 1.5
         
-        # Garante fonte Calibri 11 para o texto do corpo
         for run in paragraph.runs:
             if not paragraph.style.name.startswith('Heading'):
                 run.font.name = 'Calibri'
                 run.font.size = Pt(11)
 
         # Regra de Alinhamento de Listas e Subitens (Ex: 5.4.1, 5.4.3 ou 1.)
-        # Resolve o problema de numerações grudadas aplicando recuo invertido
         match_numeracao = re.match(r'^(\d+(\.\d+)*\.?)\s*', texto_limpo)
         if match_numeracao or (texto_limpo[:4] and ')' in texto_limpo[:4]):
             paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
             paragraph.paragraph_format.left_indent = Cm(1.25)
             paragraph.paragraph_format.first_line_indent = Cm(-1.25)
         else:
-            # Correção do Referencial Teórico (Garante recuo de primeira linha de 1,25 cm)
+            # Correção do Referencial Teórico (Recuo de primeira linha de 1,25 cm)
             paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
             paragraph.paragraph_format.left_indent = Cm(0)
             paragraph.paragraph_format.first_line_indent = Cm(1.25)
 
-    # REGRA 3: NORMALIZAÇÃO DE TABELAS (Ajusta larguras e centraliza sem estragar bordas)
+    # REGRA 3: NORMALIZAÇÃO DE TABELAS (Usando a escrita de função exata da importação)
     for table in doc.tables:
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
         for row in table.rows:
-            # Força as linhas a não quebrarem de página de forma feia
             trPr = row._element.get_or_add_trPr()
             if not row._element.xpath('w:trPr/w:cantSplit'):
+                # Corrigido para bater exatamente com a importação do topo do arquivo
                 trPr.append(OxmlElement('w:cantSplit'))
             for cell in row.cells:
-                tcPr = cell._element.get_or_add_tcPr()
-                # Remove espaços em branco internos nas células
                 for p in cell.paragraphs:
                     p.paragraph_format.space_before = Pt(2)
                     p.paragraph_format.space_after = Pt(2)
@@ -110,20 +103,17 @@ arquivo_word = st.file_uploader("Arraste o documento WORD (.docx) aqui para Tria
 if arquivo_word:
     doc_triagem = docx.Document(arquivo_word)
     
-    # Coleta de metadados em lote de alta velocidade
     texto_corpo_raw = " ".join([p.text.strip() for p in doc_triagem.paragraphs[:40]])
     texto_tabelas_raw = " ".join([cell.text.strip() for t in doc_triagem.tables[:2] for r in t.rows for cell in r.cells])
     texto_total_raw = texto_corpo_raw + " " + texto_tabelas_raw
     texto_total_validacao = texto_total_raw.upper()
     
-    # Identificação do Tipo Documental
     tipo_detectado = "PROTOCOLO"
     if "PROCEDIMENTO OPERACIONAL" in texto_total_validacao or "POP" in texto_total_validacao:
         tipo_detectado = "POP"
         
     st.write(f"📋 **Tipo de Documento Identificado:** `{tipo_detectado}`")
     
-    # Extração estável de Código e Versão
     codigo_doc = "PROT_SCIH005"
     match_codigo = re.search(r'\b(PROT|POP|MAN|NOR|ROT)_[A-Z0-9_\s-]+\b', texto_total_raw, re.IGNORECASE)
     if match_codigo:
@@ -136,7 +126,6 @@ if arquivo_word:
 
     df_atual = st.session_state.historico_lista_mestra
     
-    # Limpa tentativas anteriores com erro para evitar bloqueio falso
     if not df_atual.empty:
         st.session_state.historico_lista_mestra = df_atual[
             ~((df_atual["Código do Documento"] == codigo_doc) & (df_atual["Versão Atual"] == "NÃO IDENTIFICADA"))
@@ -158,7 +147,6 @@ if arquivo_word:
             }
             st.session_state.historico_lista_mestra = pd.concat([df_atual, pd.DataFrame([nova_linha])], ignore_index=True)
 
-        # Executa a formatação protegendo os cabeçalhos nativos
         dados_finais = aplicar_formatacao_protegida(arquivo_word)
 
         st.download_button(
