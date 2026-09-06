@@ -3,6 +3,7 @@ import docx
 import zipfile
 import re
 from io import BytesIO
+import time
 
 # --- 1. CONFIGURAÇÃO ---
 st.set_page_config(page_title="Formatador de Documentos NAQH", page_icon="📊", layout="wide")
@@ -14,14 +15,13 @@ with st.sidebar:
 
 st.title("Triagem Avançada & Formatador Automático - NAQH")
 st.markdown("""
-### 🧠 CORRIGIDO — Recuo de 1,25cm na 1ª linha • Sem espaços vazios
-✅ Margens: Superior 3,0cm • Esquerda 3,0cm • Inferior 2,0cm • Direita 2,0cm
-✅ Recuo de 1,25cm → SOMENTE na 1ª linha dos parágrafos
-✅ Títulos, listas e tabelas → SEM recuo e SEM espaços gigantes
+### 🧠 CORRIGIDO — Margens ABNT + Recuo 1,25cm + RÁPIDO
+✅ Superior: 3,0cm • Esquerda: 3,0cm • Inferior: 2,0cm • Direita: 2,0cm
+✅ Recuo de 1,25cm na 1ª linha • Títulos/listas SEM recuo
 """)
 
 # ============================================================
-# 📋 SEÇÕES OBRIGATÓRIAS POR TIPO
+# 📋 SEÇÕES OBRIGATÓRIAS
 # ============================================================
 SECOES_POR_TIPO = {
     "POI": ["1. INTRODUÇÃO", "2. OBJETIVO", "3. FINALIDADE", "4. ABRANGÊNCIA", "5. RESPONSABILIDADES", "6. GESTÃO DE RISCO", "7. ANEXOS", "8. REFERÊNCIAS"],
@@ -32,29 +32,25 @@ SECOES_POR_TIPO = {
     "NOR": ["1. OBJETIVO", "2. ABRANGÊNCIA", "3. DEFINIÇÕES", "4. COMPETÊNCIAS", "5. PROCEDIMENTOS", "6. DISPOSIÇÕES FINAIS", "7. REFERÊNCIAS"]
 }
 
-# Lista de termos que NÃO devem ter recuo
-SEM_RECUO = [
+# Termos que NÃO devem ter recuo
+NAO_RECUAR = [
     "OBJETIVO", "APLICABILIDADE", "REFERENCIAL TEÓRICO", "CLASSIFICAÇÃO",
-    "RESPONSABILIDADES", "MEDIDAS OBRIGATÓRIAS", "REFERÊNCIAS", "ANEXOS",
+    "RESPONSABILIDADES", "MEDIDAS PREVENTIVAS", "REFERÊNCIAS", "ANEXOS",
     "DEFINIÇÃO", "FINALIDADE", "ÂMBITO", "COMPETÊNCIA", "PROCEDIMENTOS",
-    "DISPOSIÇÕES", "INTRODUÇÃO", "FINALIDADE", "GESTÃO DE RISCO",
-    "QUADRO", "Figura", "Tabela", "a)", "b)", "c)", "d)", "e)", "f)", "g)", "h)", "i)", "j)",
-    "5.1", "5.2", "5.3", "5.4", "6.1", "6.2", "4.", "3.", "2.", "1.",
-    "●", "•", "Não utilizar", "Orientar", "Usar", "Aplicar", "Realizar", "Garantir"
+    "DISPOSIÇÕES", "QUADRO", "Figura", "Tabela", "a)", "b)", "c)", "d)", "e)",
+    "5.1", "5.2", "5.3", "5.4", "6.1", "•", "●"
 ]
 
 # ============================================================
-# 🧠 MOTOR — RECUO CORRIGIDO + SEM ESPAÇOS VAZIOS
+# 🧠 MOTOR SIMPLIFICADO — SEM LOOP, SEM TRAVAMENTO
 # ============================================================
 def formatar_documento_completo(arquivo_bytes):
     """
-    ✅ Margens CORRETAS: Sup 3,0cm • Esq 3,0cm • Inf 2,0cm • Dir 2,0cm
-    ✅ Recuo de 1,25cm → SOMENTE 1ª linha dos parágrafos (<w:firstLine>)
-    ✅ ZERA espaçamento antes/depois → SEM buracos gigantes
-    ✅ Títulos, listas e tabelas → SEM recuo
+    Margens: Sup 3,0cm Esq 3,0cm Inf 2,0cm Dir 2,0cm
+    Recuo 1,25cm na 1ª linha — forma SIMPLES e RÁPIDA
     """
     top_dxa, bottom_dxa, left_dxa, right_dxa = "1701", "1134", "1701", "1134"
-    recuo_primeira_linha = "709"  # 1,25 cm em dxa
+    recuo = "709"  # 1,25cm
     
     zip_original = zipfile.ZipFile(BytesIO(arquivo_bytes))
     buffer_saida = BytesIO()
@@ -64,63 +60,48 @@ def formatar_documento_completo(arquivo_bytes):
             conteudo = zip_original.read(item.filename)
             
             if item.filename == "word/document.xml":
-                xml_texto = conteudo.decode("utf-8")
+                xml = conteudo.decode("utf-8")
                 
-                # ✅ APLICA MARGENS CORRETAS
-                xml_texto = re.sub(r'w:top="\d+"',    f'w:top="{top_dxa}"',    xml_texto)
-                xml_texto = re.sub(r'w:bottom="\d+"', f'w:bottom="{bottom_dxa}"', xml_texto)
-                xml_texto = re.sub(r'w:left="\d+"',   f'w:left="{left_dxa}"',   xml_texto)
-                xml_texto = re.sub(r'w:right="\d+"',  f'w:right="{right_dxa}"',  xml_texto)
+                # ✅ Aplica margens — RÁPIDO
+                xml = re.sub(r'w:top="\d+"',    f'w:top="{top_dxa}"',    xml)
+                xml = re.sub(r'w:bottom="\d+"', f'w:bottom="{bottom_dxa}"', xml)
+                xml = re.sub(r'w:left="\d+"',   f'w:left="{left_dxa}"',   xml)
+                xml = re.sub(r'w:right="\d+"',  f'w:right="{right_dxa}"',  xml)
                 
-                # ✅ ZERA ESPAÇAMENTO ANTES/DEPOIS → ELIMINA BURACOS GIGANTES
-                xml_texto = re.sub(r'w:spaceBefore="\d+"', 'w:spaceBefore="0"', xml_texto)
-                xml_texto = re.sub(r'w:spaceAfter="\d+"',  'w:spaceAfter="240"', xml_texto)
-                xml_texto = re.sub(r'w:lineSpacing="\d+"', 'w:lineSpacing="276"', xml_texto)
+                # ✅ Zera espaçamentos — ELIMINA BURACOS
+                xml = re.sub(r'w:spaceBefore="\d+"', 'w:spaceBefore="0"', xml)
+                xml = re.sub(r'w:spaceAfter="\d+"',  'w:spaceAfter="240"', xml)
                 
-                # ✅ REMOVE QUALQUER RECUO ERRADO ANTES
-                xml_texto = re.sub(r'<w:ind[^>]+>', '', xml_texto)
+                # ✅ Remove recuos antigos
+                xml = re.sub(r'<w:ind[^>]+/?>', '', xml)
                 
-                # ✅ ADICIONA RECUO DE 1,25cm SOMENTE NA 1ª LINHA (<w:firstLine>)
-                # Aplica em parágrafos que NÃO são títulos, listas ou itens
-                padrao_paragrafo = r'(<w:pPr>(?:(?!<w:pStyle).)*?</w:pPr>)'
+                # ✅ Aplica recuo de forma SIMPLES: adiciona <w:ind w:firstLine="709"/>
+                # Depois de cada <w:pPr> que NÃO seja título/lista
+                xml = re.sub(
+                    r'(<w:pPr>)((?:(?!<w:numPr>|<w:pStyle w:val="Título").){0,150}</w:pPr>)',
+                    rf'\1\2<w:ind w:firstLine="{recuo}"/>',
+                    xml
+                )
                 
-                def aplicar_recuo(match):
-                    bloco_completo = match.group(0)
-                    conteudo_seguinte = xml_texto[match.end():match.end()+300].upper()
-                    
-                    # ✅ NÃO aplica recuo se for título, lista ou item de tabela
-                    for termo in SEM_RECUO:
-                        if termo.upper() in conteudo_seguinte:
-                            return bloco_completo
-                    
-                    # ✅ Aplica recuo CORRETO: firstLine = 1,25cm
-                    return bloco_completo.replace("</w:pPr>", f'<w:ind w:firstLine="{recuo_primeira_linha}"/></w:pPr>')
-                
-                xml_texto = re.sub(padrao_paragrafo, aplicar_recuo, xml_texto)
+                # ✅ Remove recuo de títulos e listas
+                for termo in NAO_RECUAR:
+                    padrao = rf'<w:ind w:firstLine="{recuo}"/>([^<]*?{re.escape(termo)}[^<]*?)</w:pPr>'
+                    xml = re.sub(padrao, r'\1</w:pPr>', xml, flags=re.IGNORECASE)
                 
                 # ✅ Remove quebras problemáticas
-                xml_texto = re.sub(r'<w:br w:type="page"/>', '', xml_texto)
-                xml_texto = re.sub(r'<w:pageBreakBefore/>', '', xml_texto)
+                xml = re.sub(r'<w:br w:type="page"/>', '', xml)
+                xml = re.sub(r'<w:pageBreakBefore/>', '', xml)
                 
-                conteudo = xml_texto.encode("utf-8")
+                conteudo = xml.encode("utf-8")
 
-            # ✅ CABEÇALHOS — MESMAS MARGENS
-            elif item.filename.startswith("word/header"):
-                xml_texto = conteudo.decode("utf-8")
-                xml_texto = re.sub(r'w:top="\d+"',    f'w:top="{top_dxa}"',    xml_texto)
-                xml_texto = re.sub(r'w:bottom="\d+"', f'w:bottom="{bottom_dxa}"', xml_texto)
-                xml_texto = re.sub(r'w:left="\d+"',   f'w:left="{left_dxa}"',   xml_texto)
-                xml_texto = re.sub(r'w:right="\d+"',  f'w:right="{right_dxa}"',  xml_texto)
-                conteudo = xml_texto.encode("utf-8")
-
-            # ✅ RODAPÉS — MESMAS MARGENS
-            elif item.filename.startswith("word/footer"):
-                xml_texto = conteudo.decode("utf-8")
-                xml_texto = re.sub(r'w:top="\d+"',    f'w:top="{top_dxa}"',    xml_texto)
-                xml_texto = re.sub(r'w:bottom="\d+"', f'w:bottom="{bottom_dxa}"', xml_texto)
-                xml_texto = re.sub(r'w:left="\d+"',   f'w:left="{left_dxa}"',   xml_texto)
-                xml_texto = re.sub(r'w:right="\d+"',  f'w:right="{right_dxa}"',  xml_texto)
-                conteudo = xml_texto.encode("utf-8")
+            # ✅ CABEÇALHOS e RODAPÉS — mesmas margens
+            elif item.filename.startswith("word/header") or item.filename.startswith("word/footer"):
+                xml = conteudo.decode("utf-8")
+                xml = re.sub(r'w:top="\d+"',    f'w:top="{top_dxa}"',    xml)
+                xml = re.sub(r'w:bottom="\d+"', f'w:bottom="{bottom_dxa}"', xml)
+                xml = re.sub(r'w:left="\d+"',   f'w:left="{left_dxa}"',   xml)
+                xml = re.sub(r'w:right="\d+"',  f'w:right="{right_dxa}"',  xml)
+                conteudo = xml.encode("utf-8")
             
             zip_novo.writestr(item, conteudo)
             
@@ -149,20 +130,20 @@ def identificar_tipo_e_secoes(texto):
         return "PROT", SECOES_POR_TIPO["PROT"]
 
 # ============================================================
-# 🚀 INTERFACE
+# 🚀 INTERFACE — SEM TRAVAMENTO
 # ============================================================
-with st.form("form_recuo_correto"):
+with st.form("form_final_rapido"):
     arquivo_word = st.file_uploader(
         "📂 Arraste o documento WORD (.docx) aqui",
         type=["docx"],
-        key="upload_recuo_correto"
+        key="upload_rapido"
     )
     enviado = st.form_submit_button("🔄 ANALISAR E FORMATAR", type="primary")
 
 if enviado and arquivo_word:
     st.info(f"✅ Arquivo carregado: **{arquivo_word.name}**")
     
-    with st.spinner("Aplicando margens e recuo de 1,25cm..."):
+    with st.spinner("Processando... aplicando margens e recuo..."):
         dados_brutos = arquivo_word.read()
         
         doc_triagem = docx.Document(BytesIO(dados_brutos))
@@ -177,6 +158,7 @@ if enviado and arquivo_word:
         if match_codigo:
             codigo_doc = match_codigo.group(0).strip().upper().replace(" ", "")
         
+        # ✅ Processamento RÁPIDO
         dados_finais = formatar_documento_completo(dados_brutos)
         
         st.success(f"📋 **DOCUMENTO IDENTIFICADO: {sigla_tipo}**")
@@ -195,9 +177,7 @@ if enviado and arquivo_word:
             type="primary"
         )
         
-        st.success("""✅ **PROCESSO CONCLUÍDO — RECUO CORRIGIDO!**
-• ✅ Margens: Superior 3,0cm | Esquerda 3,0cm | Inferior 2,0cm | Direita 2,0cm
-• ✅ Recuo de 1,25cm → SOMENTE na 1ª linha (texto recua à DIREITA)
-• ✅ Espaçamentos ZERADOS → SEM buracos gigantes entre título e texto
-• ✅ Títulos, listas e tabelas → SEM recuo e SEM espaços extras
-• ✅ Cabeçalhos e rodapés alinhados""")
+        st.success("""✅ **CONCLUÍDO!**
+• ✅ Margens: Sup 3,0cm | Esq 3,0cm | Inf 2,0cm | Dir 2,0cm
+• ✅ Recuo 1,25cm na 1ª linha • Títulos SEM recuo
+• ✅ Espaçamentos normalizados • Sem páginas em branco""")
