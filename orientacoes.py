@@ -48,8 +48,11 @@ def set_cell_margins(cell, top=100, bottom=100, left=150, right=150):
         tcMar.append(node)
     tcPr.append(tcMar)
 
-# --- 3. FLUXO DE CARREGAMENTO DO ARQUIVO ---
+# --- 3. ÁREA DE INTERAÇÃO COM O USUÁRIO ---
 arquivo_word = st.file_uploader("Arraste o documento WORD (.docx) aqui para Triagem e Formatação", type=["docx"])
+
+# Contêiner reservado para saídas críticas (Garante exibição prioritária no topo)
+area_resultado = st.container()
 
 if arquivo_word:
     doc = docx.Document(arquivo_word)
@@ -156,48 +159,41 @@ if arquivo_word:
         erros_gravissimos.append(f"🚫 **BLOQUEIO DE DUPLICIDADE:** O documento **{codigo_doc}** já foi validado na versão **{versao_doc}**.")
 
     # --- ETAPA 5: FORMATAÇÃO ESTÉTICA E GERAÇÃO DE SAÍDA ---
-    if not erros_gravissimos:
-        # 1. Registro Automático no Histórico da Lista Mestra
-        nova_linha = {
-            "Código do Documento": codigo_doc,
-            "Título do Documento": f"{tipo_detectado.capitalize()} de {codigo_doc}",
-            "Tipo": tipo_detectado,
-            "Versão Atual": versao_doc,
-            "Status": "Aprovado na Triagem",
-            "Data de Triagem": datetime.now().strftime("%d/%m/%Y %H:%M"),
-            "Situação": "Ativo"
-        }
-        st.session_state.historico_lista_mestra = pd.concat([df_atual, pd.DataFrame([nova_linha])], ignore_index=True)
-        
-        # 2. Configuração Geométrica Oficial (Quadro 4: Sup 2 / Inf 2 / Esquer 2 / Dir 3)
-        for section in doc.sections:
-            section.top_margin = Cm(2.0)
-            section.bottom_margin = Cm(2.0)
-            section.left_margin = Cm(2.0)
-            section.right_margin = Cm(3.0)
-
-        # 3. Formatação do Corpo de Texto (Calibri 11, Espaçamento 1.5, Justificado)
-        for paragraph in doc.paragraphs:
-            texto_limpo = paragraph.text.strip()
-            if "REFERÊNCIAS" in texto_limpo.upper() or "REFERENCIA" in texto_limpo.upper():
-                continue
-                
-            paragraph.paragraph_format.space_before = Pt(4)
-            paragraph.paragraph_format.space_after = Pt(4)
-            paragraph.paragraph_format.line_spacing = 1.5
+    with area_resultado:
+        if not erros_gravissimos:
+            # 1. Registro Automático no Histórico da Lista Mestra
+            nova_linha = {
+                "Código do Documento": codigo_doc,
+                "Título do Documento": f"{tipo_detectado.capitalize()} de {codigo_doc}",
+                "Tipo": tipo_detectado,
+                "Versão Atual": versao_doc,
+                "Status": "Aprovado na Triagem",
+                "Data de Triagem": datetime.now().strftime("%d/%m/%Y %H:%M"),
+                "Situação": "Ativo"
+            }
+            st.session_state.historico_lista_mestra = pd.concat([df_atual, pd.DataFrame([nova_linha])], ignore_index=True)
             
-            primeiros_caracteres = texto_limpo[:8]
-            if primeiros_caracteres and (primeiros_caracteres.replace('.', '').isdigit() or ')' in primeiros_caracteres):
-                paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
-                paragraph.paragraph_format.left_indent = Cm(1.25)
-                paragraph.paragraph_format.first_line_indent = Cm(-1.25)
-            else:
-                paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-                paragraph.paragraph_format.left_indent = Cm(0)
-                paragraph.paragraph_format.first_line_indent = Cm(1.25)
+            # 2. Configuração Geométrica Oficial (Quadro 4: Sup 2 / Inf 2 / Esquer 2 / Dir 3)
+            for section in doc.sections:
+                section.top_margin = Cm(2.0)
+                section.bottom_margin = Cm(2.0)
+                section.left_margin = Cm(2.0)
+                section.right_margin = Cm(3.0)
 
-        # Preparar arquivo de download em memória
-        conteudo_saida = BytesIO()
-        doc.save(conteudo_saida)
-        conteudo_saida.seek(0)
-        
+            # 3. Formatação do Corpo de Texto (Calibri 11, Espaçamento 1.5, Justificado)
+            for paragraph in doc.paragraphs:
+                texto_limpo = paragraph.text.strip()
+                if "REFERÊNCIAS" in texto_limpo.upper() or "REFERENCIA" in texto_limpo.upper():
+                    continue
+                    
+                paragraph.paragraph_format.space_before = Pt(4)
+                paragraph.paragraph_format.space_after = Pt(4)
+                paragraph.paragraph_format.line_spacing = 1.5
+                
+                primeiros_caracteres = texto_limpo[:8]
+                if primeiros_caracteres and (primeiros_caracteres.replace('.', '').isdigit() or ')' in primeiros_caracteres):
+                    paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                    paragraph.paragraph_format.left_indent = Cm(1.25)
+                    paragraph.paragraph_format.first_line_indent = Cm(-1.25)
+                else:
+                    paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
