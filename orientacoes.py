@@ -11,7 +11,7 @@ from io import BytesIO
 # --- 1. CONFIGURAÇÃO DA PÁGINA STREAMLIT ---
 st.set_page_config(page_title="Formatador de Documentos NAQH", page_icon="📊", layout="wide")
 
-# Menu Lateral - Identificação Visual do Operador Garantida
+# Menu Lateral - Identificação Visual do Operador (Ezequias Santos Agt Administrativo)
 with st.sidebar:
     st.markdown("### 🧑‍💻 Operador")
     st.markdown("**Ezequias Santos**\n*Agt Administrativo*")
@@ -71,7 +71,7 @@ def formatar_corpo_com_seguranca(doc):
             continue
             
         # SE FOR IDENTIFICADO COMO TABELA DE CABEÇALHO OU ASSINATURA, O ROBÔ NÃO TOCA NELA
-        if "TIPO DE DOCUMENTO" in texto_primeira_celula or "SÃO LUÍS" in texto_primeira_celula or "ELABORAÇÃO" in texto_primeira_celula or "CÓDIGO" in texto_primeira_celula:
+        if "TIPO DE DOCUMENTO" in texto_primeira_celula or "SÃO LUÍS" in texto_primeira_celula or "ELABORAÇÃO" in texto_primeira_celula or "CÓDIGO" in texto_primeira_celula or "SEMUS" in texto_primeira_celula:
             continue
             
         # Aplica a unificação de linhas APENAS em tabelas de dados reais (Quadro 1, Quadro 2, etc.)
