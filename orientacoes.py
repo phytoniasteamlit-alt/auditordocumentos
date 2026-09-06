@@ -157,8 +157,6 @@ if arquivo_word:
 
     # --- ETAPA 5: FORMATAÇÃO ESTÉTICA E GERAÇÃO DE SAÍDA ---
     if not erros_gravissimos:
-        st.success(f"✅ **TRIAGEM CONCLUÍDA COM SUCESSO!** Mapeado: Código `{codigo_doc}` | Versão `{versao_doc}`.")
-        
         # 1. Registro Automático no Histórico da Lista Mestra
         nova_linha = {
             "Código do Documento": codigo_doc,
@@ -199,3 +197,7 @@ if arquivo_word:
                 paragraph.paragraph_format.first_line_indent = Cm(1.25)
 
         # Preparar arquivo de download em memória
+        conteudo_saida = BytesIO()
+        doc.save(conteudo_saida)
+        conteudo_saida.seek(0)
+        
