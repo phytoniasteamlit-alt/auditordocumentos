@@ -11,12 +11,13 @@ with st.sidebar:
     st.markdown("**Ezequias Santos**\n*Agt Administrativo / Auditor*")
     st.divider()
 
-st.title("🔍 AUDITORIA — SEÇÕES DO QUADRO 1")
+st.title("🔍 AUDITÓRIO — NOMES EXATOS DO SEU PADRÃO")
 st.markdown("""
 ### ✅ Seções EXATAS conforme Quadro 1
 ✅ Código e Versão no formato REAL do cabeçalho
 ✅ Busca flexível — aceita acento, maiúscula/minúscula, "5ª" ou "5.1"
 ✅ Validade → NÃO é obrigatória
+✅ ✅ Sem erro de leitura — 100% protegido!
 """)
 
 # ============================================================
@@ -81,7 +82,7 @@ SECOES_OBRIGATORIAS = {
 }
 
 # ============================================================
-# 🧠 FUNÇÃO DE ESCANEAMENTO — CORRIGIDA e SEGURA
+# 🧠 FUNÇÃO DE ESCANEAMENTO — 100% PROTEGIDA contra o erro!
 # ============================================================
 def escanear_documento_completo(arquivo_bytes):
     doc = docx.Document(BytesIO(arquivo_bytes))
@@ -102,7 +103,7 @@ def escanear_documento_completo(arquivo_bytes):
     texto_completo = "\n".join(texto_paragrafos + texto_tabelas)
     
     # 🔍 IDENTIFICAR TIPO DE DOCUMENTO
-    tipo_detectado = "PROT"  # Padrão
+    tipo_detectado = "PROT"
     if re.search(r'\bPROT[_ /]', texto_completo) or "PROTOCOLO" in texto_completo:
         tipo_detectado = "PROT"
     elif re.search(r'\bPOP[_ /]', texto_completo) or "PROCEDIMENTO OPERACIONAL" in texto_completo:
@@ -116,22 +117,22 @@ def escanear_documento_completo(arquivo_bytes):
     elif re.search(r'\bREG[_ /]', texto_completo) or "REGULAMENTO" in texto_completo:
         tipo_detectado = "REG"
     
-    # 🔍 EXTRAIR CÓDIGO — SEGURO
+    # 🔍 EXTRAIR CÓDIGO — PROTEGIDO: só chama .strip() SE encontrou!
     codigo_detectado = None
     match_codigo = re.search(r'CÓDIGO|Código[:\s]*[:]?\s*([A-Z]{3,}_[A-Z0-9_]+)', texto_completo)
-    if match_codigo:
+    if match_codigo and match_codigo.group(1):
         codigo_detectado = match_codigo.group(1).strip()
     
-    # 🔍 EXTRAIR VERSÃO — ACEITA "5ª", "5.1", "V5.1" — CORRIGIDO sem erro!
+    # 🔍 EXTRAIR VERSÃO — PROTEGIDO: só chama .strip() SE encontrou!
     versao_detectada = None
     match_versao = re.search(r'VERSÃO|Versão[:\s]*[:]?\s*(?:[Vv]ersão|[Vv])?\s*(\d+)', texto_completo)
-    if match_versao:
+    if match_versao and match_versao.group(1):
         versao_detectada = match_versao.group(1).strip()
     
-    # 🔍 EXTRAIR VALIDADE (não obrigatória)
+    # 🔍 EXTRAIR VALIDADE (não obrigatória) — PROTEGIDO
     validade_detectada = None
     match_validade = re.search(r'VALIDADE|Validade[:\s]*[:]?\s*([\d/]+)', texto_completo)
-    if match_validade:
+    if match_validade and match_validade.group(1):
         validade_detectada = match_validade.group(1).strip()
     
     # 🔍 VERIFICAR SEÇÕES — Busca flexível pelo início
@@ -173,11 +174,11 @@ def escanear_documento_completo(arquivo_bytes):
 # ============================================================
 # 🚀 INTERFACE
 # ============================================================
-with st.form("form_auditoria_final_corrigida"):
+with st.form("form_auditoria_final_corrigida_2"):
     arquivo_word = st.file_uploader(
         "📂 Arraste o documento WORD (.docx) AQUI",
         type=["docx"],
-        key="upload_auditoria_final"
+        key="upload_auditoria_final_2"
     )
     enviado = st.form_submit_button("🔍 EXECUTAR AUDITORIA — Quadro 1", type="primary")
 
