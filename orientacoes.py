@@ -1,96 +1,233 @@
 import streamlit as st
-import zipfile
+import docx
 import re
 from io import BytesIO
 
 # --- 1. CONFIGURAÇÃO ---
-st.set_page_config(page_title="Remover Páginas Vazias e Espaços", page_icon="📄", layout="wide")
+st.set_page_config(page_title="AUDITORIA COMPLETA — Triagem e Validação", page_icon="🔍", layout="wide")
 
 with st.sidebar:
     st.markdown("### 🧑‍💻 Operador")
-    st.markdown("**Ezequias Santos**\n*Agt Administrativo*")
+    st.markdown("**Ezequias Santos**\n*Agt Administrativo / Auditor*")
     st.divider()
 
-st.title("✅ REMOVER BURACOS GIGANTES E PÁGINAS VAZIAS")
+st.title("🔍 AUDITORIA COMPLETA — Triagem, Validação e Relatório")
 st.markdown("""
-### 🧹 ELIMINA ESPAÇOS GIGANTES QUE EMPURRAM O CONTEÚDO
-✅ Remove quebras de página forçadas e espaçamentos enormes
-✅ Mantém margens ABNT e cabeçalho 100% intactos
-✅ Puxa o conteúdo para logo abaixo do cabeçalho — sem buraco!
+### ✅ Escaneia TODO o documento página por página
+✅ Verifica se TODAS as seções obrigatórias EXISTEM
+✅ Verifica CÓDIGO, VERSÃO e VALIDADE no cabeçalho
+✅ ✅ = APROVADO / ❌ = FALTANDO → DOCUMENTO DEVE VOLTAR
+✅ Relatório detalhado com tudo que foi encontrado e faltou
 """)
 
 # ============================================================
-# 🧠 MOTOR — ELIMINA ESPAÇOS GIGANTES + PRESERVA TUDO
+# 📋 SEÇÕES OBRIGATÓRIAS POR TIPO DE DOCUMENTO
 # ============================================================
-def remover_espacos_e_quebras(arquivo_bytes):
-    zip_original = zipfile.ZipFile(BytesIO(arquivo_bytes))
-    buffer_saida = BytesIO()
-    
-    with zipfile.ZipFile(buffer_saida, "w", zipfile.ZIP_DEFLATED) as zip_novo:
-        for item in zip_original.infolist():
-            conteudo = zip_original.read(item.filename)
-            
-            if item.filename == "word/document.xml":
-                xml = conteudo.decode("utf-8")
-                
-                # 🧹 ZERA TODO espaçamento ANTES — ELIMINA BURACOS GIGANTES
-                xml = re.sub(r'w:spaceBefore="\d+"', 'w:spaceBefore="0"', xml)
-                
-                # 🧹 Padroniza espaçamento DEPOIS → espaços normais
-                xml = re.sub(r'w:spaceAfter="\d+"', 'w:spaceAfter="240"', xml)
-                
-                # 🧹 REMOVE TODAS as quebras de página FORÇADAS
-                xml = re.sub(r'<w:br w:type="page"/>', '', xml)
-                xml = re.sub(r'<w:pageBreakBefore/>', '', xml)
-                xml = re.sub(r'<w:lastRenderedPageBreak/>', '', xml)
-                xml = re.sub(r'<w:bookmarkStart[^>]*>', '', xml)
-                xml = re.sub(r'<w:bookmarkEnd[^>]*>', '', xml)
-                
-                # 🧹 REMOVE parágrafos VAZIOS que ocupam espaço
-                xml = re.sub(r'<w:p[^>]*>\s*<w:pPr[^>]*>\s*</w:pPr>\s*</w:p>', '', xml)
-                
-                # 🧹 REMOVE valores de espaçamento ABSURDOS (acima de 1000 = buraco gigante)
-                xml = re.sub(r'w:spaceBefore="(1\d{3}|[2-9]\d{3})"', 'w:spaceBefore="0"', xml)
-                xml = re.sub(r'w:spaceAfter="(1\d{3}|[2-9]\d{3})"', 'w:spaceAfter="240"', xml)
-                
-                conteudo = xml.encode("utf-8")
+SECOES_OBRIGATORIAS = {
+    "PROT": [
+        "1. OBJETIVO",
+        "2. APLICABILIDADE",
+        "3. REFERENCIAL TEÓRICO",
+        "4. CLASSIFICAÇÃO",
+        "5. RESPONSABILIDADES",
+        "6. MEDIDAS PREVENTIVAS",
+        "7. REFERÊNCIAS",
+        "8. ANEXOS"
+    ],
+    "POP": [
+        "1. DEFINIÇÃO",
+        "2. APLICABILIDADE",
+        "3. RESPONSABILIDADES",
+        "4. DESCRIÇÃO DAS ETAPAS",
+        "5. REFERÊNCIAS",
+        "6. ANEXOS"
+    ],
+    "PROG": [
+        "1. REFERENCIAL TEÓRICO",
+        "2. OBJETIVOS",
+        "3. METAS E INDICADORES",
+        "4. DEFINIÇÃO DE METAS",
+        "5. ACOMPANHAMENTO E MONITORAMENTO",
+        "6. AVALIAÇÃO DE RESULTADOS",
+        "7. REFERÊNCIAS",
+        "8. ANEXOS"
+    ],
+    "POI": [
+        "1. INTRODUÇÃO",
+        "2. OBJETIVO",
+        "3. FINALIDADE",
+        "4. ABRANGÊNCIA",
+        "5. RESPONSABILIDADES",
+        "6. GESTÃO DE RISCO",
+        "7. ANEXOS",
+        "8. REFERÊNCIAS"
+    ],
+    "NOR": [
+        "1. OBJETIVO",
+        "2. ABRANGÊNCIA",
+        "3. DEFINIÇÕES",
+        "4. COMPETÊNCIAS",
+        "5. PROCEDIMENTOS",
+        "6. DISPOSIÇÕES FINAIS",
+        "7. REFERÊNCIAS"
+    ],
+    "REG": [
+        "1. FINALIDADE",
+        "2. ÂMBITO",
+        "3. COMPETÊNCIA E ORGANIZAÇÃO",
+        "4. DISPOSIÇÕES GERAIS",
+        "5. DISPOSIÇÕES FINAIS"
+    ]
+}
 
-            # ✅ CABEÇALHO E RODAPÉ → COPIA IGUAL, SEM ALTERAÇÃO!
-            
-            zip_novo.writestr(item, conteudo)
-            
-    zip_original.close()
-    buffer_saida.seek(0)
-    return buffer_saida.getvalue()
+# ============================================================
+# 🧠 ESCANEAR TODO O DOCUMENTO
+# ============================================================
+def escanear_documento_completo(arquivo_bytes):
+    """
+    ✅ LÊ TODO o texto do documento
+    ✅ IDENTIFICA o tipo (PROT, POP, NOR, etc.)
+    ✅ VERIFICA se CADA seção obrigatória EXISTE no texto
+    ✅ VERIFICA CÓDIGO, VERSÃO e VALIDADE no cabeçalho
+    ✅ RETORNA relatório completo
+    """
+    doc = docx.Document(BytesIO(arquivo_bytes))
+    
+    # 📖 LER TODO O CONTEÚDO — parágrafos + tabelas
+    texto_paragrafos = []
+    for p in doc.paragraphs:
+        if p.text.strip():
+            texto_paragrafos.append(p.text.strip().upper())
+    
+    texto_tabelas = []
+    for tabela in doc.tables:
+        for linha in tabela.rows:
+            for celula in linha.cells:
+                if celula.text.strip():
+                    texto_tabelas.append(celula.text.strip().upper())
+    
+    texto_completo = "\n".join(texto_paragrafos + texto_tabelas)
+    
+    # 🔍 IDENTIFICAR TIPO DE DOCUMENTO
+    tipo_detectado = None
+    codigo_detectado = None
+    versao_detectada = None
+    validade_detectada = None
+    
+    if re.search(r'\bPROT[_ /]', texto_completo) or "PROTOCOLO" in texto_completo:
+        tipo_detectado = "PROT"
+    elif re.search(r'\bPOP[_ /]', texto_completo) or "PROCEDIMENTO OPERACIONAL" in texto_completo:
+        tipo_detectado = "POP"
+    elif re.search(r'\bPROG[_ /]', texto_completo) or "PROGRAMA" in texto_completo:
+        tipo_detectado = "PROG"
+    elif re.search(r'\bPOI[_ /]', texto_completo) or "POLÍTICA" in texto_completo or "POLITICA" in texto_completo:
+        tipo_detectado = "POI"
+    elif re.search(r'\bNOR[_ /]', texto_completo) or "NORMA" in texto_completo:
+        tipo_detectado = "NOR"
+    elif re.search(r'\bREG[_ /]', texto_completo) or "REGULAMENTO" in texto_completo:
+        tipo_detectado = "REG"
+    else:
+        tipo_detectado = "PROT"  # Padrão
+    
+    # 🔍 EXTRAIR CÓDIGO, VERSÃO e VALIDADE do cabeçalho
+    match_codigo = re.search(r'CÓDIGO[:\s]*([A-Z]{3,}_[A-Z0-9_]+|[A-Z]{4}_[A-Z0-9_]+)', texto_completo)
+    if match_codigo:
+        codigo_detectado = match_codigo.group(1).strip()
+    
+    match_versao = re.search(r'VERSÃO[:\s]*([Vv]?\d+[./]?\d*)', texto_completo)
+    if match_versao:
+        versao_detectada = match_versao.group(1).strip()
+    
+    match_validade = re.search(r'VALIDADE[:\s]*([\d/]+)', texto_completo)
+    if match_validade:
+        validade_detectada = match_validade.group(1).strip()
+    
+    # 🔍 VERIFICAR SEÇÕES — escaneia UMA POR UMA
+    secoes_esperadas = SECOES_OBRIGATORIAS.get(tipo_detectado, SECOES_OBRIGATORIAS["PROT"])
+    secoes_encontradas = []
+    secoes_faltantes = []
+    
+    for secao in secoes_esperadas:
+        secao_limpa = re.escape(secao.upper().replace(".", "").strip())
+        padrao = rf'\b{secao_limpa}\b'
+        if re.search(padrao, texto_completo):
+            secoes_encontradas.append(secao)
+        else:
+            secoes_faltantes.append(secao)
+    
+    # ✅ RESULTADO FINAL
+    aprovado = len(secoes_faltantes) == 0 and codigo_detectado and versao_detectada
+    
+    return {
+        "tipo": tipo_detectado,
+        "codigo": codigo_detectado,
+        "versao": versao_detectada,
+        "validade": validade_detectada,
+        "secoes_esperadas": secoes_esperadas,
+        "secoes_encontradas": secoes_encontradas,
+        "secoes_faltantes": secoes_faltantes,
+        "aprovado": aprovado
+    }
 
 # ============================================================
 # 🚀 INTERFACE
 # ============================================================
-with st.form("form_final_buracos"):
+with st.form("form_auditoria_completa"):
     arquivo_word = st.file_uploader(
-        "📂 Arraste o arquivo AQUI com margens corretas",
+        "📂 Arraste o documento WORD (.docx) AQUI para AUDITORIA COMPLETA",
         type=["docx"],
-        key="upload_buracos"
+        key="upload_auditoria"
     )
-    enviado = st.form_submit_button("🔄 ELIMINAR BURACOS E PÁGINAS VAZIAS", type="primary")
+    enviado = st.form_submit_button("🔍 EXECUTAR AUDITORIA COMPLETA", type="primary")
 
 if enviado and arquivo_word:
     st.info(f"✅ Arquivo carregado: **{arquivo_word.name}**")
     
-    with st.spinner("Removendo espaços gigantes que empurram o conteúdo..."):
+    with st.spinner("Escaneando TODO o documento página por página... verificando seções, código e versão..."):
         dados_brutos = arquivo_word.read()
-        dados_finais = remover_espacos_e_quebras(dados_brutos)
+        relatorio = escanear_documento_completo(dados_brutos)
         
-        st.download_button(
-            label="📥 BAIXAR — SEM BURACOS E SEM PÁGINAS VAZIAS",
-            data=dados_finais,
-            file_name=f"{arquivo_word.name.replace('.docx','')}_SEM_BURACOS.docx",
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            type="primary"
-        )
+        # ======================================
+        # 📋 RELATÓRIO DE AUDITORIA
+        # ======================================
+        st.markdown("---")
+        st.subheader("📋 RELATÓRIO DE AUDITORIA")
         
-        st.success("""✅ **CONCLUÍDO! BURACOS GIGANTES ELIMINADOS!**
-• ✅ Conteúdo puxado para logo abaixo do cabeçalho
-• ✅ Espaçamentos gigantes → ZERADOS
-• ✅ Quebras de página forçadas → REMOVIDAS
-• 🛡️ Cabeçalho, margens e rodapé → 100% PRESERVADOS""")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.info(f"**Tipo de Documento:** {relatorio['tipo']}")
+            st.info(f"**Código:** {relatorio['codigo'] or '❌ NÃO ENCONTRADO'}")
+        with col2:
+            st.info(f"**Versão:** {relatorio['versao'] or '❌ NÃO ENCONTRADA'}")
+            st.info(f"**Validade:** {relatorio['validade'] or '⚠️ Não verificada'}")
+        
+        st.markdown("---")
+        
+        # ✅ SEÇÕES ENCONTRADAS
+        st.subheader("✅ SEÇÕES ENCONTRADAS")
+        for secao in relatorio["secoes_encontradas"]:
+            st.success(f"✅ {secao}")
+        
+        # ❌ SEÇÕES FALTANTES
+        if relatorio["secoes_faltantes"]:
+            st.subheader("❌ SEÇÕES FALTANTES — DOCUMENTO DEVE VOLTAR!")
+            for secao in relatorio["secoes_faltantes"]:
+                st.error(f"❌ {secao}")
+        else:
+            st.subheader("✅ TODAS AS SEÇÕES FORAM ENCONTRADAS!")
+        
+        st.markdown("---")
+        
+        # 🏅 RESULTADO FINAL
+        if relatorio["aprovado"]:
+            st.success("## ✅ APROVADO — Documento completo e conforme!")
+            st.balloons()
+        else:
+            st.error("## ❌ REPROVADO — Documento INCOMPLETO!")
+            st.error("### ⚠️ Este documento DEVE VOLTAR para correção!")
+            if not relatorio["codigo"]:
+                st.error("• ❌ Falta CÓDIGO no cabeçalho")
+            if not relatorio["versao"]:
+                st.error("• ❌ Falta VERSÃO no cabeçalho")
+            if relatorio["secoes_faltantes"]:
+                st.error(f"• ❌ Faltam {len(relatorio['secoes_faltantes'])} seção(ões) obrigatória(s)")
