@@ -4,19 +4,19 @@ import re
 from io import BytesIO
 
 # --- 1. CONFIGURAÇÃO ---
-st.set_page_config(page_title="AUDITORIA — NOMES REAIS DA TABELA", page_icon="🔍", layout="wide")
+st.set_page_config(page_title="AUDITORIA — Quadro 1", page_icon="🔍", layout="wide")
 
 with st.sidebar:
     st.markdown("### 🧑‍💻 Operador")
     st.markdown("**Ezequias Santos**\n*Agt Administrativo / Auditor*")
     st.divider()
 
-st.title("🔍 AUDITORIA — NOMES REAIS CONFORME QUADRO 1")
+st.title("🔍 AUDITORIA — SEÇÕES DO QUADRO 1")
 st.markdown("""
-### ✅ SEÇÕES COPIADAS DIRETAMENTE DO QUADRO 1 DO SEU DOCUMENTO
-✅ Código e Versão detectados no formato REAL do cabeçalho
-✅ Busca flexível — não importa acento ou maiúscula/minúscula
-✅ Data de aprovação → NÃO é obrigatória
+### ✅ Seções EXATAS conforme Quadro 1
+✅ Código e Versão no formato REAL do cabeçalho
+✅ Busca flexível — aceita acento, maiúscula/minúscula, "5ª" ou "5.1"
+✅ Validade → NÃO é obrigatória
 """)
 
 # ============================================================
@@ -81,7 +81,7 @@ SECOES_OBRIGATORIAS = {
 }
 
 # ============================================================
-# 🧠 ESCANEAR — Flexível + Cabeçalho real + Nomes do Quadro 1
+# 🧠 FUNÇÃO DE ESCANEAMENTO — CORRIGIDA e SEGURA
 # ============================================================
 def escanear_documento_completo(arquivo_bytes):
     doc = docx.Document(BytesIO(arquivo_bytes))
@@ -101,8 +101,8 @@ def escanear_documento_completo(arquivo_bytes):
     
     texto_completo = "\n".join(texto_paragrafos + texto_tabelas)
     
-    # 🔍 IDENTIFICAR TIPO
-    tipo_detectado = None
+    # 🔍 IDENTIFICAR TIPO DE DOCUMENTO
+    tipo_detectado = "PROT"  # Padrão
     if re.search(r'\bPROT[_ /]', texto_completo) or "PROTOCOLO" in texto_completo:
         tipo_detectado = "PROT"
     elif re.search(r'\bPOP[_ /]', texto_completo) or "PROCEDIMENTO OPERACIONAL" in texto_completo:
@@ -115,30 +115,33 @@ def escanear_documento_completo(arquivo_bytes):
         tipo_detectado = "NOR"
     elif re.search(r'\bREG[_ /]', texto_completo) or "REGULAMENTO" in texto_completo:
         tipo_detectado = "REG"
-    else:
-        tipo_detectado = "PROT"
     
-    # 🔍 EXTRAIR CÓDIGO — FLEXÍVEL! Aceita "Código:" ou "CÓDIGO:" sem exigir padrão rígido
-    # Ex: "Código: PROT_SCIH005"
+    # 🔍 EXTRAIR CÓDIGO — SEGURO
+    codigo_detectado = None
     match_codigo = re.search(r'CÓDIGO|Código[:\s]*[:]?\s*([A-Z]{3,}_[A-Z0-9_]+)', texto_completo)
-    codigo_detectado = match_codigo.group(1).strip() if match_codigo else None
+    if match_codigo:
+        codigo_detectado = match_codigo.group(1).strip()
     
-    # 🔍 EXTRAIR VERSÃO — FLEXÍVEL! Aceita "Versão: 5ª" ou "Versão: 5.1"
-    match_versao = re.search(r'VERSÃO|Versão[:\s]*[:]?\s*(?:[Vv]|ª)?\s*(\d+[./]?\d*)', texto_completo)
-    versao_detectada = match_versao.group(1).strip() if match_versao else None
+    # 🔍 EXTRAIR VERSÃO — ACEITA "5ª", "5.1", "V5.1" — CORRIGIDO sem erro!
+    versao_detectada = None
+    match_versao = re.search(r'VERSÃO|Versão[:\s]*[:]?\s*(?:[Vv]ersão|[Vv])?\s*(\d+)', texto_completo)
+    if match_versao:
+        versao_detectada = match_versao.group(1).strip()
     
     # 🔍 EXTRAIR VALIDADE (não obrigatória)
+    validade_detectada = None
     match_validade = re.search(r'VALIDADE|Validade[:\s]*[:]?\s*([\d/]+)', texto_completo)
-    validade_detectada = match_validade.group(1).strip() if match_validade else None
+    if match_validade:
+        validade_detectada = match_validade.group(1).strip()
     
-    # 🔍 VERIFICAR SEÇÕES — FLEXÍVEL! Ignora acento e busca pelo início
+    # 🔍 VERIFICAR SEÇÕES — Busca flexível pelo início
     secoes_esperadas = SECOES_OBRIGATORIAS.get(tipo_detectado, SECOES_OBRIGATORIAS["PROT"])
     secoes_encontradas = []
     secoes_faltantes = []
     
     for secao in secoes_esperadas:
-        secao_limpa = re.escape(secao.upper()).replace(r"\\", r"[\\s\\-—–]*")
-        padrao = rf'^{secao_limpa}'
+        secao_upper = secao.upper().strip()
+        padrao = rf'^{re.escape(secao_upper)}'
         
         encontrada = False
         for linha in texto_paragrafos + texto_tabelas:
@@ -152,7 +155,9 @@ def escanear_documento_completo(arquivo_bytes):
             secoes_faltantes.append(secao)
     
     # ✅ APROVADO = Tem Código + Tem Versão + Tem Todas as Seções
-    aprovado = len(secoes_faltantes) == 0 and codigo_detectado and versao_detectada
+    aprovado = (len(secoes_faltantes) == 0 and 
+                codigo_detectado is not None and 
+                versao_detectada is not None)
     
     return {
         "tipo": tipo_detectado,
@@ -168,64 +173,69 @@ def escanear_documento_completo(arquivo_bytes):
 # ============================================================
 # 🚀 INTERFACE
 # ============================================================
-with st.form("form_auditoria_final_quadro1"):
+with st.form("form_auditoria_final_corrigida"):
     arquivo_word = st.file_uploader(
         "📂 Arraste o documento WORD (.docx) AQUI",
         type=["docx"],
-        key="upload_auditoria_final_quadro1"
+        key="upload_auditoria_final"
     )
     enviado = st.form_submit_button("🔍 EXECUTAR AUDITORIA — Quadro 1", type="primary")
 
 if enviado and arquivo_word:
     st.info(f"✅ Arquivo carregado: **{arquivo_word.name}**")
     
-    with st.spinner("Escaneando... buscando código na tabela... conferindo seções do Quadro 1..."):
-        dados_brutos = arquivo_word.read()
-        relatorio = escanear_documento_completo(dados_brutos)
-        
-        st.markdown("---")
-        st.subheader("📋 RELATÓRIO DE AUDITORIA")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            st.info(f"**Tipo de Documento:** {relatorio['tipo']}")
-            if relatorio['codigo']:
-                st.success(f"**Código:** {relatorio['codigo']}")
-            else:
-                st.error("**Código:** ❌ NÃO ENCONTRADO")
-        with col2:
-            if relatorio['versao']:
-                st.success(f"**Versão:** {relatorio['versao']}")
-            else:
-                st.error("**Versão:** ❌ NÃO ENCONTRADA")
-            if relatorio['validade']:
-                st.info(f"**Validade:** {relatorio['validade']}")
-            else:
-                st.info("**Validade:** ⚠️ Não obrigatória")
-        
-        st.markdown("---")
-        
-        st.subheader("✅ SEÇÕES ENCONTRADAS")
-        for secao in relatorio["secoes_encontradas"]:
-            st.success(f"✅ {secao}")
-        
-        if relatorio["secoes_faltantes"]:
-            st.subheader("❌ SEÇÕES FALTANTES")
-            for secao in relatorio["secoes_faltantes"]:
-                st.error(f"❌ {secao}")
-        else:
-            st.subheader("✅ TODAS AS SEÇÕES FORAM ENCONTRADAS!")
-        
-        st.markdown("---")
-        
-        if relatorio["aprovado"]:
-            st.success("## ✅ APROVADO — Documento COMPLETO e CONFORME ao Quadro 1!")
-            st.balloons()
-        else:
-            st.error("## ❌ REPROVADO — Verifique os itens acima!")
-            if not relatorio["codigo"]:
-                st.error("• ❌ Falta CÓDIGO no cabeçalho")
-            if not relatorio["versao"]:
-                st.error("• ❌ Falta VERSÃO no cabeçalho")
+    with st.spinner("Escaneando... buscando código e versão... conferindo seções..."):
+        try:
+            dados_brutos = arquivo_word.read()
+            relatorio = escanear_documento_completo(dados_brutos)
+            
+            st.markdown("---")
+            st.subheader("📋 RELATÓRIO DE AUDITORIA")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.info(f"**Tipo de Documento:** {relatorio['tipo']}")
+                if relatorio['codigo']:
+                    st.success(f"**Código:** {relatorio['codigo']}")
+                else:
+                    st.error("**Código:** ❌ NÃO ENCONTRADO")
+            with col2:
+                if relatorio['versao']:
+                    st.success(f"**Versão:** {relatorio['versao']}")
+                else:
+                    st.error("**Versão:** ❌ NÃO ENCONTRADA")
+                if relatorio['validade']:
+                    st.info(f"**Validade:** {relatorio['validade']}")
+                else:
+                    st.info("**Validade:** ⚠️ Não obrigatória")
+            
+            st.markdown("---")
+            
+            st.subheader("✅ SEÇÕES ENCONTRADAS")
+            for secao in relatorio["secoes_encontradas"]:
+                st.success(f"✅ {secao}")
+            
             if relatorio["secoes_faltantes"]:
-                st.error(f"• ❌ Faltam {len(relatorio['secoes_faltantes'])} seção(ões) do Quadro 1")
+                st.subheader("❌ SEÇÕES FALTANTES")
+                for secao in relatorio["secoes_faltantes"]:
+                    st.error(f"❌ {secao}")
+            else:
+                st.subheader("✅ TODAS AS SEÇÕES FORAM ENCONTRADAS!")
+            
+            st.markdown("---")
+            
+            if relatorio["aprovado"]:
+                st.success("## ✅ APROVADO — Documento COMPLETO e CONFORME!")
+                st.balloons()
+            else:
+                st.error("## ❌ REPROVADO — Verifique os itens acima!")
+                if not relatorio["codigo"]:
+                    st.error("• ❌ Falta CÓDIGO no cabeçalho")
+                if not relatorio["versao"]:
+                    st.error("• ❌ Falta VERSÃO no cabeçalho")
+                if relatorio["secoes_faltantes"]:
+                    st.error(f"• ❌ Faltam {len(relatorio['secoes_faltantes'])} seção(ões)")
+        
+        except Exception as e:
+            st.error(f"## ❌ ERRO durante a auditoria: {str(e)}")
+            st.info("Por favor, verifique se o arquivo está no formato .docx válido.")
