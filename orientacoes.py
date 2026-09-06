@@ -12,7 +12,7 @@ import re
 # --- 1. CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="Triagem & Lista Mestra NAQH", page_icon="📊", layout="wide")
 
-# Menu Lateral - Identificação do Operador (Solicitado)
+# Menu Lateral - Identificação do Operador
 with st.sidebar:
     st.markdown("### 🧑‍💻 Operador do Sistema")
     st.markdown("**Ezequias Santos**\n*Agt Administrativo*")
@@ -111,9 +111,8 @@ if arquivo_word:
         if termo not in texto_total_validacao:
             erros_gravissimos.append(f"⚠️ **OMISSÃO DE SEÇÃO CRÍTICA (Modelo {tipo_detectado}):** A seção contendo o termo obrigatório **'{termo}'** não foi localizada no arquivo.")
 
-    # --- ETAPA 3: EXTRAÇÃO INTELIGENTE (TABELAS + MÉTODOS DE CONTINGÊNCIA NO TEXTO) ---
+    # --- ETAPA 3: EXTRAÇÃO INTELIGENTE (TABELAS + REGEX NO TEXTO) ---
     codigo_doc = "NÃO IDENTIFICADO"
-    # Método 1: Busca em tabelas padrões do cabeçalho
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
@@ -122,14 +121,12 @@ if arquivo_word:
                     codigo_doc = txt.split(":")[-1].strip()
                     break
 
-    # Método 2 (Contingência): Busca por padrões regex comuns de codificação (Ex: PROT_SCIH 0018)
     if codigo_doc == "NÃO IDENTIFICADO" or len(codigo_doc) <= 2:
         match_codigo = re.search(r'\b(PROT|POP|MAN|NOR|ROT|REG|POL|PLANC|PROG)_[A-Z0-9_\s-]+\b', texto_total_raw, re.IGNORECASE)
         if match_codigo:
             codigo_doc = match_codigo.group(0).strip()
 
     versao_doc = "NÃO IDENTIFICADA"
-    # Método 1: Busca em tabelas padrões do cabeçalho
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
@@ -138,13 +135,11 @@ if arquivo_word:
                     versao_doc = txt.split(":")[-1].strip()
                     break
 
-    # Método 2 (Contingência): Busca por números ordinais de versão na tabela de registro histórico
     if versao_doc == "NÃO IDENTIFICADA" or not any(char.isdigit() for char in versao_doc):
         match_versao = re.findall(r'\b(\d+ª|\d+ª\s*VERSÃO|\d+\.\d+)\b', texto_total_raw, re.IGNORECASE)
         if match_versao:
-            versao_doc = match_versao[-1].strip()  # Captura a última versão mapeada (geralmente a mais atual no histórico)
+            versao_doc = match_versao[-1].strip()
 
-    # Validações finais de integridade
     possui_codigo = codigo_doc != "NÃO IDENTIFICADO" and len(codigo_doc) > 2
     possui_versao = versao_doc != "NÃO IDENTIFICADA" and any(char.isdigit() for char in versao_doc)
 
@@ -195,3 +190,12 @@ if arquivo_word:
             
             primeiros_caracteres = texto_limpo[:8]
             if primeiros_caracteres and (primeiros_caracteres.replace('.', '').isdigit() or ')' in primeiros_caracteres):
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                paragraph.paragraph_format.left_indent = Cm(1.25)
+                paragraph.paragraph_format.first_line_indent = Cm(-1.25)
+            else:
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+                paragraph.paragraph_format.left_indent = Cm(0)
+                paragraph.paragraph_format.first_line_indent = Cm(1.25)
+
+        # Preparar arquivo de download em memória
