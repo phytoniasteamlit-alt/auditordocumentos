@@ -186,11 +186,11 @@ if arquivo_word:
                 paragraph.paragraph_format.left_indent = Cm(0)
                 paragraph.paragraph_format.first_line_indent = Cm(1.25)
 
-        # Gravação binária direta em bloco para contornar gargalos de Timeout
+        # Gravação binária isolada (EVITA SINTAXE QUEBRADA)
         conteudo_saida = BytesIO()
         doc_triagem.save(conteudo_saida)
         conteudo_saida.seek(0)
+        dados_finais_word = conteudo_saida.getvalue()
 
-        # Botão de ação explícito fixado acima do aviso de sucesso
+        # Botão limpo sem funções embutidas como parâmetro
         st.download_button(
-            label="📥 CLIQUE AQUI PARA BAIXAR O DOCUMENTO FORMATADO",
