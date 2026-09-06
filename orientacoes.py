@@ -14,9 +14,8 @@ with st.sidebar:
 
 st.title("Triagem Avançada & Formatador Automático - NAQH")
 st.markdown("""
-### 🧠 Correção Completa de Layout — Norma Zero + Ajuste de Conteúdo
-Margens unificadas em corpo/cabeçalhos/rodapés + normalização de tabelas e espaçamentos.
-Elimina páginas em branco e desalinhamentos.
+### 🧠 Formatação Completa — Norma Zero + Cabeçalho Preservado
+Margens unificadas + cabeçalho redimensionado + tabelas ajustadas + sem páginas em branco.
 """)
 
 # ============================================================
@@ -32,17 +31,17 @@ SECOES_POR_TIPO = {
 }
 
 # ============================================================
-# 🧠 MOTOR DE FORMATAÇÃO COMPLETO — MARGENS + LAYOUT
+# 🧠 MOTOR DE FORMATAÇÃO COMPLETA — CABEÇALHO INCLUSO
 # ============================================================
 def formatar_documento_completo(arquivo_bytes):
     """
-    ✅ Aplica margens Norma Zero em corpo, cabeçalhos e rodapés (TODAS IGUAIS)
-    ✅ Remove espaçamentos fixos que empurram conteúdo
-    ✅ Remove quebras de página problemáticas
-    ✅ Reduz largura de tabelas para caber na nova margem direita
+    ✅ Margens Norma Zero em corpo, cabeçalhos e rodapés
+    ✅ Redimensiona TABELAS do cabeçalho para caber na margem nova
+    ✅ Normaliza espaçamentos e remove quebras problemáticas
+    ✅ Preserva número de páginas, versão e validade
     """
-    # Margens Norma Zero: Sup/Inf 2cm | Esq 2cm | Dir 3cm
     top_dxa, bottom_dxa, left_dxa, right_dxa = "1134", "1134", "1134", "1701"
+    REDUCAO_LARGURA = 500  # ~1cm em dxa — reduz tabelas para caber
     
     zip_original = zipfile.ZipFile(BytesIO(arquivo_bytes))
     buffer_saida = BytesIO()
@@ -57,39 +56,60 @@ def formatar_documento_completo(arquivo_bytes):
             if item.filename == "word/document.xml":
                 xml_texto = conteudo.decode("utf-8")
                 
-                # ✅ Aplica margens em TODAS as seções
+                # Aplica margens em TODAS as seções
                 xml_texto = re.sub(r'w:top="\d+"',    f'w:top="{top_dxa}"',    xml_texto)
                 xml_texto = re.sub(r'w:bottom="\d+"', f'w:bottom="{bottom_dxa}"', xml_texto)
                 xml_texto = re.sub(r'w:left="\d+"',   f'w:left="{left_dxa}"',   xml_texto)
                 xml_texto = re.sub(r'w:right="\d+"',  f'w:right="{right_dxa}"',  xml_texto)
                 
-                # ✅ NORMALIZA ESPAÇAMENTO ANTES/DEPOIS dos parágrafos (elimina buracos gigantes)
+                # Normaliza espaçamentos
                 xml_texto = re.sub(r'w:spaceBefore="\d+"', 'w:spaceBefore="0"', xml_texto)
                 xml_texto = re.sub(r'w:spaceAfter="\d+"',  'w:spaceAfter="240"', xml_texto)
-                xml_texto = re.sub(r'w:lineSpacing="\d+"', 'w:lineSpacing="276"', xml_texto)  # 1,15 linha
+                xml_texto = re.sub(r'w:lineSpacing="\d+"', 'w:lineSpacing="276"', xml_texto)
                 
-                # ✅ REMOVE QUEBRAS DE PÁGINA FORÇADAS que causam páginas vazias
+                # Remove quebras problemáticas
                 xml_texto = re.sub(r'<w:br w:type="page"/>', '', xml_texto)
                 xml_texto = re.sub(r'<w:pageBreakBefore/>', '', xml_texto)
                 
-                # ✅ AJUSTA LARGURA DAS TABELAS — reduz 1cm para caber na margem nova
-                xml_texto = re.sub(r'w:w="(\d+)"', lambda m: f'w:w="{str(int(m.group(1)) - 500)}"' if 3000 < int(m.group(1)) < 15000 else m.group(0), xml_texto)
+                # ✅ REDUZ LARGURA DE TODAS AS TABELAS em ~1cm
+                xml_texto = re.sub(
+                    r'(<w:tblW w:w=")(\d+)(" w:type="dxa"/>)',
+                    lambda m: f'{m.group(1)}{max(2000, int(m.group(2)) - REDUCAO_LARGURA)}{m.group(3)}',
+                    xml_texto
+                )
                 
                 conteudo = xml_texto.encode("utf-8")
 
             # ======================================
-            # CABEÇALHOS — MESMAS MARGENS DO CORPO
+            # ✅ CABEÇALHO — MESMAS MARGENS + TABELA REDUZIDA
             # ======================================
             elif item.filename.startswith("word/header"):
                 xml_texto = conteudo.decode("utf-8")
+                
+                # Aplica margens IGUAIS ao corpo
                 xml_texto = re.sub(r'w:top="\d+"',    f'w:top="{top_dxa}"',    xml_texto)
                 xml_texto = re.sub(r'w:bottom="\d+"', f'w:bottom="{bottom_dxa}"', xml_texto)
                 xml_texto = re.sub(r'w:left="\d+"',   f'w:left="{left_dxa}"',   xml_texto)
                 xml_texto = re.sub(r'w:right="\d+"',  f'w:right="{right_dxa}"',  xml_texto)
+                
+                # ✅ REDUZ TABELA DO CABEÇALHO em ~1cm → NÃO DESALINHA MAIS!
+                xml_texto = re.sub(
+                    r'(<w:tblW w:w=")(\d+)(" w:type="dxa"/>)',
+                    lambda m: f'{m.group(1)}{max(1500, int(m.group(2)) - REDUCAO_LARGURA)}{m.group(3)}',
+                    xml_texto
+                )
+                
+                # ✅ REDUZ LARGURA DAS CÉLULAS da tabela do cabeçalho
+                xml_texto = re.sub(
+                    r'(<w:tcW w:w=")(\d+)(" w:type="dxa"/>)',
+                    lambda m: f'{m.group(1)}{max(500, int(m.group(2)) - 170)}{m.group(3)}',
+                    xml_texto
+                )
+                
                 conteudo = xml_texto.encode("utf-8")
 
             # ======================================
-            # RODAPÉS — MESMAS MARGENS DO CORPO
+            # RODAPÉS — MESMAS MARGENS
             # ======================================
             elif item.filename.startswith("word/footer"):
                 xml_texto = conteudo.decode("utf-8")
@@ -126,20 +146,20 @@ def identificar_tipo_e_secoes(texto):
         return "PROT", SECOES_POR_TIPO["PROT"]
 
 # ============================================================
-# 🚀 INTERFACE COM FORMULÁRIO (sem erro)
+# 🚀 INTERFACE COM FORMULÁRIO
 # ============================================================
-with st.form("form_norma_zero_completo"):
+with st.form("form_cabecalho_corrigido"):
     arquivo_word = st.file_uploader(
         "📂 Arraste o documento WORD (.docx) aqui",
         type=["docx"],
-        key="upload_completo"
+        key="upload_cabecalho"
     )
     enviado = st.form_submit_button("🔄 ANALISAR E FORMATAR", type="primary")
 
 if enviado and arquivo_word:
     st.info(f"✅ Arquivo carregado: **{arquivo_word.name}**")
     
-    with st.spinner("Aplicando margens, unificando cabeçalhos e ajustando layout..."):
+    with st.spinner("Ajustando margens, redimensionando cabeçalho e tabelas..."):
         dados_brutos = arquivo_word.read()
         
         # Triagem
@@ -155,7 +175,7 @@ if enviado and arquivo_word:
         if match_codigo:
             codigo_doc = match_codigo.group(0).strip().upper().replace(" ", "")
         
-        # ✅ Processamento COMPLETO: margens + layout + tabelas
+        # ✅ Processamento COMPLETO com CABEÇALHO AJUSTADO
         dados_finais = formatar_documento_completo(dados_brutos)
         
         st.success(f"📋 **DOCUMENTO IDENTIFICADO: {sigla_tipo}**")
@@ -174,10 +194,9 @@ if enviado and arquivo_word:
             type="primary"
         )
         
-        st.success("""✅ **PROCESSO CONCLUÍDO — LAYOUT UNIFICADO!**
-• ✅ Margens Norma Zero em corpo, cabeçalhos e rodapés (TODAS IGUAIS)
-• ✅ Espaçamentos normalizados — elimina buracos gigantes
-• ✅ Quebras de página problemáticas removidas
-• ✅ Largura de tabelas ajustada à margem nova
-• ✅ Cabeçalhos alinhados com o corpo
-• Logos e tabelas preservados""")
+        st.success("""✅ **PROCESSO CONCLUÍDO — CABEÇALHO PRESERVADO!**
+• ✅ Margens Norma Zero em corpo, cabeçalhos e rodapés
+• ✅ Tabela do cabeçalho REDIMENSIONADA — não desalinha mais!
+• ✅ Número de páginas, versão e validade PRESERVADOS
+• ✅ Tabelas internas ajustadas à nova largura
+• ✅ Espaçamentos normalizados e páginas em branco eliminadas""")
