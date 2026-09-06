@@ -33,7 +33,6 @@ if "historico_lista_mestra" not in st.session_state:
 
 # --- 2. FUNÇÃO DE TRATAMENTO EM TEMPO DE DOWNLOAD (EVITA TIMEOUT) ---
 def executar_formatacao_pesada(arquivo_bytes):
-    # Só processa os parágrafos pesados quando o operador clica no botão
     doc = docx.Document(arquivo_bytes)
     
     # Limpeza de Parágrafos Fantasmas
@@ -73,14 +72,20 @@ def executar_formatacao_pesada(arquivo_bytes):
     conteudo_saida.seek(0)
     return conteudo_saida.getvalue()
 
+# Função para converter a Lista Mestra da tela em arquivo Excel real (.xlsx)
+def converter_lista_para_excel(df):
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name='Lista Mestra')
+    return output.getvalue()
+
 # --- 3. FLUXO DE CARREGAMENTO DO ARQUIVO ---
 arquivo_word = st.file_uploader("Arraste o documento WORD (.docx) aqui para Triagem e Formatação", type=["docx"])
 
 if arquivo_word:
-    # Leitura superficial ultra rápida apenas para coletar metadados de triagem
     doc_triagem = docx.Document(arquivo_word)
     
-    texto_corpo_raw = " ".join([p.text.strip() for p in doc_triagem.paragraphs[:50]]) # Apenas o topo
+    texto_corpo_raw = " ".join([p.text.strip() for p in doc_triagem.paragraphs[:50]])
     texto_tabelas_raw = " ".join([cell.text.strip() for t in doc_triagem.tables[:3] for r in t.rows for cell in r.cells])
     texto_total_raw = texto_corpo_raw + " " + texto_tabelas_raw
     texto_total_validacao = texto_total_raw.upper()
@@ -135,8 +140,16 @@ if arquivo_word:
         if match_versao:
             versao_doc = match_versao[-1].strip()
 
-    # --- ETAPA 4: GERENCIADOR DE DUPLICIDADE ---
+    # --- ETAPA 4: GERENCIADOR DE DUPLICIDADE (CORRIGIDO CONTRA BLOQUEIOS FANTASMAS) ---
     df_atual = st.session_state.historico_lista_mestra
+    
+    # Limpa automaticamente da memória registros corrompidos ou não identificados do mesmo código
+    if not df_atual.empty:
+        st.session_state.historico_lista_mestra = df_atual[
+            ~((df_atual["Código do Documento"] == codigo_doc) & (df_atual["Versão Atual"] == "NÃO IDENTIFICADA"))
+        ]
+        df_atual = st.session_state.historico_lista_mestra
+
     is_duplicado = not df_atual[(df_atual["Código do Documento"] == codigo_doc) & (df_atual["Versão Atual"] == versao_doc)].empty
 
     # --- ETAPA 5: ENTREGA DO BOTÃO IMEDIATO ---
@@ -153,7 +166,7 @@ if arquivo_word:
             }
             st.session_state.historico_lista_mestra = pd.concat([df_atual, pd.DataFrame([nova_linha])], ignore_index=True)
 
-        # O botão puxa a função pesada sob demanda (Isso faz o app carregar instantâneo!)
+        # Botão 1: Baixar o Word Formatado
         st.download_button(
             label="📥 CLIQUE AQUI PARA BAIXAR O DOCUMENTO FORMATADO",
             data=executar_formatacao_pesada(arquivo_word),
@@ -164,7 +177,17 @@ if arquivo_word:
     else:
         st.error(f"🚫 **BLOQUEIO DE DUPLICIDADE:** O documento **{codigo_doc}** já foi registrado na versão **{versao_doc}**.")
 
-# --- 6. EXIBIÇÃO DA PLANILHA ---
+# --- 6. EXIBIÇÃO DA PLANILHA E DOWNLOAD REAL EM EXCEL ---
 st.divider()
 st.subheader("📊 Histórico Dinâmico da Lista Mestra (Excel)")
+
+if not st.session_state.historico_lista_mestra.empty:
+    # Botão 2: Baixar a planilha Excel (.xlsx) real gerada na tela
+    st.download_button(
+        label="🟢 BAIXAR PLANILHA DA LISTA MESTRA (.XLSX)",
+        data=converter_lista_para_excel(st.session_state.historico_lista_mestra),
+        file_name=f"Lista_Mestra_NAQH_{datetime.now().strftime('%d_%m_%Y')}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
 st.dataframe(st.session_state.historico_lista_mestra, use_container_width=True)
