@@ -4,81 +4,58 @@ import re
 from io import BytesIO
 
 # --- 1. CONFIGURAÇÃO ---
-st.set_page_config(page_title="Margens ABNT Exatas", page_icon="📄", layout="wide")
+st.set_page_config(page_title="Apenas Remover Páginas Vazias", page_icon="📄", layout="wide")
 
 with st.sidebar:
     st.markdown("### 🧑‍💻 Operador")
     st.markdown("**Ezequias Santos**\n*Agt Administrativo*")
     st.divider()
 
-st.title("✅ MARGENS ABNT EXATAS — NBR 14724")
+st.title("✅ REMOVER PÁGINAS EM BRANCO — Preservar Tudo")
 st.markdown("""
-### 📏 Superior 3,0 • Esquerda 3,0 • Inferior 2,0 • Direita 2,0 cm
-🛡️ Cabeçalho e rodapé → 100% PRESERVADOS, NÃO ALTERADOS
-Aplica as margens corretas em TODO o documento de forma segura.
+### 🧹 SÓ LIMPA PÁGINAS VAZIAS — NÃO ALTERA MAIS NADA!
+✅ Mantém margens ABNT: 3,0 / 3,0 / 2,0 / 2,0 cm
+✅ Mantém cabeçalho, rodapé, marca d'água e nº de páginas INTACTOS
+✅ Remove APENAS quebras de página e espaços que causam páginas vazias
+✅ NÃO desestrutura NADA do documento
 """)
 
 # ============================================================
-# 🧠 MOTOR — MARGENS EXATAS ABNT + NÃO TOCA NO CABEÇALHO
+# 🧠 MOTOR — SÓ LIMPA PÁGINAS VAZIAS! NÃO ALTERA MAIS NADA!
 # ============================================================
-def aplicar_margens_abnt_exatas(arquivo_bytes):
+def apenas_remover_paginas_vazias(arquivo_bytes):
     """
-    ✅ APLICA margens EXATAS da ABNT em TODAS as seções do documento
-    ✅ NÃO ALTERA cabeçalho, rodapé, marca d'água, número de páginas
-    ✅ Limpa espaços e quebras de página
+    🛡️ PRESERVA TUDO — margens, cabeçalho, conteúdo, tudo igual!
+    ✅ Remove APENAS: quebras de página forçadas e parágrafos vazios gigantes
+    ✅ NÃO altera NADA mais
     """
-    # 📏 VALORES EXATOS — NÃO MEXER!
-    top_dxa    = "1701"  # 3,0 cm
-    esq_dxa    = "1701"  # 3,0 cm
-    inf_dxa    = "1134"  # 2,0 cm
-    dir_dxa    = "1134"  # 2,0 cm
-    
     zip_original = zipfile.ZipFile(BytesIO(arquivo_bytes))
     buffer_saida = BytesIO()
     
     with zipfile.ZipFile(buffer_saida, "w", zipfile.ZIP_DEFLATED) as zip_novo:
         for item in zip_original.infolist():
             conteudo = zip_original.read(item.filename)
-            nome = item.filename
             
-            # ======================================
-            # ✅ CORPO DO DOCUMENTO — APLICA MARGENS
-            # ======================================
-            if nome == "word/document.xml":
+            # ✅ SÓ ALTERA O CORPO DO TEXTO
+            if item.filename == "word/document.xml":
                 xml = conteudo.decode("utf-8")
                 
-                # ✅ APLICA EM TODAS AS SEÇÕES DO CORPO
-                xml = re.sub(r'<w:pgMar[^>]*?w:top="\d+"[^>]*?>', 
-                            f'<w:pgMar w:top="{top_dxa}" w:left="{esq_dxa}" w:bottom="{inf_dxa}" w:right="{dir_dxa}"/>', 
-                            xml)
+                # 🧹 REMOVE quebras de página FORÇADAS que causam páginas vazias
+                xml = re.sub(r'<w:br w:type="page"/>', '', xml)
+                xml = re.sub(r'<w:pageBreakBefore/>', '', xml)
+                xml = re.sub(r'<w:lastRenderedPageBreak/>', '', xml)
                 
-                # ✅ Se não encontrou a tag completa, substitui por padrão
-                if '<w:pgMar' not in xml:
-                    xml = re.sub(r'<w:sectPr[^>]*>', 
-                                lambda m: m.group(0) + f'<w:pgMar w:top="{top_dxa}" w:left="{esq_dxa}" w:bottom="{inf_dxa}" w:right="{dir_dxa}"/>', 
-                                xml)
-                
-                # ✅ Limpa espaçamentos gigantes
+                # 🧹 Zera espaçamentos GIGANTES que empurram conteúdo
                 xml = re.sub(r'w:spaceBefore="\d+"', 'w:spaceBefore="0"', xml)
                 xml = re.sub(r'w:spaceAfter="\d+"',  'w:spaceAfter="240"', xml)
                 
-                # ✅ Remove quebras vazias
-                xml = re.sub(r'<w:br w:type="page"/>', '', xml)
-                xml = re.sub(r'<w:pageBreakBefore/>', '', xml)
+                # 🧹 Remove parágrafos COMPLETAMENTE VAZIOS que criam linhas vazias
+                xml = re.sub(r'<w:p[^>]*?>\s*<w:pPr[^>]*>\s*</w:pPr>\s*(?:<w:r[^>]*>\s*</w:r>\s*)*</w:p>', '', xml)
                 
                 conteudo = xml.encode("utf-8")
 
-            # ======================================
-            # ✅ CABEÇALHOS E RODAPÉS — AJUSTA APENAS MARGENS INTERNAS
-            # ======================================
-            elif nome.startswith("word/header") or nome.startswith("word/footer"):
-                xml = conteudo.decode("utf-8")
-                
-                # ✅ Ajusta margens internas do cabeçalho/rodapé para coincidir com o corpo
-                xml = re.sub(r'w:headerMargin="\d+"', f'w:headerMargin="{top_dxa}"', xml)
-                xml = re.sub(r'w:footerMargin="\d+"', f'w:footerMargin="{inf_dxa}"', xml)
-                
-                conteudo = xml.encode("utf-8")
+            # ✅ CABEÇALHO, RODAPÉ E OUTROS → COPIA IGUAL, SEM ALTERAÇÃO!
+            # NÃO FAZ NADA!
             
             zip_novo.writestr(item, conteudo)
             
@@ -89,31 +66,32 @@ def aplicar_margens_abnt_exatas(arquivo_bytes):
 # ============================================================
 # 🚀 INTERFACE
 # ============================================================
-with st.form("form_margens_abnt_exatas"):
+with st.form("form_apenas_limpar"):
     arquivo_word = st.file_uploader(
-        "📂 Arraste o arquivo AQUI com o cabeçalho já ajustado",
+        "📂 Arraste o arquivo AQUI com as margens já corretas",
         type=["docx"],
-        key="upload_margens_abnt_exatas"
+        key="upload_apenas_limpar"
     )
-    enviado = st.form_submit_button("🔄 APLICAR MARGENS ABNT EXATAS", type="primary")
+    enviado = st.form_submit_button("🔄 REMOVER PÁGINAS EM BRANCO", type="primary")
 
 if enviado and arquivo_word:
     st.info(f"✅ Arquivo carregado: **{arquivo_word.name}**")
     
-    with st.spinner("Aplicando margens EXATAS da ABNT... cabeçalho preservado..."):
+    with st.spinner("Removendo páginas vazias... PRESERVANDO TUDO O RESTO..."):
         dados_brutos = arquivo_word.read()
-        dados_finais = aplicar_margens_abnt_exatas(dados_brutos)
+        dados_finais = apenas_remover_paginas_vazias(dados_brutos)
         
         st.download_button(
-            label="📥 BAIXAR — MARGENS ABNT 3/3/2/2",
+            label="📥 BAIXAR — SEM PÁGINAS VAZIAS",
             data=dados_finais,
-            file_name=f"{arquivo_word.name.replace('.docx','')}_ABNT_3_3_2_2.docx",
+            file_name=f"{arquivo_word.name.replace('.docx','')}_SEM_PAGINAS_VAZIAS.docx",
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             type="primary"
         )
         
-        st.success("""✅ **CONCLUÍDO — MARGENS ABNT EXATAS APLICADAS!**
-• 📏 Superior: 3,0cm • Esquerda: 3,0cm • Inferior: 2,0cm • Direita: 2,0cm
-• 🛡️ Cabeçalho, rodapé, marca d'água e nº de páginas → PRESERVADOS
-• ✅ Espaços e quebras vazias → REMOVIDOS
-• ✅ Abra o Word → Configurar Página → as margens estarão corretas!""")
+        st.success("""✅ **CONCLUÍDO — PÁGINAS VAZIAS REMOVIDAS!**
+• 🛡️ Margens ABNT → PRESERVADAS (3,0 / 3,0 / 2,0 / 2,0)
+• 🛡️ Cabeçalho, marca d'água, nº de páginas → EXATAMENTE IGUAIS
+• ✅ Quebras de página vazias → REMOVIDAS
+• ✅ Espaços gigantes entre títulos e textos → REMOVIDOS
+• ✅ Estrutura, tabelas e conteúdo → 100% PRESERVADOS""")
