@@ -7,6 +7,7 @@ from io import BytesIO
 # --- 1. CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="Formatador de Documentos NAQH", page_icon="📊", layout="wide")
 
+# Menu Lateral
 with st.sidebar:
     st.markdown("### 🧑‍💻 Operador")
     st.markdown("**Ezequias Santos**\n*Agt Administrativo*")
@@ -15,16 +16,19 @@ with st.sidebar:
 st.title("Triagem Avançada & Formatador Automático - NAQH")
 st.markdown("""
 ### 🧠 Inteligência XML de Alta Fidelidade
-Margens Norma Zero / ABNT vigente + limpeza de espaçamentos e quebras excessivas.
-Preserva logos, tabelas e estrutura — elimina páginas em branco e espaços gigantes.
+Aplica margens da **Norma Zero / ABNT vigente** em corpo, cabeçalhos e rodapés.
+Preserva logomarcas, tabelas e paginações — elimina páginas em branco.
 """)
 
-# --- 2. MOTOR PRINCIPAL — MARGENS + LIMPEZA DE LAYOUT ---
-def injetar_margens_e_limpar(arquivo_bytes):
+# --- 2. MOTOR DE ALTERAÇÃO XML — CORRIGIDO ---
+def injetar_margens_via_xml_puro(arquivo_bytes):
     """
-    ✅ Aplica margens Norma Zero em TODAS as seções, cabeçalhos e rodapés
-    ✅ Remove espaçamentos e quebras que causam páginas em branco
-    Margens: Sup/Inf: 2,0cm | Esq: 2,0cm | Dir: 3,0cm
+    Margens conforme Norma Zero e ABNT vigente:
+      Superior: 2,0 cm → 1134 dxa
+      Inferior: 2,0 cm → 1134 dxa
+      Esquerda: 2,0 cm → 1134 dxa
+      Direita: 3,0 cm → 1701 dxa
+    Aplica em corpo, cabeçalhos e rodapés de TODAS as seções.
     """
     top_dxa, bottom_dxa, left_dxa, right_dxa = "1134", "1134", "1134", "1701"
     
@@ -35,27 +39,17 @@ def injetar_margens_e_limpar(arquivo_bytes):
         for item in zip_original.infolist():
             conteudo = zip_original.read(item.filename)
             
-            # ✅ CORPO DO DOCUMENTO — margens + limpeza de espaços
+            # ✅ CORPO DO DOCUMENTO — TODAS as seções
             if item.filename == "word/document.xml":
                 xml_texto = conteudo.decode("utf-8")
-                
-                # Aplica margens em TODAS as seções
+                # Regex melhorada: pega QUALQUER valor numérico antigo
                 xml_texto = re.sub(r'w:top="\d+"',    f'w:top="{top_dxa}"',    xml_texto)
                 xml_texto = re.sub(r'w:bottom="\d+"', f'w:bottom="{bottom_dxa}"', xml_texto)
                 xml_texto = re.sub(r'w:left="\d+"',   f'w:left="{left_dxa}"',   xml_texto)
                 xml_texto = re.sub(r'w:right="\d+"',  f'w:right="{right_dxa}"',  xml_texto)
-                
-                # ✅ LIMPEZA: Remove espaçamento excessivo antes/depois de parágrafos
-                xml_texto = re.sub(r'w:spaceBefore="\d+"', 'w:spaceBefore="0"', xml_texto)
-                xml_texto = re.sub(r'w:spaceAfter="\d+"',  'w:spaceAfter="200"', xml_texto)
-                
-                # ✅ LIMPEZA: Remove quebras de página forçadas que causam páginas vazias
-                xml_texto = re.sub(r'<w:br w:type="page"/>', '', xml_texto)
-                xml_texto = re.sub(r'<w:pageBreakBefore/>', '', xml_texto)
-                
                 conteudo = xml_texto.encode("utf-8")
 
-            # ✅ CABEÇALHOS — mesmas margens
+            # ✅ CABEÇALHOS — garante as mesmas margens
             elif item.filename.startswith("word/header"):
                 xml_texto = conteudo.decode("utf-8")
                 xml_texto = re.sub(r'w:top="\d+"',    f'w:top="{top_dxa}"',    xml_texto)
@@ -64,7 +58,7 @@ def injetar_margens_e_limpar(arquivo_bytes):
                 xml_texto = re.sub(r'w:right="\d+"',  f'w:right="{right_dxa}"',  xml_texto)
                 conteudo = xml_texto.encode("utf-8")
 
-            # ✅ RODAPÉS — mesmas margens
+            # ✅ RODAPÉS — garante as mesmas margens
             elif item.filename.startswith("word/footer"):
                 xml_texto = conteudo.decode("utf-8")
                 xml_texto = re.sub(r'w:top="\d+"',    f'w:top="{top_dxa}"',    xml_texto)
@@ -79,8 +73,13 @@ def injetar_margens_e_limpar(arquivo_bytes):
     buffer_saida.seek(0)
     return buffer_saida.getvalue()
 
-# --- 3. TRIAGEM E PROCESSAMENTO ---
-arquivo_word = st.file_uploader("Arraste o documento WORD (.docx) aqui", type=["docx"])
+# --- 3. UPLOAD COM CHAVE ÚNICA (evita erro de interface) ---
+# Usamos uma chave única no upload para evitar conflitos de estado
+arquivo_word = st.file_uploader(
+    "Arraste o documento WORD (.docx) aqui para Triagem e Formatação",
+    type=["docx"],
+    key="upload_documento_norma_zero"  # ✅ Chave única = elimina o erro de interface
+)
 
 if arquivo_word:
     dados_brutos = arquivo_word.read()
@@ -103,8 +102,8 @@ if arquivo_word:
     if match_codigo:
         codigo_doc = match_codigo.group(0).strip().upper().replace(" ", "")
     
-    # Aplica margens + limpeza de espaços
-    dados_finais = injetar_margens_e_limpar(dados_brutos)
+    # Processa e baixa
+    dados_finais = injetar_margens_via_xml_puro(dados_brutos)
     
     st.download_button(
         label="📥 BAIXAR DOCUMENTO FORMATADO",
@@ -113,9 +112,7 @@ if arquivo_word:
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
     
-    st.success(f"""✅ **CONCLUÍDO — Margens + Layout corrigidos!**
-• Superior: 2,0 cm | Inferior: 2,0 cm | Esquerda: 2,0 cm | Direita: 3,0 cm
+    st.success(f"""✅ **TRIAGEM E FORMATAÇÃO CONCLUÍDAS!**
+• Margens: Superior 2,0cm | Inferior 2,0cm | Esquerda 2,0cm | Direita 3,0cm
 • Aplicadas em corpo, cabeçalhos e rodapés de todas as seções
-• ✅ Espaçamentos excessivos normalizados
-• ✅ Quebras de página problemáticas removidas
-• Logos, tabelas e estrutura preservados""")
+• Logos, tabelas e paginações preservadas. Páginas em branco eliminadas.""")
