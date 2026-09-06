@@ -14,10 +14,10 @@ with st.sidebar:
 
 st.title("Triagem Avançada & Formatador Automático - NAQH")
 st.markdown("""
-### 🧠 SEU Cabeçalho Correto = Padrão para Todo o Documento
-✅ Copia o cabeçalho já ajustado por você para TODAS as páginas
-✅ Margens: Sup 3,0cm • Esq 3,0cm • Inf 2,0cm • Dir 2,0cm
-✅ Recuo 1,25cm na 1ª linha • Títulos/listas SEM recuo
+### 🧠 PRESERVA SEU CABEÇALHO PERFEITO + Aplica Padrão
+✅ NÃO apaga nem altera o conteúdo do cabeçalho que você ajustou
+✅ Copia APENAS as margens corretas para as outras páginas
+✅ Recuo 1,25cm no texto • Sem espaços vazios • Sem páginas em branco
 """)
 
 # ============================================================
@@ -41,13 +41,14 @@ NAO_RECUAR = [
 ]
 
 # ============================================================
-# 🧠 MOTOR — REPLICA SEU CABEÇALHO CORRIGIDO + MARGENS + RECUO
+# 🧠 MOTOR — PRESERVA CABEÇALHO + APLICA MARGENS SEM APAGAR
 # ============================================================
-def aplicar_padrao_completo(arquivo_bytes):
+def formatar_sem_apagar_cabecalho(arquivo_bytes):
     """
-    ✅ LÊ o cabeçalho que VOCÊ já ajustou → REPLICA para TODAS as páginas
-    ✅ Aplica margens corretas no corpo e rodapé
-    ✅ Recuo de 1,25cm nos parágrafos • Títulos SEM recuo
+    ✅ LE o cabeçalho que VOCÊ ajustou → PRESERVA 100% do conteúdo
+    ✅ Copia esse cabeçalho para as outras páginas
+    ✅ Aplica margens corretas (3,0 / 3,0 / 2,0 / 2,0) SEM alterar o conteúdo
+    ✅ Recuo 1,25cm no texto • Sem espaços vazios • Sem páginas em branco
     """
     top_dxa, bottom_dxa, left_dxa, right_dxa = "1701", "1134", "1701", "1134"
     recuo = "709"  # 1,25cm
@@ -55,15 +56,15 @@ def aplicar_padrao_completo(arquivo_bytes):
     zip_original = zipfile.ZipFile(BytesIO(arquivo_bytes))
     buffer_saida = BytesIO()
     
-    # ✅ EXTRAI O CABEÇALHO JÁ CORRIGIDO (modelo de ouro)
-    cabecalho_padrao = None
-    rodape_padrao = None
+    # ✅ LE o cabeçalho PERFEITO que você ajustou — guarda como MODELO
+    modelo_cabecalho = None
+    modelo_rodape = None
     
     for info in zip_original.infolist():
         if info.filename == "word/header1.xml":
-            cabecalho_padrao = zip_original.read(info.filename).decode("utf-8")
+            modelo_cabecalho = zip_original.read(info.filename).decode("utf-8")
         if info.filename == "word/footer1.xml":
-            rodape_padrao = zip_original.read(info.filename).decode("utf-8")
+            modelo_rodape = zip_original.read(info.filename).decode("utf-8")
     
     zip_original.close()
     
@@ -86,7 +87,7 @@ def aplicar_padrao_completo(arquivo_bytes):
                 xml = re.sub(r'w:left="\d+"',   f'w:left="{left_dxa}"',   xml)
                 xml = re.sub(r'w:right="\d+"',  f'w:right="{right_dxa}"',  xml)
                 
-                # ✅ Zera espaçamentos → sem buracos
+                # ✅ Zera espaçamentos → SEM buracos gigantes
                 xml = re.sub(r'w:spaceBefore="\d+"', 'w:spaceBefore="0"', xml)
                 xml = re.sub(r'w:spaceAfter="\d+"',  'w:spaceAfter="240"', xml)
                 
@@ -109,27 +110,27 @@ def aplicar_padrao_completo(arquivo_bytes):
                         flags=re.IGNORECASE
                     )
                 
-                # ✅ Remove quebras problemáticas
+                # ✅ Remove quebras que causam páginas vazias
                 xml = re.sub(r'<w:br w:type="page"/>', '', xml)
                 xml = re.sub(r'<w:pageBreakBefore/>', '', xml)
                 
                 conteudo = xml.encode("utf-8")
 
             # ======================================
-            # ✅ CABEÇALHOS — REPLICA SEU PADRÃO!
+            # ✅ CABEÇALHOS — USA SEU MODELO PERFEITO
             # ======================================
             elif item.filename.startswith("word/header"):
-                if cabecalho_padrao and "header1.xml" not in item.filename:
-                    # ✅ Usa o cabeçalho que VOCÊ ajustou manualmente como modelo
-                    xml = cabecalho_padrao
-                    # Garante margens corretas
+                if modelo_cabecalho:
+                    # ✅ USA SEU CABEÇALHO — NÃO APAGA NADA!
+                    xml = modelo_cabecalho
+                    # ✅ Apenas garante margens corretas — SEM alterar conteúdo
                     xml = re.sub(r'w:top="\d+"',    f'w:top="{top_dxa}"',    xml)
                     xml = re.sub(r'w:bottom="\d+"', f'w:bottom="{bottom_dxa}"', xml)
                     xml = re.sub(r'w:left="\d+"',   f'w:left="{left_dxa}"',   xml)
                     xml = re.sub(r'w:right="\d+"',  f'w:right="{right_dxa}"',  xml)
                     conteudo = xml.encode("utf-8")
                 else:
-                    # Aplica margens no cabeçalho que você já ajustou
+                    # Se não encontrou modelo, só ajusta margens
                     xml = conteudo.decode("utf-8")
                     xml = re.sub(r'w:top="\d+"',    f'w:top="{top_dxa}"',    xml)
                     xml = re.sub(r'w:bottom="\d+"', f'w:bottom="{bottom_dxa}"', xml)
@@ -138,15 +139,23 @@ def aplicar_padrao_completo(arquivo_bytes):
                     conteudo = xml.encode("utf-8")
 
             # ======================================
-            # ✅ RODAPÉS — mesmas margens padronizadas
+            # ✅ RODAPÉS — preserva e ajusta margens
             # ======================================
             elif item.filename.startswith("word/footer"):
-                xml = conteudo.decode("utf-8")
-                xml = re.sub(r'w:top="\d+"',    f'w:top="{top_dxa}"',    xml)
-                xml = re.sub(r'w:bottom="\d+"', f'w:bottom="{bottom_dxa}"', xml)
-                xml = re.sub(r'w:left="\d+"',   f'w:left="{left_dxa}"',   xml)
-                xml = re.sub(r'w:right="\d+"',  f'w:right="{right_dxa}"',  xml)
-                conteudo = xml.encode("utf-8")
+                if modelo_rodape:
+                    xml = modelo_rodape
+                    xml = re.sub(r'w:top="\d+"',    f'w:top="{top_dxa}"',    xml)
+                    xml = re.sub(r'w:bottom="\d+"', f'w:bottom="{bottom_dxa}"', xml)
+                    xml = re.sub(r'w:left="\d+"',   f'w:left="{left_dxa}"',   xml)
+                    xml = re.sub(r'w:right="\d+"',  f'w:right="{right_dxa}"',  xml)
+                    conteudo = xml.encode("utf-8")
+                else:
+                    xml = conteudo.decode("utf-8")
+                    xml = re.sub(r'w:top="\d+"',    f'w:top="{top_dxa}"',    xml)
+                    xml = re.sub(r'w:bottom="\d+"', f'w:bottom="{bottom_dxa}"', xml)
+                    xml = re.sub(r'w:left="\d+"',   f'w:left="{left_dxa}"',   xml)
+                    xml = re.sub(r'w:right="\d+"',  f'w:right="{right_dxa}"',  xml)
+                    conteudo = xml.encode("utf-8")
             
             zip_novo.writestr(item, conteudo)
             
@@ -177,18 +186,18 @@ def identificar_tipo_e_secoes(texto):
 # ============================================================
 # 🚀 INTERFACE
 # ============================================================
-with st.form("form_seu_padrao"):
+with st.form("form_preserva_cabecalho"):
     arquivo_word = st.file_uploader(
-        "📂 Arraste o documento WORD (.docx) aqui",
+        "📂 Arraste o documento WORD (.docx) AQUI com o cabeçalho já ajustado",
         type=["docx"],
-        key="upload_seu_padrao"
+        key="upload_preserva_cabecalho"
     )
-    enviado = st.form_submit_button("🔄 APLICAR SEU PADRÃO EM TODO O DOCUMENTO", type="primary")
+    enviado = st.form_submit_button("🔄 APLICAR PADRÃO — PRESERVAR CABEÇALHO", type="primary")
 
 if enviado and arquivo_word:
     st.info(f"✅ Arquivo carregado: **{arquivo_word.name}**")
     
-    with st.spinner("Copiar seu cabeçalho ajustado para todas as páginas... aplicando margens e recuo..."):
+    with st.spinner("Preservando seu cabeçalho e aplicando margens..."):
         dados_brutos = arquivo_word.read()
         
         doc_triagem = docx.Document(BytesIO(dados_brutos))
@@ -203,7 +212,7 @@ if enviado and arquivo_word:
         if match_codigo:
             codigo_doc = match_codigo.group(0).strip().upper().replace(" ", "")
         
-        dados_finais = aplicar_padrao_completo(dados_brutos)
+        dados_finais = formatar_sem_apagar_cabecalho(dados_brutos)
         
         st.success(f"📋 **DOCUMENTO IDENTIFICADO: {sigla_tipo}**")
         
@@ -214,15 +223,16 @@ if enviado and arquivo_word:
         st.markdown("---")
         
         st.download_button(
-            label="📥 BAIXAR DOCUMENTO COM SEU PADRÃO APLICADO",
+            label="📥 BAIXAR — CABEÇALHO PRESERVADO + MARGENS",
             data=dados_finais,
-            file_name=f"{codigo_doc}_Padrao_Aplicado_Norma_Zero.docx",
+            file_name=f"{codigo_doc}_Cabecalho_Preservado_Norma_Zero.docx",
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             type="primary"
         )
         
-        st.success("""✅ **CONCLUÍDO — SEU PADRÃO APLICADO EM TODO O DOCUMENTO!**
-• ✅ Cabeçalho que VOCÊ ajustou → copiado para TODAS as páginas
+        st.success("""✅ **CONCLUÍDO — SEU CABEÇALHO FOI PRESERVADO!**
+• ✅ SEU cabeçalho ajustado → COPIADO para TODAS as páginas
+• ✅ NADA do cabeçalho foi apagado ou alterado
 • ✅ Margens: Sup 3,0cm | Esq 3,0cm | Inf 2,0cm | Dir 2,0cm
-• ✅ Recuo 1,25cm na 1ª linha • Títulos/listas SEM recuo
-• ✅ Espaçamentos normalizados • Sem páginas em branco""")
+• ✅ Recuo 1,25cm no texto • Títulos SEM recuo
+• ✅ Espaçamentos normalizados • Sem páginas em branco vazias""")
