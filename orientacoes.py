@@ -3,26 +3,21 @@ import docx
 import re
 from io import BytesIO
 
-# --- 1. CONFIGURAÇÃO ---
-st.set_page_config(page_title="AUDITORIA — Acha Tudo!", page_icon="🔍", layout="wide")
+st.set_page_config(page_title="AUDITORIA COMPLETA — Todos os Tipos", page_icon="🔍", layout="wide")
 
-with st.sidebar:
-    st.markdown("### 🧑‍💻 Operador")
-    st.markdown("**Ezequias Santos**\n*Agt Administrativo / Auditor*")
-    st.divider()
-
-st.title("🔍 AUDITORIA — ACHA CÓDIGO, VERSÃO E SEÇÕES!")
+st.title("🔍 AUDITORIA COMPLETA — Todos os Tipos de Documento")
 st.markdown("""
-### ✅ Cabeçalho lido com formato flexível
-✅ Seções com NOMES REAIS do seu documento (completos!)
-✅ Aceita espaços entre número e nome
+### ✅ Reconhece: PROT, POP, POI, NOR, REG, PROG, PLAN e ROT
+✅ Seções EXATAMENTE conforme Quadro 1
+✅ Busca simples — lê tudo e verifica se está presente
+✅ Código e Versão detectados de forma flexível
 ✅ Validade → NÃO é obrigatória
 """)
 
 # ============================================================
-# 📋 SEÇÕES — NOMES EXATAMENTE COMO ESTÃO NO SEU DOCUMENTO!
+# 📋 SEÇÕES OBRIGATÓRIAS — TODOS OS TIPOS conforme Quadro 1
 # ============================================================
-SECOES_OBRIGATORIAS = {
+SECOES_POR_TIPO = {
     "PROT": [
         "1. OBJETIVO",
         "2. APLICABILIDADE",
@@ -36,18 +31,10 @@ SECOES_OBRIGATORIAS = {
     "POP": [
         "1. DEFINIÇÃO",
         "2. APLICABILIDADE",
-        "3. RESPONSABILIDADES",
-        "4. DESCRIÇÃO DAS ETAPAS",
-        "5. REFERÊNCIAS",
-        "6. ANEXOS"
-    ],
-    "PROG": [
-        "1. REFERENCIAL TEÓRICO",
-        "2. OBJETIVOS",
-        "3. METAS E INDICADORES",
-        "4. DEFINIÇÃO DE METAS",
-        "5. ACOMPANHAMENTO E MONITORAMENTO",
-        "6. AVALIAÇÃO DE RESULTADOS",
+        "3. RESPONSÁVEL",
+        "4. DESCRIÇÃO DA EXECUÇÃO",
+        "5. MATERIAIS UTILIZADOS",
+        "6. TARIFA",
         "7. REFERÊNCIAS",
         "8. ANEXOS"
     ],
@@ -63,12 +50,12 @@ SECOES_OBRIGATORIAS = {
     ],
     "NOR": [
         "1. OBJETIVO",
-        "2. ABRANGÊNCIA",
-        "3. DEFINIÇÕES",
-        "4. COMPETÊNCIAS",
-        "5. PROCEDIMENTOS",
-        "6. DISPOSIÇÕES FINAIS",
-        "7. REFERÊNCIAS"
+        "2. APLICABILIDADE",
+        "3. DESCRIÇÃO DA NORMA",
+        "4. RESPONSÁVEL",
+        "5. EFETIVO NO CUMPRIMENTO",
+        "6. NORMA DE REFERÊNCIA",
+        "7. ANEXOS"
     ],
     "REG": [
         "1. FINALIDADE",
@@ -76,86 +63,93 @@ SECOES_OBRIGATORIAS = {
         "3. COMPETÊNCIA E ORGANIZAÇÃO",
         "4. DISPOSIÇÕES GERAIS",
         "5. DISPOSIÇÕES FINAIS"
+    ],
+    "PROG": [
+        "1. REFERENCIAL TEÓRICO",
+        "2. OBJETIVOS",
+        "3. METAS E INDICADORES",
+        "4. DEFINIÇÃO DE METAS",
+        "5. ACOMPANHAMENTO E MONITORAMENTO",
+        "6. AVALIAÇÃO DE RESULTADOS",
+        "7. REFERÊNCIAS",
+        "8. ANEXOS"
+    ],
+    "PLAN": [
+        "1. OBJETIVO",
+        "2. APLICABILIDADE",
+        "3. DESCRIÇÃO DO CENÁRIO DE RISCO",
+        "4. MEDIDAS DE CONTINGÊNCIA",
+        "5. ESTRATÉGIAS DE RESPOSTA",
+        "6. REFERÊNCIAS",
+        "7. ANEXOS"
+    ],
+    "ROT": [
+        "1. OBJETIVO",
+        "2. APLICABILIDADE",
+        "3. DESCRIÇÃO DA ROTINA",
+        "4. RESPONSÁVEL",
+        "5. ETAPAS DE EXECUÇÃO",
+        "6. REFERÊNCIAS",
+        "7. ANEXOS"
     ]
 }
 
 # ============================================================
-# 🧠 ESCANEAR — AGORA ACHA TUDO!
+# 🧠 FUNÇÃO DE AUDITORIA — SIMPLES E DIRETA
 # ============================================================
-def escanear_documento_completo(arquivo_bytes):
+def auditar_documento(arquivo_bytes):
     doc = docx.Document(BytesIO(arquivo_bytes))
     
-    # 📖 LER TODO O CONTEÚDO — parágrafos + TODAS as tabelas
-    texto_paragrafos = []
+    # ✅ LÊ TUDO — junta parágrafos e TODAS as tabelas em UMA string MAIÚSCULA
+    texto_completo = ""
     for p in doc.paragraphs:
-        t = p.text.strip().upper()
-        if t:
-            texto_paragrafos.append(t)
-    
-    texto_tabelas = []
+        texto_completo += p.text.upper() + "\n"
     for tabela in doc.tables:
         for linha in tabela.rows:
-            texto_linha = " ".join([celula.text.strip() for celula in linha.cells])
-            texto_tabelas.append(texto_linha.upper())
+            for celula in linha.cells:
+                texto_completo += celula.text.upper() + " "
     
-    texto_completo = "\n".join(texto_paragrafos + texto_tabelas)
+    # 🔍 IDENTIFICAR TIPO DE DOCUMENTO
+    tipo_detectado = None
+    for tipo in SECOES_POR_TIPO.keys():
+        if re.search(rf'\b{tipo}[_ /]', texto_completo) or re.search(rf'\b{tipo}\b', texto_completo):
+            tipo_detectado = tipo
+            break
     
-    # 🔍 IDENTIFICAR TIPO
-    tipo_detectado = "PROT"
-    if re.search(r'\bPROT[_ /]', texto_completo) or "PROTOCOLO" in texto_completo:
-        tipo_detectado = "PROT"
-    elif re.search(r'\bPOP[_ /]', texto_completo) or "PROCEDIMENTO OPERACIONAL" in texto_completo:
-        tipo_detectado = "POP"
-    elif re.search(r'\bPROG[_ /]', texto_completo) or "PROGRAMA" in texto_completo:
-        tipo_detectado = "PROG"
-    elif re.search(r'\bPOI[_ /]', texto_completo) or "POLÍTICA" in texto_completo or "POLITICA" in texto_completo:
-        tipo_detectado = "POI"
-    elif re.search(r'\bNOR[_ /]', texto_completo) or "NORMA" in texto_completo:
-        tipo_detectado = "NOR"
-    elif re.search(r'\bREG[_ /]', texto_completo) or "REGULAMENTO" in texto_completo:
-        tipo_detectado = "REG"
+    if not tipo_detectado:
+        tipo_detectado = "PROT"  # Padrão
     
-    # 🔍 EXTRAIR CÓDIGO — ACEITA 3 OU 4 LETRAS antes do _!
+    # 🔍 EXTRAIR CÓDIGO — flexível: PROT_..., POP_..., etc.
     codigo_detectado = None
-    match_codigo = re.search(r'CÓDIGO|Código[:\s]*[:]?\s*([A-Z]{3,4}_[A-Z0-9_]+)', texto_completo)
-    if match_codigo and match_codigo.group(1):
-        codigo_detectado = match_codigo.group(1).strip()
+    match_codigo = re.search(rf'{tipo_detectado}[_ ][A-Z0-9_]+', texto_completo)
+    if match_codigo:
+        codigo_detectado = match_codigo.group(0).strip()
     
-    # 🔍 EXTRAIR VERSÃO — aceita "5ª", "5", "V5"
+    # 🔍 EXTRAIR VERSÃO — aceita "5ª", "5", "V5.1"
     versao_detectada = None
-    match_versao = re.search(r'VERSÃO|Versão[:\s]*[:]?\s*(?:[Vv]|versão)?\s*(\d+)', texto_completo)
+    match_versao = re.search(r'VERSÃO|VERSÃO[:\s]*(\d+)', texto_completo)
     if match_versao and match_versao.group(1):
         versao_detectada = match_versao.group(1).strip()
     
     # 🔍 EXTRAIR VALIDADE (não obrigatória)
     validade_detectada = None
-    match_validade = re.search(r'VALIDADE|Validade[:\s]*[:]?\s*([\d/]+)', texto_completo)
+    match_validade = re.search(r'VALIDADE[:\s]*([\d/]+)', texto_completo)
     if match_validade and match_validade.group(1):
         validade_detectada = match_validade.group(1).strip()
     
-    # 🔍 VERIFICAR SEÇÕES — ACEITA ESPAÇOS entre número e nome!
-    secoes_esperadas = SECOES_OBRIGATORIAS.get(tipo_detectado, SECOES_OBRIGATORIAS["PROT"])
+    # 🔍 VERIFICAR SEÇÕES — busca simples: "o texto existe lá?"
+    secoes_esperadas = SECOES_POR_TIPO[tipo_detectado]
     secoes_encontradas = []
     secoes_faltantes = []
     
     for secao in secoes_esperadas:
-        secao_upper = secao.upper().strip()
-        # ✅ Aceita espaços QUALQUER quantidade entre número e nome!
-        padrao = rf'^{re.escape(secao_upper.replace(". ", "."))}\s+'
-        
-        encontrada = False
-        for linha in texto_paragrafos + texto_tabelas:
-            linha_limpa = re.sub(r'\s+', ' ', linha.strip())
-            if re.search(padrao, linha_limpa, re.IGNORECASE):
-                encontrada = True
-                break
-        
-        if encontrada:
+        secao_limpa = secao.upper().strip()
+        if secao_limpa in texto_completo:
             secoes_encontradas.append(secao)
         else:
             secoes_faltantes.append(secao)
     
-    # ✅ APROVADO
+    # ✅ APROVADO = Tem Código + Tem Versão + Tem Todas as Seções
     aprovado = (len(secoes_faltantes) == 0 and 
                 codigo_detectado is not None and 
                 versao_detectada is not None)
@@ -174,21 +168,21 @@ def escanear_documento_completo(arquivo_bytes):
 # ============================================================
 # 🚀 INTERFACE
 # ============================================================
-with st.form("form_auditoria_final_achando_tudo"):
+with st.form("form_auditoria_completa_todos_tipos"):
     arquivo_word = st.file_uploader(
         "📂 Arraste o documento WORD (.docx) AQUI",
         type=["docx"],
-        key="upload_auditoria_final"
+        key="upload_auditoria_completa"
     )
-    enviado = st.form_submit_button("🔍 EXECUTAR AUDITORIA — ACHA TUDO!", type="primary")
+    enviado = st.form_submit_button("🔍 EXECUTAR AUDITORIA COMPLETA", type="primary")
 
 if enviado and arquivo_word:
     st.info(f"✅ Arquivo carregado: **{arquivo_word.name}**")
     
-    with st.spinner("Escaneando... buscando código e versão... verificando seções..."):
+    with st.spinner("Escaneando... identificando tipo... verificando seções..."):
         try:
             dados_brutos = arquivo_word.read()
-            relatorio = escanear_documento_completo(dados_brutos)
+            relatorio = auditar_documento(dados_brutos)
             
             st.markdown("---")
             st.subheader("📋 RELATÓRIO DE AUDITORIA")
@@ -235,7 +229,8 @@ if enviado and arquivo_word:
                 if not relatorio["versao"]:
                     st.error("• ❌ Falta VERSÃO no cabeçalho")
                 if relatorio["secoes_faltantes"]:
-                    st.error(f"• ❌ Faltam {len(relatorio['secoes_faltantes'])} seção(ões)")
+                    st.error(f"• ❌ Faltam {len(relatorio['secoes_faltantes'])} seção(ões) obrigatória(s)")
         
         except Exception as e:
-            st.error(f"## ❌ ERRO: {str(e)}")
+            st.error(f"## ❌ ERRO durante a auditoria: {str(e)}")
+            st.info("Por favor, verifique se o arquivo está no formato .docx válido.")
