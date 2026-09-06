@@ -200,4 +200,3 @@ if arquivo_word:
             }
             st.session_state.historico_lista_mestra = pd.concat([df_atual, pd.DataFrame([nova_linha])], ignore_index=True)
 
-        st.download_button(
