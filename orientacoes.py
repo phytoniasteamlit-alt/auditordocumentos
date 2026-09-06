@@ -48,32 +48,62 @@ def set_cell_margins(cell, top=100, bottom=100, left=150, right=150):
         tcMar.append(node)
     tcPr.append(tcMar)
 
-# --- 3. ÁREA DE INTERAÇÃO COM O USUÁRIO ---
-arquivo_word = st.file_uploader("Arraste o documento WORD (.docx) aqui para Triagem e Formatação", type=["docx"])
-
-# Contêiner reservado para saídas críticas (Garante exibição prioritária no topo)
-area_resultado = st.container()
-
-if arquivo_word:
-    doc = docx.Document(arquivo_word)
+# --- 3. FUNÇÃO DE PROCESSAMENTO PESADO (RODA SÓ NO CLIQUE DO BOTÃO) ---
+def formatar_documento_pesado(documento_carregado):
+    # Recarrega o documento de forma limpa
+    doc = docx.Document(documento_carregado)
     
-    # Limpeza de Parágrafos Fantasmas (Espaços em Branco)
-    p_indices_remover = []
-    for i, p in enumerate(doc.paragraphs):
-        if not p.text.strip():
-            p_indices_remover.append(i)
-            
+    # Limpeza de Parágrafos Fantasmas
+    p_indices_remover = [i for i, p in enumerate(doc.paragraphs) if not p.text.strip()]
     for index in sorted(p_indices_remover, reverse=True):
         p_element = doc.paragraphs[index]._element
         p_element.getparent().remove(p_element)
         
-    # Consolidação de Texto para Varredura Completa (Corpo e Tabelas)
-    texto_corpo_raw = " ".join([p.text.strip() for p in doc.paragraphs])
-    texto_tabelas_raw = " ".join([cell.text.strip() for t in doc.tables for r in t.rows for cell in r.cells])
+    # Configuração Geométrica Oficial (Quadro 4: Sup 2 / Inf 2 / Esquer 2 / Dir 3)
+    for section in doc.sections:
+        section.top_margin = Cm(2.0)
+        section.bottom_margin = Cm(2.0)
+        section.left_margin = Cm(2.0)
+        section.right_margin = Cm(3.0)
+
+    # Formatação do Corpo de Texto (Calibri 11, Espaçamento 1.5, Justificado)
+    for paragraph in doc.paragraphs:
+        texto_limpo = paragraph.text.strip()
+        if "REFERÊNCIAS" in texto_limpo.upper() or "REFERENCIA" in texto_limpo.upper():
+            continue
+            
+        paragraph.paragraph_format.space_before = Pt(4)
+        paragraph.paragraph_format.space_after = Pt(4)
+        paragraph.paragraph_format.line_spacing = 1.5
+        
+        primeiros_caracteres = texto_limpo[:8]
+        if primeiros_caracteres and (primeiros_caracteres.replace('.', '').isdigit() or ')' in primeiros_caracteres):
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+            paragraph.paragraph_format.left_indent = Cm(1.25)
+            paragraph.paragraph_format.first_line_indent = Cm(-1.25)
+        else:
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+            paragraph.paragraph_format.left_indent = Cm(0)
+            paragraph.paragraph_format.first_line_indent = Cm(1.25)
+            
+    conteudo_saida = BytesIO()
+    doc.save(conteudo_saida)
+    conteudo_saida.seek(0)
+    return conteudo_saida
+
+# --- 4. FLUXO DE CARREGAMENTO DO ARQUIVO ---
+arquivo_word = st.file_uploader("Arraste o documento WORD (.docx) aqui para Triagem e Formatação", type=["docx"])
+
+if arquivo_word:
+    # Lemos o documento uma vez de forma rápida apenas para extrair textos para triagem
+    doc_triagem = docx.Document(arquivo_word)
+    
+    texto_corpo_raw = " ".join([p.text.strip() for p in doc_triagem.paragraphs])
+    texto_tabelas_raw = " ".join([cell.text.strip() for t in doc_triagem.tables for r in t.rows for cell in r.cells])
     texto_total_raw = texto_corpo_raw + " " + texto_tabelas_raw
     texto_total_validacao = texto_total_raw.upper()
     
-    # --- ETAPA 1: IDENTIFICAÇÃO DINÂMICA DO TIPO (9 MODELOS DO MANUAL) ---
+    # --- ETAPA 1: IDENTIFICAÇÃO DINÂMICA DO TIPO ---
     tipo_detectado = "NORMA"
     if "PROTOCOLO" in texto_total_validacao or "PROT_" in texto_total_validacao:
         tipo_detectado = "PROTOCOLO"
@@ -114,9 +144,9 @@ if arquivo_word:
         if termo not in texto_total_validacao:
             erros_gravissimos.append(f"⚠️ **OMISSÃO DE SEÇÃO CRÍTICA (Modelo {tipo_detectado}):** A seção contendo o termo obrigatório **'{termo}'** não foi localizada no arquivo.")
 
-    # --- ETAPA 3: EXTRAÇÃO INTELIGENTE (TABELAS + REGEX NO TEXTO) ---
+    # --- ETAPA 3: EXTRAÇÃO INTELIGENTE DE CÓDIGO E VERSÃO ---
     codigo_doc = "NÃO IDENTIFICADO"
-    for table in doc.tables:
+    for table in doc_triagem.tables:
         for row in table.rows:
             for cell in row.cells:
                 txt = cell.text.strip()
@@ -130,7 +160,7 @@ if arquivo_word:
             codigo_doc = match_codigo.group(0).strip()
 
     versao_doc = "NÃO IDENTIFICADA"
-    for table in doc.tables:
+    for table in doc_triagem.tables:
         for row in table.rows:
             for cell in row.cells:
                 txt = cell.text.strip()
@@ -158,42 +188,13 @@ if arquivo_word:
     if is_duplicado:
         erros_gravissimos.append(f"🚫 **BLOQUEIO DE DUPLICIDADE:** O documento **{codigo_doc}** já foi validado na versão **{versao_doc}**.")
 
-    # --- ETAPA 5: FORMATAÇÃO ESTÉTICA E GERAÇÃO DE SAÍDA ---
-    with area_resultado:
-        if not erros_gravissimos:
-            # 1. Registro Automático no Histórico da Lista Mestra
+    # --- ETAPA 5: EXIBIÇÃO IMEDIATA DOS RESULTADOS E DOWNLOAD CONTRA TRAVAMENTOS ---
+    if not erros_gravissimos:
+        # Atualiza a tabela na memória apenas se não estiver listado ainda
+        if df_atual[(df_atual["Código do Documento"] == codigo_doc) & (df_atual["Versão Atual"] == versao_doc)].empty:
             nova_linha = {
                 "Código do Documento": codigo_doc,
                 "Título do Documento": f"{tipo_detectado.capitalize()} de {codigo_doc}",
                 "Tipo": tipo_detectado,
                 "Versão Atual": versao_doc,
                 "Status": "Aprovado na Triagem",
-                "Data de Triagem": datetime.now().strftime("%d/%m/%Y %H:%M"),
-                "Situação": "Ativo"
-            }
-            st.session_state.historico_lista_mestra = pd.concat([df_atual, pd.DataFrame([nova_linha])], ignore_index=True)
-            
-            # 2. Configuração Geométrica Oficial (Quadro 4: Sup 2 / Inf 2 / Esquer 2 / Dir 3)
-            for section in doc.sections:
-                section.top_margin = Cm(2.0)
-                section.bottom_margin = Cm(2.0)
-                section.left_margin = Cm(2.0)
-                section.right_margin = Cm(3.0)
-
-            # 3. Formatação do Corpo de Texto (Calibri 11, Espaçamento 1.5, Justificado)
-            for paragraph in doc.paragraphs:
-                texto_limpo = paragraph.text.strip()
-                if "REFERÊNCIAS" in texto_limpo.upper() or "REFERENCIA" in texto_limpo.upper():
-                    continue
-                    
-                paragraph.paragraph_format.space_before = Pt(4)
-                paragraph.paragraph_format.space_after = Pt(4)
-                paragraph.paragraph_format.line_spacing = 1.5
-                
-                primeiros_caracteres = texto_limpo[:8]
-                if primeiros_caracteres and (primeiros_caracteres.replace('.', '').isdigit() or ')' in primeiros_caracteres):
-                    paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
-                    paragraph.paragraph_format.left_indent = Cm(1.25)
-                    paragraph.paragraph_format.first_line_indent = Cm(-1.25)
-                else:
-                    paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
