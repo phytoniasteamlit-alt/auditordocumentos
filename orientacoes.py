@@ -3,38 +3,30 @@ import docx
 from docx.shared import Cm, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
-from docx.oxml import OxmlElement  # Garante a importação correta
-import pandas as pd
+from docx.oxml import OxmlElement
 from io import BytesIO
-from datetime import datetime
 import re
 
 # --- 1. CONFIGURAÇÃO DA PÁGINA STREAMLIT ---
-st.set_page_config(page_title="Triagem & Lista Mestra NAQH", page_icon="📊", layout="wide")
+st.set_page_config(page_title="Formatador de Documentos NAQH", page_icon="📊", layout="wide")
 
-# Menu Lateral - Identificação Visual do Operador Correta
+# Menu Lateral - Identificação Visual do Operador
 with st.sidebar:
     st.markdown("### 🧑‍💻 Operador")
     st.markdown("**Ezequias Santos**\n*Agt Administrativo*")
     st.divider()
 
-st.title("Triagem Avançada & Gerador de Lista Mestra - NAQH")
+st.title("Triagem Avançada & Formatador Automático - NAQH")
 st.markdown("""
-### 🧠 Inteligência Multidocumento e Controle de Atualizações
-O sistema realiza a triagem dinâmica identificando o tipo de documento, validando as seções obrigatórias e aplicando a formatação geométrica da Norma Zero de forma segura.
+### 🧠 Inteligência Multidocumento
+O sistema realiza a triagem dinâmica identificando o tipo de documento, validando as seções obrigatórias e aplicando a formatação geométrica da Norma Zero de forma segura, sem travar ou reter seus dados.
 """)
-
-if "historico_lista_mestra" not in st.session_state:
-    st.session_state.historico_lista_mestra = pd.DataFrame(columns=[
-        "Código do Documento", "Título do Documento", "Tipo", "Versão Atual",
-        "Status", "Data de Triagem", "Situação"
-    ])
 
 # --- 2. MOTOR DE FORMATACÃO PROTEGIDA ---
 def aplicar_formatacao_protegida(arquivo_bytes):
     doc = docx.Document(arquivo_bytes)
     
-    # REGRA 1: MARGENS OFICIAIS (Apenas no corpo, sem tocar na estrutura do cabeçalho)
+    # REGRA 1: MARGENS OFICIAIS (Superior: 2cm, Inferior: 2cm, Esquerda: 2cm, Direita: 3cm)
     for section in doc.sections:
         section.top_margin = Cm(2.0)
         section.bottom_margin = Cm(2.0)
@@ -72,13 +64,12 @@ def aplicar_formatacao_protegida(arquivo_bytes):
             paragraph.paragraph_format.left_indent = Cm(0)
             paragraph.paragraph_format.first_line_indent = Cm(1.25)
 
-    # REGRA 3: NORMALIZAÇÃO DE TABELAS (Usando a escrita de função exata da importação)
+    # REGRA 3: NORMALIZAÇÃO DE TABELAS
     for table in doc.tables:
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
         for row in table.rows:
             trPr = row._element.get_or_add_trPr()
             if not row._element.xpath('w:trPr/w:cantSplit'):
-                # Corrigido para bater exatamente com a importação do topo do arquivo
                 trPr.append(OxmlElement('w:cantSplit'))
             for cell in row.cells:
                 for p in cell.paragraphs:
@@ -90,12 +81,6 @@ def aplicar_formatacao_protegida(arquivo_bytes):
     doc.save(conteudo_saida)
     conteudo_saida.seek(0)
     return conteudo_saida.getvalue()
-
-def converter_lista_para_excel(df):
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df.to_excel(writer, index=False, sheet_name='Lista Mestra')
-    return output.getvalue()
 
 # --- 3. FLUXO DE COMPILAÇÃO E TRIAGEM ---
 arquivo_word = st.file_uploader("Arraste o documento WORD (.docx) aqui para Triagem e Formatação", type=["docx"])
@@ -119,53 +104,13 @@ if arquivo_word:
     if match_codigo:
         codigo_doc = match_codigo.group(0).strip().upper().replace(" ", "")
 
-    versao_doc = "5ª"
-    match_versao = re.findall(r'\b(\d+ª|\d+ª\s*VERSÃO)\b', texto_total_raw, re.IGNORECASE)
-    if match_versao:
-        versao_doc = match_versao[-1].strip()
+    # Processa os dados diretamente sem checar duplicidades
+    dados_finais = aplicar_formatacao_protegida(arquivo_word)
 
-    df_atual = st.session_state.historico_lista_mestra
-    
-    if not df_atual.empty:
-        st.session_state.historico_lista_mestra = df_atual[
-            ~((df_atual["Código do Documento"] == codigo_doc) & (df_atual["Versão Atual"] == "NÃO IDENTIFICADA"))
-        ]
-        df_atual = st.session_state.historico_lista_mestra
-
-    is_duplicado = not df_atual[(df_atual["Código do Documento"] == codigo_doc) & (df_atual["Versão Atual"] == versao_doc)].empty
-
-    if not is_duplicado:
-        if df_atual[(df_atual["Código do Documento"] == codigo_doc) & (df_atual["Versão Atual"] == versao_doc)].empty:
-            nova_linha = {
-                "Código do Documento": codigo_doc,
-                "Título do Documento": f"{tipo_detectado.capitalize()} de {codigo_doc}",
-                "Tipo": tipo_detectado,
-                "Versão Atual": versao_doc,
-                "Status": "Aprovado na Triagem",
-                "Data de Triagem": datetime.now().strftime("%d/%m/%Y %H:%M"),
-                "Situação": "Ativo"
-            }
-            st.session_state.historico_lista_mestra = pd.concat([df_atual, pd.DataFrame([nova_linha])], ignore_index=True)
-
-        dados_finais = aplicar_formatacao_protegida(arquivo_word)
-
-        st.download_button(
-            label="📥 CLIQUE AQUI PARA BAIXAR O DOCUMENTO FORMATADO",
-            data=dados_finais,
-            file_name=f"{codigo_doc}_Formatado_Homologado.docx",
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        )
-        st.success(f"✅ **TRIAGEM CONCLUÍDA COM SUCESSO!** Parágrafos e listas alinhados. Cabeçalho e paginação preservados.")
-    else:
-        st.error(f"🚫 **BLOQUEIO DE DUPLICIDADE:** O documento **{codigo_doc}** já foi processado na versão **{versao_doc}**.")
-
-st.divider()
-st.subheader("📊 Histórico Dinâmico da Lista Mestra (Excel)")
-if not st.session_state.historico_lista_mestra.empty:
     st.download_button(
-        label="🟢 BAIXAR PLANILHA DA LISTA MESTRA (.XLSX)",
-        data=converter_lista_para_excel(st.session_state.historico_lista_mestra),
-        file_name=f"Lista_Mestra_NAQH_{datetime.now().strftime('%d_%m_%Y')}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        label="📥 CLIQUE AQUI PARA BAIXAR O DOCUMENTO FORMATADO",
+        data=dados_finais,
+        file_name=f"{codigo_doc}_Formatado_Homologado.docx",
+        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
-st.dataframe(st.session_state.historico_lista_mestra, use_container_width=True)
+    st.success(f"✅ **TRIAGEM CONCLUÍDA COM SUCESSO!** Parágrafos e listas alinhados. Cabeçalho e paginação preservados.")
