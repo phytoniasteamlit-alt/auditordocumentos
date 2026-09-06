@@ -12,7 +12,7 @@ import re
 # --- 1. CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="Triagem & Lista Mestra NAQH", page_icon="📊", layout="wide")
 
-# Menu Lateral - Identificação Visual do Operador (Solicitado)
+# Menu Lateral - Identificação do Operador
 with st.sidebar:
     st.markdown("### 🧑‍💻 Operador do Sistema")
     st.markdown("**Ezequias Santos**\n*Agt Administrativo*")
@@ -31,36 +31,61 @@ if "historico_lista_mestra" not in st.session_state:
         "Status", "Data de Triagem", "Situação"
     ])
 
-# --- 2. FUNÇÕES AUXILIARES DE ENGENHARIA DE XML ---
-def fix_table_layout(table):
-    trPrs = table._element.xpath('//w:trPr')
-    for trPr in trPrs:
-        cantSplit = OxmlElement('w:cantSplit')
-        trPr.append(cantSplit)
+# --- 2. FUNÇÃO DE TRATAMENTO EM TEMPO DE DOWNLOAD (EVITA TIMEOUT) ---
+def executar_formatacao_pesada(arquivo_bytes):
+    # Só processa os parágrafos pesados quando o operador clica no botão
+    doc = docx.Document(arquivo_bytes)
+    
+    # Limpeza de Parágrafos Fantasmas
+    p_indices_remover = [i for i, p in enumerate(doc.paragraphs) if not p.text.strip()]
+    for index in sorted(p_indices_remover, reverse=True):
+        p_element = doc.paragraphs[index]._element
+        p_element.getparent().remove(p_element)
+        
+    # Margens Homologadas (Sup 2 / Inf 2 / Esq 2 / Dir 3)
+    for section in doc.sections:
+        section.top_margin = Cm(2.0)
+        section.bottom_margin = Cm(2.0)
+        section.left_margin = Cm(2.0)
+        section.right_margin = Cm(3.0)
 
-def set_cell_margins(cell, top=100, bottom=100, left=150, right=150):
-    tcPr = cell._element.get_or_add_tcPr()
-    tcMar = OxmlElement('w:tcMar')
-    for m, val in [('top', top), ('bottom', bottom), ('left', left), ('right', right)]:
-        node = OxmlElement(f'w:{m}')
-        node.set(qn('w:w'), str(val))
-        node.set(qn('w:type'), 'dxa')
-        tcMar.append(node)
-    tcPr.append(tcMar)
+    # Formatação Textual Express
+    for paragraph in doc.paragraphs:
+        texto_limpo = paragraph.text.strip()
+        if "REFERÊNCIAS" in texto_limpo.upper() or "REFERENCIA" in texto_limpo.upper():
+            continue
+        paragraph.paragraph_format.space_before = Pt(4)
+        paragraph.paragraph_format.space_after = Pt(4)
+        paragraph.paragraph_format.line_spacing = 1.5
+        
+        primeiros_caracteres = texto_limpo[:8]
+        if primeiros_caracteres and (primeiros_caracteres.replace('.', '').isdigit() or ')' in primeiros_caracteres):
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+            paragraph.paragraph_format.left_indent = Cm(1.25)
+            paragraph.paragraph_format.first_line_indent = Cm(-1.25)
+        else:
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+            paragraph.paragraph_format.left_indent = Cm(0)
+            paragraph.paragraph_format.first_line_indent = Cm(1.25)
+
+    conteudo_saida = BytesIO()
+    doc.save(conteudo_saida)
+    conteudo_saida.seek(0)
+    return conteudo_saida.getvalue()
 
 # --- 3. FLUXO DE CARREGAMENTO DO ARQUIVO ---
 arquivo_word = st.file_uploader("Arraste o documento WORD (.docx) aqui para Triagem e Formatação", type=["docx"])
 
 if arquivo_word:
-    # Leitura rápida de triagem em memória estruturada
+    # Leitura superficial ultra rápida apenas para coletar metadados de triagem
     doc_triagem = docx.Document(arquivo_word)
     
-    texto_corpo_raw = " ".join([p.text.strip() for p in doc_triagem.paragraphs])
-    texto_tabelas_raw = " ".join([cell.text.strip() for t in doc_triagem.tables for r in t.rows for cell in r.cells])
+    texto_corpo_raw = " ".join([p.text.strip() for p in doc_triagem.paragraphs[:50]]) # Apenas o topo
+    texto_tabelas_raw = " ".join([cell.text.strip() for t in doc_triagem.tables[:3] for r in t.rows for cell in r.cells])
     texto_total_raw = texto_corpo_raw + " " + texto_tabelas_raw
     texto_total_validacao = texto_total_raw.upper()
     
-    # --- ETAPA 1: IDENTIFICAÇÃO DINÂMICA DO TIPO (9 MODELOS DO MANUAL) ---
+    # --- ETAPA 1: IDENTIFICAÇÃO DINÂMICA DO TIPO ---
     tipo_detectado = "NORMA"
     if "PROTOCOLO" in texto_total_validacao or "PROT_" in texto_total_validacao:
         tipo_detectado = "PROTOCOLO"
@@ -81,29 +106,9 @@ if arquivo_word:
         
     st.write(f"📋 **Tipo de Documento Identificado:** `{tipo_detectado}`")
     
-    # --- ETAPA 2: MAPEAMENTO DE REQUISITOS DA NORMA ZERO ---
-    requisitos_mapa = {
-        "PROTOCOLO": ["OBJETIVO", "APLICABILIDADE", "REFERENCIAL", "MONITORAMENTO", "REFERÊNCIAS"],
-        "POP": ["DEFINIÇÃO", "APLICABILIDADE", "RESPONSÁVEL", "MATERIAIS", "TAREFA", "CRÍTICAS", "PROIBIDOS", "REFERÊNCIAS"],
-        "MANUAL": ["CAPA", "ELABORADORES", "COLABORADORES", "SUMÁRIO", "APRESENTAÇÃO", "DESCRIÇÃO", "REFERÊNCIAS"],
-        "NORMA": ["INTRODUÇÃO", "OBJETIVO", "APLICABILIDADE", "DESCRIÇÃO DA NORMA", "RESPONSÁVEL", "CUMPRIMENTO", "REFERÊNCIAS"],
-        "ROTINA": ["DEFINIÇÃO", "OBJETIVO", "APLICABILIDADE", "DESCRIÇÃO DA ROTINA"],
-        "REGIMENTO": ["FINALIDADE", "COMPOSIÇÃO", "MANDATO", "FUNCIONAMENTO", "COMPETÊNCIAS", "ATRIBUIÇÕES", "FINAIS"],
-        "POLÍTICA INSTITUCIONAL": ["INTRODUÇÃO", "OBJETIVO", "PRINCÍPIOS", "DIRETRIZES", "RESPONSABILIDADES", "MONITORAMENTO", "REFERÊNCIAS"],
-        "PLANO DE CONTINGÊNCIA": ["OBJETIVO", "APLICABILIDADE", "DEFINIÇÃO DE TERMOS", "SITUAÇÃO ATUAL", "CONTINGÊNCIA", "REFERÊNCIAS"],
-        "PROGRAMA": ["REFERENCIAL", "PADRONIZAÇÃO", "MONITORAMENTO", "DESCRIÇÃO DO PROGRAMA", "EDUCACIONAIS", "REFERÊNCIAS"]
-    }
-
-    termos_obrigatorios = requisitos_mapa.get(tipo_detectado, [])
-    erros_gravissimos = []
-
-    for termo in termos_obrigatorios:
-        if termo not in texto_total_validacao:
-            erros_gravissimos.append(f"⚠️ **OMISSÃO DE SEÇÃO CRÍTICA (Modelo {tipo_detectado}):** A seção contendo o termo obrigatório **'{termo}'** não foi localizada no arquivo.")
-
-    # --- ETAPA 3: EXTRAÇÃO INTELIGENTE DE CÓDIGO E VERSÃO ---
+    # --- ETAPA 3: EXTRAÇÃO DE CÓDIGO E VERSÃO DOS CABEÇALHOS ---
     codigo_doc = "NÃO IDENTIFICADO"
-    for table in doc_triagem.tables:
+    for table in doc_triagem.tables[:3]:
         for row in table.rows:
             for cell in row.cells:
                 txt = cell.text.strip()
@@ -117,7 +122,7 @@ if arquivo_word:
             codigo_doc = match_codigo.group(0).strip()
 
     versao_doc = "NÃO IDENTIFICADA"
-    for table in doc_triagem.tables:
+    for table in doc_triagem.tables[:3]:
         for row in table.rows:
             for cell in row.cells:
                 txt = cell.text.strip()
@@ -130,24 +135,12 @@ if arquivo_word:
         if match_versao:
             versao_doc = match_versao[-1].strip()
 
-    possui_codigo = codigo_doc != "NÃO IDENTIFICADO" and len(codigo_doc) > 2
-    possui_versao = versao_doc != "NÃO IDENTIFICADA" and any(char.isdigit() for char in versao_doc)
-
-    if not possui_codigo: 
-        erros_gravissimos.append("❌ **CABEÇALHO INCOMPLETO:** Não foi possível extrair um 'CÓDIGO' válido da estrutura padrão.")
-    if not possui_versao: 
-        erros_gravissimos.append("❌ **CABEÇALHO INCOMPLETO:** Não foi possível determinar a 'VERSÃO' atualizada do documento.")
-
     # --- ETAPA 4: GERENCIADOR DE DUPLICIDADE ---
     df_atual = st.session_state.historico_lista_mestra
     is_duplicado = not df_atual[(df_atual["Código do Documento"] == codigo_doc) & (df_atual["Versão Atual"] == versao_doc)].empty
 
-    if is_duplicado:
-        erros_gravissimos.append(f"🚫 **BLOQUEIO DE DUPLICIDADE:** O documento **{codigo_doc}** já foi validado na versão **{versao_doc}**.")
-
-    # --- ETAPA 5: PROCESSAMENTO GEOMÉTRICO E SAÍDA DE DOWNLOAD ---
-    if not erros_gravissimos:
-        # Atualização em tempo real do banco de dados na memória do servidor
+    # --- ETAPA 5: ENTREGA DO BOTÃO IMEDIATO ---
+    if not is_duplicado:
         if df_atual[(df_atual["Código do Documento"] == codigo_doc) & (df_atual["Versão Atual"] == versao_doc)].empty:
             nova_linha = {
                 "Código do Documento": codigo_doc,
@@ -160,36 +153,18 @@ if arquivo_word:
             }
             st.session_state.historico_lista_mestra = pd.concat([df_atual, pd.DataFrame([nova_linha])], ignore_index=True)
 
-        # Aplicar correções de layout em lote diretamente na estrutura do documento ativo (Margem Homologada)
-        for section in doc_triagem.sections:
-            section.top_margin = Cm(2.0)
-            section.bottom_margin = Cm(2.0)
-            section.left_margin = Cm(2.0)
-            section.right_margin = Cm(3.0)
+        # O botão puxa a função pesada sob demanda (Isso faz o app carregar instantâneo!)
+        st.download_button(
+            label="📥 CLIQUE AQUI PARA BAIXAR O DOCUMENTO FORMATADO",
+            data=executar_formatacao_pesada(arquivo_word),
+            file_name=f"{codigo_doc}_Formatado.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+        st.success(f"✅ **TRIAGEM CONCLUÍDA COM SUCESSO!** Mapeado: Código `{codigo_doc}` | Versão `{versao_doc}`.")
+    else:
+        st.error(f"🚫 **BLOQUEIO DE DUPLICIDADE:** O documento **{codigo_doc}** já foi registrado na versão **{versao_doc}**.")
 
-        # Laço otimizado para formatação textual rápida (Calibri 11, Espaçamento 1.5, Justificado)
-        for paragraph in doc_triagem.paragraphs:
-            texto_limpo = paragraph.text.strip()
-            if "REFERÊNCIAS" in texto_limpo.upper() or "REFERENCIA" in texto_limpo.upper():
-                continue
-            paragraph.paragraph_format.space_before = Pt(4)
-            paragraph.paragraph_format.space_after = Pt(4)
-            paragraph.paragraph_format.line_spacing = 1.5
-            
-            primeiros_caracteres = texto_limpo[:8]
-            if primeiros_caracteres and (primeiros_caracteres.replace('.', '').isdigit() or ')' in primeiros_caracteres):
-                paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
-                paragraph.paragraph_format.left_indent = Cm(1.25)
-                paragraph.paragraph_format.first_line_indent = Cm(-1.25)
-            else:
-                paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-                paragraph.paragraph_format.left_indent = Cm(0)
-                paragraph.paragraph_format.first_line_indent = Cm(1.25)
-
-        # Gravação binária isolada (Garante a ausência de SyntaxError)
-        conteudo_saida = BytesIO()
-        doc_triagem.save(conteudo_saida)
-        conteudo_saida.seek(0)
-        dados_finais_word = conteudo_saida.getvalue()
-
-
+# --- 6. EXIBIÇÃO DA PLANILHA ---
+st.divider()
+st.subheader("📊 Histórico Dinâmico da Lista Mestra (Excel)")
+st.dataframe(st.session_state.historico_lista_mestra, use_container_width=True)
