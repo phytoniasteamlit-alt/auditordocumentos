@@ -99,7 +99,7 @@ def gerar_ficha_naqh(tipo, codigo, versao, encontradas, faltantes, aprovado):
 # --- 3. FLUXO DE COMPILAÇÃO E TRIAGEM DE METADADOS ---
 arquivo_word = st.file_uploader("Arraste o documento WORD (.docx) aqui para Triagem e Formatação", type=["docx"])
 
-if arquivo_word:
+if arquivo_word is not None:
     dados_brutos = arquivo_word.read()
     
     # Instancia o documento para varredura estrutural
@@ -186,18 +186,12 @@ if arquivo_word:
     st.markdown("---")
     if documento_aprovado:
         st.success("🎉 **DOCUMENTO APROVADO COM SUCESSO!** Tudo pronto para download.")
+        st.balloons()
     else:
         st.warning("⚠️ **DOCUMENTO FORMATADO COM PENDÊNCIAS!** Verifique os itens apontados na triagem.")
 
-    # Exibição paralela dos botões de download homologados
-    d1, d2 = st.columns(2)
-    with d1:
-        st.download_button(
-            label="📥 DOWNLOAD DO DOCUMENTO FORMATADO (.DOCX)",
-            data=dados_finais,
-            file_name=f"{codigo_doc}_Formatado_Homologado.docx",
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        )
-    with d2:
-        st.download_button(
-            label="📥 DOWNLOAD DA FICHA DE VERIFICAÇÃO NAQH (.TXT)",
+    st.markdown("### 📥 ÁREA DE DOWNLOADS DO PROCESSO")
+    
+    # Botões de download em formato sequencial puro para evitar erros de parênteses abertos
+    st.download_button(label="📥 DOWNLOAD DO DOCUMENTO FORMATADO (.DOCX)", data=dados_finais, file_name=f"{codigo_doc}_Formatado.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+    
