@@ -24,7 +24,7 @@ SECOES_POR_TIPO = {
     "MANUAL": ["CAPA", "ELABORADORES", "COLABORADORES", "SUMÁRIO", "APRESENTAÇÃO", "DESCRIÇÃO", "REFERÊNCIAS", "APÊNDICES", "ANEXOS"],
     "NORMA": ["INTRODUÇÃO", "OBJETIVO", "APLICABILIDADE", "DESCRIÇÃO DA NORMA", "RESPONSÁVEL", "EFEITOS DO NÃO CUMPRIMENTO DA NORMA", "REFERÊNCIAS", "APÊNDICES", "ANEXOS"],
     "PLANO DE CONTINGENCIA": ["OBJETIVO", "APLICABILIDADE", "DEFINIÇÃO DE TERMOS", "IDENTIFICAÇÃO DA SITUAÇÃO ATUAL", "MEDIDAS DE CONTINGÊNCIA", "REFERÊNCIAS", "APÊNDICES", "ANEXOS"],
-    "POLITICA INSTITUCIONAL": ["INTRODUÇÃO", "OBJETIVO", "PRINCÍPIOS", "DIRETRIZES", "RESPONSABILIDADES", "ESTRATÉGIA DE MONITORAMENTO", "REFERÊNCIAS", "APÊNDICES", "ANEXOS"],
+    "POLITICA INSTITUCIONAL": ["INTRODUÇÃO", "OBJETIVO", "PRINCÍPIOS", "DIRETRIZES", "RESPONSABILIDADES", "ESTRATÉGIAS DE MONITORAMENTO", "REFERÊNCIAS", "APÊNDICES", "ANEXOS"],
     "POP": ["DEFINIÇÃO", "APLICABILIDADE", "RESPONSÁVEL PELA EXECUÇÃO", "MATERIAIS UTILIZADOS NA REALIZAÇÃO DA TAREFA", "DESCRIÇÃO DA TAREFA/ATIVIDADE", "ATIVIDADES CRÍTICAS", "PONTOS PROIBIDOS NA EXECUÇÃO DA TAREFA", "REFERÊNCIAS", "APÊNDICES", "ANEXOS"],
     "PROGRAMA": ["REFERENCIAL TEÓRICO", "PADRONIZAÇÃO DE ROTINAS TÉCNICO-OPERACIONAIS", "ESTRATÉGIAS DE MONITORAMENTO", "DESCRIÇÃO DO PROGRAMA", "MEDIDAS EDUCACIONAIS", "REFERÊNCIAS", "APÊNDICES", "ANEXOS"],
     "PROTOCOLO": ["OBJETIVO", "APLICABILIDADE", "REFERENCIAL TEÓRICO", "DESCRIÇÃO DO PROTOCOLO", "ESTRATÉGIAS DE MONITORAMENTO", "REFERÊNCIAS", "APÊNDICES", "ANEXOS"],
@@ -154,27 +154,26 @@ if arquivo_word is not None:
         if match_ver_c:
             versao_doc = match_ver_c.group(1).strip()
 
-    # 🧠 TRIAGEM AVANÇADA INSTITUCIONAL DE TODOS OS 9 TIPOS DE DOCUMENTOS
+    # 🧠 TRIAGEM ULTRA ISOLADA (Foca apenas no início do arquivo para evitar conflito com histórico)
+    texto_inicio_documento = texto_limpo_busca[:1000]
+    
     tipo_detectado = "PROTOCOLO"
-    if "PLANO DE CONTINGENCIA" in texto_limpo_busca or "PLANC" in texto_limpo_busca[:600]:
-        tipo_detectado = "PLANO DE CONTINGENCIA"
-    elif "POLITICA INSTITUCIONAL" in texto_limpo_busca or "POL" in texto_limpo_busca[:600]:
-        tipo_detectado = "POLITICA INSTITUCIONAL"
-    elif "PROCEDIMENTO OPERACIONAL" in texto_limpo_busca or "POP" in texto_limpo_busca[:600]:
-        tipo_detectado = "POP"
-    elif "PROGRAMA" in texto_limpo_busca or "PROG" in texto_limpo_busca[:600]:
-        tipo_detectado = "PROGRAMA"
-    elif "REGIMENTO" in texto_limpo_busca or "REG" in texto_limpo_busca[:600]:
-        tipo_detectado = "REGIMENTO"
-    elif "ROTINA" in texto_limpo_busca or "ROT" in texto_limpo_busca[:600]:
-        tipo_detectado = "ROTINA"
-    elif "MANUAL" in texto_limpo_busca or "MAN" in texto_limpo_busca[:600]:
-        tipo_detectado = "MANUAL"
-    elif "NORMA" in texto_limpo_busca[:600] or "NOR_" in texto_limpo_busca[:600]:
-        tipo_detectado = "NORMA"
-    elif "PROTOCOLO" in texto_limpo_busca or "PROT" in texto_limpo_busca[:600]:
+    if "PROTOCOLO" in texto_inicio_documento or "PROT_" in texto_inicio_documento or "PROT " in texto_inicio_documento:
         tipo_detectado = "PROTOCOLO"
+    elif "PROCEDIMENTO OPERACIONAL" in texto_inicio_documento or "POP_" in texto_inicio_documento or "POP " in texto_inicio_documento:
+        tipo_detectado = "POP"
+    elif "PLANO DE CONTINGENCIA" in texto_inicio_documento or "PLANC_" in texto_inicio_documento:
+        tipo_detectado = "PLANO DE CONTINGENCIA"
+    elif "POLITICA INSTITUCIONAL" in texto_inicio_documento or "POL_" in texto_inicio_documento:
+        tipo_detectado = "POLITICA INSTITUCIONAL"
+    elif "PROGRAMA" in texto_inicio_documento or "PROG_" in texto_inicio_documento:
+        tipo_detectado = "PROGRAMA"
+    elif "REGIMENTO" in texto_inicio_documento or "REG_" in texto_inicio_documento:
+        tipo_detectado = "REGIMENTO"
+    elif "ROTINA" in texto_inicio_documento or "ROT_" in texto_inicio_documento:
+        tipo_detectado = "ROTINA"
+    elif "MANUAL" in texto_inicio_documento or "MAN_" in texto_inicio_documento:
+        tipo_detectado = "MANUAL"
+    elif "NORMA" in texto_inicio_documento or "NOR_" in texto_inicio_documento:
+        tipo_detectado = "NORMA"
         
-    st.markdown("---")
-    st.subheader("📋 **Triagem e Auditoria de Estrutura**")
-    st.write(f"🔹 **Tipo de Documento Identificado:** `{tipo_detectado}`")
