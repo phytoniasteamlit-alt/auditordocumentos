@@ -4,18 +4,18 @@ import re
 import unicodedata
 from io import BytesIO
 
-st.set_page_config(page_title="VERIFICAÇÃO — NORMA ZERO OFICIAL", page_icon="📏", layout="wide")
-
-st.title("📏 VERIFICAÇÃO CONFORME NORMA ZERO — VALORES OFICIAIS")
-st.markdown("### ✅ Margens: Esq 3,0 / Dir 2,0 / Sup 3,0 / Inf 2,0 cm • Corpo Calibri 11 • Tabelas Calibri 10")
+# ============================================================
+# 🎯 CONFIGURAÇÕES DA PÁGINA
+# ============================================================
+st.set_page_config(page_title="AUDITOR NAQH NMZ", page_icon="👨‍💻", layout="wide")
 
 # ============================================================
 # 📏 VALORES EXATOS — ABNT NBR 14724 / NORMA ZERO
 # ============================================================
 MARGEM_SUP_ESPERADA = 3.0   # cm
 MARGEM_INF_ESPERADA = 2.0   # cm
-MARGEM_ESQ_ESPERADA = 3.0   # cm ✅ CORRIGIDO
-MARGEM_DIR_ESPERADA = 2.0   # cm ✅ CORRIGIDO
+MARGEM_ESQ_ESPERADA = 3.0   # cm ✅
+MARGEM_DIR_ESPERADA = 2.0   # cm ✅
 
 FONTE_CORPO = "Calibri"
 TAMANHO_CORPO = 11
@@ -223,24 +223,27 @@ def gerar_ficha(tipo, codigo, versao, m, f, tb, enc, falt, aprov):
     return "\n".join(ficha).encode("utf-8")
 
 # ============================================================
-# 🧠 ESCANEAR DOCUMENTO COMPLETO
+# 🧠 ESCANEAR DOCUMENTO — ERRO CORRIGIDO!
 # ============================================================
 def escanear(doc_bytes):
     doc = docx.Document(BytesIO(doc_bytes))
     texto_completo = ""
     codigo = versao = validade = None
     
-    # Ler tabelas (cabeçalho)
+    # Ler tabelas (cabeçalho) — ✅ CORRIGIDO o erro 'NoneType' object has no attribute 'strip'
     for tb in doc.tables:
         for ln in tb.rows:
             lt = " ".join([c.text for c in ln.cells])
             texto_completo += lt + " "
             cod = re.search(r'CÓDIGO|Código[:\s]*[:]?\s*([A-Z]{2,5}[_\s]?[A-Z0-9]+)', lt, re.IGNORECASE)
-            if cod and not codigo: codigo = re.sub(r'\s+','_', cod.group(1).strip())
+            if cod and cod.group(1) and not codigo: 
+                codigo = re.sub(r'\s+','_', cod.group(1).strip())
             ver = re.search(r'VERSÃO|Versão[:\s]*[:]?\s*(\d+)', lt, re.IGNORECASE)
-            if ver and not versao: versao = ver.group(1).strip()
+            if ver and ver.group(1) and not versao: 
+                versao = ver.group(1).strip()
             val = re.search(r'VALIDADE|Validade[:\s]*[:]?\s*([\d/]+)', lt, re.IGNORECASE)
-            if val and not validade: validade = val.group(1).strip()
+            if val and val.group(1) and not validade: 
+                validade = val.group(1).strip()
     
     # Ler corpo do texto
     for p in doc.paragraphs: texto_completo += p.text + " "
@@ -272,8 +275,46 @@ def escanear(doc_bytes):
     }
 
 # ============================================================
-# 🚀 INTERFACE PRINCIPAL
+# 🚀 INTERFACE PRINCIPAL — SEU NOME, TÍTULO E BONEQUINHO
 # ============================================================
+
+# Cabeçalho com título, nome e bonequinho no canto direito
+st.markdown("""
+    <style>
+    .header-container {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background-color: #0F172A;
+        padding: 15px 25px;
+        border-radius: 12px;
+        margin-bottom: 20px;
+    }
+    .header-text h1 {
+        color: #FFFFFF;
+        margin: 0;
+        font-size: 28px;
+        font-weight: bold;
+    }
+    .header-text p {
+        color: #94A3B8;
+        margin: 5px 0 0 0;
+        font-size: 15px;
+    }
+    .header-emoji {
+        font-size: 50px;
+    }
+    </style>
+    <div class="header-container">
+        <div class="header-text">
+            <h1>AUDITOR NAQH NMZ DE ALTA PRECISÃO</h1>
+            <p>Ezequias Santos — Agente Administrativo | Margens: Esq 3,0 / Dir 2,0 / Sup 3,0 / Inf 2,0 cm • Corpo Calibri 11 • Tabelas Calibri 10</p>
+        </div>
+        <div class="header-emoji">👨‍💻</div>
+    </div>
+""", unsafe_allow_html=True)
+
+# Upload do arquivo
 arquivo = st.file_uploader("📂 Envie o documento (.docx)", type=["docx"])
 
 if arquivo:
