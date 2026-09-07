@@ -16,9 +16,11 @@ def limpar_texto(texto):
     """Remove acentos, converte para maiúsculo, remove espaços extras"""
     if not texto:
         return ""
-    # Remove acentos
+    # Normaliza e remove acentos mantendo letras e números limpos
     sem_acento = unicodedata.normalize('NFKD', texto).encode('ASCII', 'ignore').decode('ASCII')
-    # Maiúsculo e espaços únicos
+    # Substitui quebras de linha por espaços para evitar palavras coladas
+    sem_acento = sem_acento.replace('\n', ' ').replace('\r', ' ')
+    # Força maiúsculo e limpa espaços múltiplos
     return re.sub(r'\s+', ' ', sem_acento.upper().strip())
 
 # ============================================================
@@ -102,56 +104,63 @@ SECOES_POR_TIPO = {
 }
 
 # ============================================================
-# 🧠 FUNÇÃO DE AUDITORIA — SEM ACENTO!
+# 🧠 FUNÇÃO DE AUDITORIA — CORRIGIDA!
 # ============================================================
 def auditar_documento(arquivo_bytes):
     doc = docx.Document(BytesIO(arquivo_bytes))
     
-    # ✅ LÊ TUDO e LIMPA (sem acento, tudo maiúsculo, espaços normais)
-    texto_bruto = ""
+    # Extrai o texto preservando espaços entre parágrafos e células de tabela
+    elementos_texto = []
     for p in doc.paragraphs:
-        texto_bruto += p.text + "\n"
+        if p.text.strip():
+            elementos_texto.append(p.text)
+            
     for tabela in doc.tables:
         for linha in tabela.rows:
             for celula in linha.cells:
-                texto_bruto += celula.text + " "
+                if celula.text.strip():
+                    elementos_texto.append(celula.text)
     
-    # ✅ LIMPA TUDO: sem acento, tudo maiúsculo, espaços únicos
+    # Junta tudo com um espaço duplo seguro para evitar colisão de dados da tabela
+    texto_bruto = "  ".join(elementos_texto)
     texto = limpar_texto(texto_bruto)
     
-    # 🔍 IDENTIFICAR TIPO
+    # 🔍 IDENTIFICAR TIPO DO DOCUMENTO
     tipo_detectado = "PROT"
     for tipo in SECOES_POR_TIPO.keys():
-        if re.search(rf'\b{tipo}[_ /]', texto) or re.search(rf'\b{tipo}\b', texto):
+        if re.search(rf'\b{tipo}\b', texto):
             tipo_detectado = tipo
             break
     
-    # 🔍 CÓDIGO — SEM ACENTO! Busca "CODIGO:" ou "Código:" → ACHA OS DOIS!
+    # 🔍 CÓDIGO — Busca flexível e abrangente (aceita letras, números, underlines e traços)
     codigo_detectado = None
-    match_codigo = re.search(r'CODIGO[:\s]+([A-Z]{3,4}_[A-Z0-9]+)', texto)
-    if match_codigo and match_codigo.group(1):
+    match_codigo = re.search(r'CODIGO[\s:]+([A-Z0-9_|-]+)', texto)
+    if match_codigo:
         codigo_detectado = match_codigo.group(1).strip()
     
-    # 🔍 VERSÃO — SEM ACENTO! Busca "VERSAO:" ou "Versão:" → ACHA OS DOIS!
+    # 🔍 VERSÃO — Captura o dígito puro numérico isolado
     versao_detectada = None
-    match_versao = re.search(r'VERSAO[:\s]*(?:VERSAO|[Vv])?\s*(\d+)', texto)
-    if match_versao and match_versao.group(1):
+    match_versao = re.search(r'VERSAO[\s:]+(\d+)', texto)
+    if match_versao:
         versao_detectada = match_versao.group(1).strip()
     
     # 🔍 VALIDADE
     validade_detectada = None
-    match_validade = re.search(r'VALIDADE[:\s]*([\d/]+)', texto)
-    if match_validade and match_validade.group(1):
+    match_validade = re.search(r'VALIDADE[\s:]*([\d/X]+)', texto)
+    if match_validade:
         validade_detectada = match_validade.group(1).strip()
     
-    # 🔍 SEÇÕES — COMPARA SEM ACENTO!
+    # 🔍 SEÇÕES — COMPARA SEM ACENTO E SEM PREFIXO NUMÉRICO
     secoes_esperadas = SECOES_POR_TIPO[tipo_detectado]
     secoes_encontradas = []
     secoes_faltantes = []
     
     for secao in secoes_esperadas:
-        secao_limpa = limpar_texto(secao)
-        # Busca se o texto COMEÇA com o nome da seção → encontra mesmo com resto!
+        # Remove a numeração inicial do título (ex: "1. OBJETIVO" vira "OBJETIVO")
+        secao_sem_numero = re.sub(r'^\d+\.\s*', '', secao)
+        secao_limpa = limpar_texto(secao_sem_numero)
+        
+        # Procura o nome do título isolado como uma palavra inteira
         if re.search(rf'\b{re.escape(secao_limpa)}\b', texto):
             secoes_encontradas.append(secao)
         else:
@@ -172,7 +181,7 @@ def auditar_documento(arquivo_bytes):
     }
 
 # ============================================================
-# 🚀 INTERFACE
+# 🚀 INTERFACE STREAMLIT
 # ============================================================
 with st.form("auditoria_sem_acento_final"):
     arquivo_word = st.file_uploader(
@@ -226,4 +235,4 @@ if enviado and arquivo_word:
                 st.error("## ❌ REPROVADO — Verifique os itens acima")
         
         except Exception as e:
-            st.error(f"## ❌ ERRO: {str(e)}")
+            st.error(f"## ❌ ERRO INESPERADO: {str(e)}")
