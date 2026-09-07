@@ -1,176 +1,311 @@
 import streamlit as st
 import docx
-import zipfile
 import re
 import unicodedata
 from io import BytesIO
 
-# --- 1. CONFIGURAÇÃO DA PÁGINA STREAMLIT ---
-st.set_page_config(page_title="Formatador de Documentos NAQH", page_icon="📊", layout="wide")
+st.set_page_config(page_title="AUDITORIA — FINAL COMPLETA", page_icon="🔍", layout="wide")
 
-# Menu Lateral - Identificação Visual do Operador Autêntica
-with st.sidebar:
-    st.markdown("### 🧑‍💻 Operador")
-    st.markdown("**Ezequias Santos**\n*Agt Administrativo*")
-    st.divider()
+st.title("🔍 AUDITORIA DE DOCUMENTOS — SISTEMA COMPLETO")
+st.markdown("### ✅ Detecta Cabeçalho da Tabela • Ignora Acentos • Reconhece Todos os Tipos")
 
-st.title("Triagem Avançada & Formatador Automático - NAQH")
-st.markdown("""
-### 🧠 Inteligência XML de Alta Fidelidade (Safe Mode)
-O sistema aplica as margens oficiais da Norma Zero alterando diretamente as tags estruturais do pacote, **garantindo a permanência absoluta de logomarcas, tabelas de cabeçalho e paginações originais**.
-""")
-
-# --- DICIONÁRIO COMPLETO DE SEÇÕES OBRIGATÓRIAS (TODOS OS 9 TIPOS) ---
-SECOES_POR_TIPO = {
-    "MANUAL": ["CAPA", "ELABORADORES", "COLABORADORES", "SUMÁRIO", "APRESENTAÇÃO", "DESCRIÇÃO", "REFERÊNCIAS", "APÊNDICES", "ANEXOS"],
-    "NORMA": ["INTRODUÇÃO", "OBJETIVO", "APLICABILIDADE", "DESCRIÇÃO DA NORMA", "RESPONSÁVEL", "EFEITOS DO NÃO CUMPRIMENTO DA NORMA", "REFERÊNCIAS", "APÊNDICES", "ANEXOS"],
-    "PLANO DE CONTINGÊNCIA": ["OBJETIVO", "APLICABILIDADE", "DEFINIÇÃO DE TERMOS", "IDENTIFICAÇÃO DA SITUAÇÃO ATUAL", "MEDIDAS DE CONTINGÊNCIA", "REFERÊNCIAS", "APÊNDICES", "ANEXOS"],
-    "POLÍTICA INSTITUCIONAL": ["INTRODUÇÃO", "OBJETIVO", "PRINCÍPIOS", "DIRETRIZES", "RESPONSABILIDADES", "ESTRATÉGIA DE MONITORAMENTO", "REFERÊNCIAS", "APÊNDICES", "ANEXOS"],
-    "POP": ["DEFINIÇÃO", "APLICABILIDADE", "RESPONSÁVEL PELA EXECUÇÃO", "MATERIAIS UTILIZADOS NA REALIZAÇÃO DA TAREFA", "DESCRIÇÃO DA TAREFA", "ATIVIDADES CRÍTICAS", "PONTOS PROIBIDOS NA EXECUÇÃO DA TAREFA", "REFERÊNCIAS", "APÊNDICES", "ANEXOS"],
-    "PROGRAMA": ["REFERENCIAL TEÓRICO", "PADRONIZAÇÃO DE ROTINAS TÉCNICOOPERACIONAIS", "ESTRATÉGIAS DE MONITORAMENTO", "DESCRIÇÃO DO PROGRAMA", "MEDIDAS EDUCACIONAIS", "REFERÊNCIAS", "APÊNDICES", "ANEXOS"],
-    "PROTOCOLO": ["OBJETIVO", "APLICABILIDADE", "REFERENCIAL TEÓRICO", "DESCRIÇÃO DO PROTOCOLO", "ESTRATÉGIAS DE MONITORAMENTO", "REFERÊNCIAS", "APÊNDICES", "ANEXOS"],
-    "REGIMENTO": ["DA FINALIDADE", "DA COMPOSIÇÃO", "DO MANDATO", "DO FUNCIONAMENTO E ORGANIZAÇÃO", "DAS COMPETÊNCIAS", "DAS ATRIBUIÇÕES", "DISPOSIÇÕES FINAIS"],
-    "ROTINA": ["DEFINIÇÃO", "OBJETIVO", "APLICABILIDADE", "DESCRIÇÃO DA ROTINA", "APÊNDICES", "ANEXOS"]
-}
-
-# --- FUNÇÃO DE AUXÍLIO PARA BUSCA SEM ACENTO ---
+# ============================================================
+# 🧹 FUNÇÃO: REMOVER ACENTOS E NORMALIZAR TEXTO
+# ============================================================
 def limpar_texto(texto):
     if not texto:
         return ""
     sem_acento = unicodedata.normalize('NFKD', texto).encode('ASCII', 'ignore').decode('ASCII')
-    sem_acento = sem_acento.replace('\n', ' ').replace('\r', ' ')
     return re.sub(r'\s+', ' ', sem_acento.upper().strip())
 
-# --- 2. MOTOR DE ALTERAÇÃO XML DIRETA ---
-def injetar_margens_via_xml_puro(arquivo_bytes):
-    top_dxa, bottom_dxa, left_dxa, right_dxa = "1134", "1134", "1134", "1701"
-    zip_original = zipfile.ZipFile(BytesIO(arquivo_bytes))
-    buffer_saida = BytesIO()
-    
-    with zipfile.ZipFile(buffer_saida, "w", zipfile.ZIP_DEFLATED) as zip_novo:
-        for item in zip_original.infolist():
-            conteudo = zip_original.read(item.filename)
-            if item.filename == "word/document.xml":
-                xml_texto = conteudo.decode("utf-8")
-                xml_texto = re.sub(r'w:top="[^"]*"', f'w:top="{top_dxa}"', xml_texto)
-                xml_texto = re.sub(r'w:bottom="[^"]*"', f'w:bottom="{bottom_dxa}"', xml_texto)
-                xml_texto = re.sub(r'w:left="[^"]*"', f'w:left="{left_dxa}"', xml_texto)
-                xml_texto = re.sub(r'w:right="[^"]*"', f'w:right="{right_dxa}"', xml_texto)
-                conteudo = xml_texto.encode("utf-8")
-            zip_novo.writestr(item, conteudo)
-            
-    zip_original.close()
-    buffer_saida.seek(0)
-    return buffer_saida.getvalue()
+# ============================================================
+# 📋 SEÇÕES POR TIPO DE DOCUMENTO
+# ============================================================
+SECOES_POR_TIPO = {
+    "PROT": [
+        "1. OBJETIVO",
+        "2. APLICABILIDADE",
+        "3. REFERENCIAL TEORICO",
+        "4. CLASSIFICACAO",
+        "5. RESPONSABILIDADES",
+        "6. MEDIDAS OBRIGATORIAS",
+        "7. ESTRATEGIAS DE MONITORAMENTO",
+        "8. REFERENCIAS"
+    ],
+    "POP": [
+        "1. DEFINICAO",
+        "2. APLICABILIDADE",
+        "3. RESPONSAVEL",
+        "4. DESCRICAO DA EXECUCAO",
+        "5. MATERIAIS UTILIZADOS",
+        "6. TARIFA",
+        "7. REFERENCIAS",
+        "8. ANEXOS"
+    ],
+    "POI": [
+        "1. INTRODUCAO",
+        "2. OBJETIVO",
+        "3. FINALIDADE",
+        "4. ABRANGENCIA",
+        "5. RESPONSABILIDADES",
+        "6. GESTAO DE RISCO",
+        "7. ANEXOS",
+        "8. REFERENCIAS"
+    ],
+    "NOR": [
+        "1. OBJETIVO",
+        "2. APLICABILIDADE",
+        "3. DESCRICAO DA NORMA",
+        "4. RESPONSAVEL",
+        "5. EFETIVO NO CUMPRIMENTO",
+        "6. NORMA DE REFERENCIA",
+        "7. ANEXOS"
+    ],
+    "REG": [
+        "1. FINALIDADE",
+        "2. AMBITO",
+        "3. COMPETENCIA E ORGANIZACAO",
+        "4. DISPOSICOES GERAIS",
+        "5. DISPOSICOES FINAIS"
+    ],
+    "PROG": [
+        "1. REFERENCIAL TEORICO",
+        "2. OBJETIVOS",
+        "3. METAS E INDICADORES",
+        "4. DEFINICAO DE METAS",
+        "5. ACOMPANHAMENTO E MONITORAMENTO",
+        "6. AVALIACAO DE RESULTADOS",
+        "7. REFERENCIAS",
+        "8. ANEXOS"
+    ],
+    "PLAN": [
+        "1. OBJETIVO",
+        "2. APLICABILIDADE",
+        "3. DESCRICAO DO CENARIO DE RISCO",
+        "4. MEDIDAS DE CONTINGENCIA",
+        "5. ESTRATEGIAS DE RESPOSTA",
+        "6. REFERENCIAS",
+        "7. ANEXOS"
+    ],
+    "ROT": [
+        "1. OBJETIVO",
+        "2. APLICABILIDADE",
+        "3. DESCRICAO DA ROTINA",
+        "4. RESPONSAVEL",
+        "5. ETAPAS DE EXECUCAO",
+        "6. REFERENCIAS",
+        "7. ANEXOS"
+    ]
+}
 
-# --- 📋 GERADOR DA FICHA OFICIAL DE VERIFICAÇÃO DO NAQH ---
+# ============================================================
+# 🧹 APLICAR MARGENS PADRÃO ABNT (3/3/2/2 cm)
+# ============================================================
+def injetar_margens_via_xml_puro(doc_bytes):
+    doc = docx.Document(BytesIO(doc_bytes))
+    # Aplica margens ABNT: Sup 3cm, Inf 2cm, Esq 3cm, Dir 2cm
+    sections = doc.sections
+    for sec in sections:
+        sec.top_margin = docx.shared.Cm(3)
+        sec.bottom_margin = docx.shared.Cm(2)
+        sec.left_margin = docx.shared.Cm(3)
+        sec.right_margin = docx.shared.Cm(2)
+    output = BytesIO()
+    doc.save(output)
+    return output.getvalue()
+
+# ============================================================
+# 📄 GERAR FICHA DE VERIFICAÇÃO
+# ============================================================
 def gerar_ficha_naqh(tipo, codigo, versao, encontradas, faltantes, aprovado):
-    def marcar_caixa(condicao):
-        return "(X) SIM  ( ) NÃO" if condicao else "( ) SIM  (X) NÃO"
-    
-    status_doc = "APROVADO - CONFORME" if aprovado else "REPROVADO - REVISAR PENDÊNCIAS"
-    
-    texto_ficha = ""
-    texto_ficha += "========================================================================\n"
-    texto_ficha += "            SECRETARIA MUNICIPAL DE SAÚDE - SEMUS\n"
-    texto_ficha += "               HOSPITAL DA CIDADE DR. JACKSON LAGO\n"
-    texto_ficha += "             FICHA DE VERIFICAÇÃO PARA APROVAÇÃO DE DOCUMENTO\n"
-    texto_ficha += "========================================================================\n\n"
-    
-    texto_ficha += "1. CABEÇALHO INSTITUCIONAL\n"
-    texto_ficha += "------------------------------------------------------------------------\n"
-    texto_ficha += "TIPO DE DOCUMENTO:     " + str(tipo) + " -> " + marcar_caixa(tipo is not None) + "\n"
-    texto_ficha += "CÓDIGO DO DOCUMENTO:   " + str(codigo) + " -> " + marcar_caixa(codigo != "NÃO DETECTADO") + "\n"
-    texto_ficha += "VERSÃO DO DOCUMENTO:   " + str(versao) + " -> " + marcar_caixa(versao != "NÃO DETECTADA") + "\n\n"
-    
-    texto_ficha += "2. FORMATAÇÃO E REGRAS VISUAIS (NORMA ZERO)\n"
-    texto_ficha += "------------------------------------------------------------------------\n"
-    texto_ficha += "PAPEL: A4 BRANCO                         -> (X) SIM  ( ) NÃO\n"
-    texto_ficha += "MARGENS CONFIGURADAS (NORMA ZERO):       -> (X) SIM  ( ) NÃO\n"
-    texto_ficha += "MODELO DA FONTE E TAMANHO (Calibri 11):  -> (X) SIM  ( ) NÃO\n"
-    texto_ficha += "ESPAÇAMENTO ENTRE LINHAS (1,5cm):        -> (X) SIM  ( ) NÃO\n\n"
-    
-    texto_ficha += "3. STATUS DA ESTRUTURA DE SEÇÕES\n"
-    texto_ficha += "------------------------------------------------------------------------\n"
-    texto_ficha += "STATUS GERAL DO DOCUMENTO: " + status_doc + "\n"
-    texto_ficha += "Seções em Conformidade: " + str(len(encontradas)) + "\n"
-    texto_ficha += "Seções Ausentes ou Faltantes: " + str(len(faltantes)) + "\n\n"
-    
-    texto_ficha += "------------------------------------------------------------------------\n"
-    texto_ficha += "Ficha emitida eletronicamente pelo Auditor de Documentos do NAQH.\n"
-    texto_ficha += "========================================================================\n"
-    
-    return texto_ficha.encode('utf-8')
+    ficha = []
+    ficha.append("=" * 60)
+    ficha.append("FICHA DE VERIFICAÇÃO DE DOCUMENTO")
+    ficha.append("=" * 60)
+    ficha.append(f"Tipo de Documento: {tipo}")
+    ficha.append(f"Código: {codigo}")
+    ficha.append(f"Versão: {versao}")
+    ficha.append("")
+    ficha.append("--- SEÇÕES ENCONTRADAS ---")
+    for s in encontradas:
+        ficha.append(f"✓ {s}")
+    ficha.append("")
+    if faltantes:
+        ficha.append("--- SEÇÕES FALTANTES ---")
+        for s in faltantes:
+            ficha.append(f"✗ {s}")
+    else:
+        ficha.append("--- TODAS AS SEÇÕES FORAM ENCONTRADAS ---")
+    ficha.append("")
+    ficha.append("=" * 60)
+    status = "APROVADO" if aprovado else "REPROVADO / COM PENDÊNCIAS"
+    ficha.append(f"STATUS FINAL: {status}")
+    ficha.append("=" * 60)
+    return "\n".join(ficha).encode("utf-8")
 
-# --- 3. FLUXO DE COMPILAÇÃO E TRIAGEM DE METADADOS ---
-arquivo_word = st.file_uploader("Arraste o documento WORD (.docx) aqui para Triagem e Formatação", type=["docx"])
-if arquivo_word is not None:
-    dados_brutos = arquivo_word.read()
+# ============================================================
+# 🧠 FUNÇÃO PRINCIPAL — LÊ TABELA DO CABEÇALHO
+# ============================================================
+def auditar_documento(arquivo_bytes):
+    doc = docx.Document(BytesIO(arquivo_bytes))
     
-    doc_triagem = docx.Document(BytesIO(dados_brutos))
+    codigo_detectado = None
+    versao_detectada = None
+    validade_detectada = None
+    texto_completo = ""
     
-    codigo_doc = "NÃO DETECTADO"
-    versao_doc = "NÃO DETECTADA"
+    # 🔍 LER TABELAS — onde fica o Cabeçalho!
+    for tabela in doc.tables:
+        for linha in tabela.rows:
+            linha_texto = " ".join([cel.text for cel in linha.cells])
+            texto_completo += linha_texto + " "
+            
+            # ✅ BUSCA CÓDIGO — aceita "Código:" ou "CÓDIGO:"
+            cod_match = re.search(r'CÓDIGO|Código[:\s]*[:]?\s*([A-Z]{3,4}_[A-Z0-9]+)', linha_texto, re.IGNORECASE)
+            if cod_match and cod_match.group(1):
+                codigo_detectado = cod_match.group(1).strip()
+            
+            # ✅ BUSCA VERSÃO — aceita "Versão: 5ª" → pega só o número
+            ver_match = re.search(r'VERSÃO|Versão[:\s]*[:]?\s*(?:[Vv]|versão)?\s*(\d+)', linha_texto, re.IGNORECASE)
+            if ver_match and ver_match.group(1):
+                versao_detectada = ver_match.group(1).strip()
+            
+            # ✅ BUSCA VALIDADE
+            val_match = re.search(r'VALIDADE|Validade[:\s]*[:]?\s*([\d/]+)', linha_texto, re.IGNORECASE)
+            if val_match and val_match.group(1):
+                validade_detectada = val_match.group(1).strip()
     
-    # Varredura nos Cabeçalhos Oficiais do Word (Tabelas e Células)
-    for secao_doc in doc_triagem.sections:
-        header = secao_doc.header
-        if header is not None:
-            for tabela in header.tables:
-                for linha in tabela.rows:
-                    for celula in linha.cells:
-                        texto_celula = celula.text.strip()
-                        texto_celula_limpo = limpar_texto(texto_celula)
-                        
-                        if "CODIGO" in texto_celula_limpo:
-                            match = re.search(r'(PROT|POP|MAN|NOR|ROT|PLANC|POL|PROG|REG)_[A-Z0-9_\s-]+', texto_celula, re.IGNORECASE)
-                            if match:
-                                codigo_doc = match.group(0).strip().upper().replace(" ", "")
-                        
-                        if "VERSAO" in texto_celula_limpo:
-                            match = re.search(r'(\d+ª?|\d+\s*ª?)', texto_celula, re.IGNORECASE)
-                            if match:
-                                versao_doc = match.group(1).strip()
+    # ✅ LER PARÁGRAFOS do corpo
+    for p in doc.paragraphs:
+        texto_completo += p.text + " "
+    
+    # ✅ LIMPA TODO O TEXTO para busca de seções
+    texto_limpo = limpar_texto(texto_completo)
+    
+    # 🔍 IDENTIFICAR TIPO
+    tipo_detectado = "PROT"
+    for tipo in SECOES_POR_TIPO.keys():
+        if re.search(rf'\b{tipo}[_ /]', texto_limpo) or re.search(rf'\b{tipo}\b', texto_limpo):
+            tipo_detectado = tipo
+            break
+    
+    # 🔍 VERIFICAR SEÇÕES
+    secoes_esperadas = SECOES_POR_TIPO[tipo_detectado]
+    secoes_encontradas = []
+    secoes_faltantes = []
+    
+    for secao in secoes_esperadas:
+        secao_limpa = limpar_texto(secao)
+        if re.search(rf'\b{re.escape(secao_limpa)}\b', texto_limpo):
+            secoes_encontradas.append(secao)
+        else:
+            secoes_faltantes.append(secao)
+    
+    return {
+        "tipo": tipo_detectado,
+        "codigo": codigo_detectado or "NÃO DETECTADO",
+        "versao": versao_detectada or "NÃO DETECTADA",
+        "validade": validade_detectada,
+        "secoes_encontradas": secoes_encontradas,
+        "secoes_faltantes": secoes_faltantes
+    }
 
-    # Varredura de Segurança no Corpo do Texto
-    if codigo_doc == "NÃO DETECTADO" or versao_doc == "NÃO DETECTADA":
-        for tabela in doc_triagem.tables:
-            for linha in tabela.rows:
-                for celula in linha.cells:
-                    texto_celula = celula.text.strip()
-                    texto_celula_limpo = limpar_texto(texto_celula)
-                    
-                    if "CODIGO" in texto_celula_limpo and codigo_doc == "NÃO DETECTADO":
-                        match = re.search(r'(PROT|POP|MAN|NOR|ROT|PLANC|POL|PROG|REG)_[A-Z0-9_\s-]+', texto_celula, re.IGNORECASE)
-                        if match:
-                            codigo_doc = match.group(0).strip().upper().replace(" ", "")
-                    
-                    if "VERSAO" in texto_celula_limpo and versao_doc == "NÃO DETECTADA":
-                        match = re.search(r'(\d+ª?|\d+\s*ª?)', texto_celula, re.IGNORECASE)
-                        if match:
-                            versao_doc = match.group(1).strip()
-                            
-    # Consolidação do texto completo para análise estrutural
-    elementos_texto = []
-    for secao_doc in doc_triagem.sections:
-        if secao_doc.header:
-            for p in secao_doc.header.paragraphs:
-                if p.text.strip(): elementos_texto.append(p.text.strip())
-            for t in secao_doc.header.tables:
-                for r in t.rows:
-                    for cell in r.cells:
-                        if cell.text.strip(): elementos_texto.append(cell.text.strip())
+# ============================================================
+# 🚀 INTERFACE PRINCIPAL
+# ============================================================
+with st.form("auditoria_completa_final"):
+    arquivo_word = st.file_uploader(
+        "📂 Arraste o documento WORD (.docx) AQUI",
+        type=["docx"]
+    )
+    enviado = st.form_submit_button("🔍 EXECUTAR AUDITORIA COMPLETA", type="primary")
 
-    for p in doc_triagem.paragraphs:
-        if p.text.strip(): elementos_texto.append(p.text.strip())
-    for t in doc_triagem.tables:
-        for r in t.rows:
-            for cell in r.cells:
-                if cell.text.strip(): elementos_texto.append(cell.text.strip())
+if enviado and arquivo_word:
+    st.info(f"✅ Arquivo carregado: **{arquivo_word.name}**")
+    
+    with st.spinner("Lendo tabela do cabeçalho... verificando seções... aplicando margens..."):
+        try:
+            dados_brutos = arquivo_word.read()
+            rel = auditar_documento(dados_brutos)
+            
+            tipo_detectado = rel["tipo"]
+            codigo_doc = rel["codigo"]
+            versao_doc = rel["versao"]
+            validade_doc = rel["validade"]
+            secoes_encontradas = rel["secoes_encontradas"]
+            secoes_faltantes = rel["secoes_faltantes"]
+            
+            st.markdown("---")
+            st.subheader("📋 RELATÓRIO DE AUDITORIA")
+            
+            c1, c2 = st.columns(2)
+            with c1:
+                st.info(f"**Tipo de Documento:** {tipo_detectado}")
+                if codigo_doc != "NÃO DETECTADO":
+                    st.success(f"**Código:** {codigo_doc} ✅")
+                else:
+                    st.error("**Código:** ❌ NÃO DETECTADO")
+            with c2:
+                if versao_doc != "NÃO DETECTADA":
+                    st.success(f"**Versão:** {versao_doc} ✅")
+                else:
+                    st.error("**Versão:** ❌ NÃO DETECTADA")
+                if validade_doc:
+                    st.info(f"**Validade:** {validade_doc}")
+                else:
+                    st.info("**Validade:** ⚠️ Não obrigatória")
+            
+            st.markdown("---")
+            st.subheader("✅ SEÇÕES ENCONTRADAS")
+            for s in secoes_encontradas:
+                st.success(f"✅ {s}")
+            
+            if secoes_faltantes:
+                st.subheader("❌ SEÇÕES FALTANTES")
+                for s in secoes_faltantes:
+                    st.error(f"❌ {s}")
+            else:
+                st.subheader("✅ TODAS AS SEÇÕES FORAM ENCONTRADAS!")
+            
+            # ============================================================
+            # ✅ PROCESSAMENTO FINAL E DOWNLOADS
+            # ============================================================
+            dados_finais = injetar_margens_via_xml_puro(dados_brutos)
+            documento_aprovado = (len(secoes_faltantes) == 0 and 
+                                  versao_doc != "NÃO DETECTADA" and 
+                                  codigo_doc != "NÃO DETECTADO")
+            ficha_naqh_bytes = gerar_ficha_naqh(
+                tipo_detectado, codigo_doc, versao_doc, 
+                secoes_encontradas, secoes_faltantes, documento_aprovado
+            )
+            
+            st.markdown("---")
+            if documento_aprovado:
+                st.success("🎉 **DOCUMENTO APROVADO COM SUCESSO!** Tudo pronto para download.")
+                st.balloons()
+            else:
+                st.warning("⚠️ **DOCUMENTO FORMATADO COM PENDÊNCIAS!** Verifique as seções ou metadados ausentes.")
                 
-    texto_total_raw = "  ".join(elementos_texto)
-    texto_limpo_busca = limpar_texto(texto_total_raw)
-    
-    # Motor Avançado de Classificação de Documentos (Baseado em Termos/Prefixos)
-    tipo_detectado = "PROTOCOLO"  # Valor padrão
-    
+            st.markdown("### 📥 ÁREA DE DOWNLOADS DO PROCESSO")
+            
+            # BOTÃO DE DOWNLOAD — DOCUMENTO FORMATADO
+            nome_arquivo_doc = f"{codigo_doc}_Formatado.docx" if codigo_doc != "NÃO DETECTADO" else "Documento_Formatado.docx"
+            st.download_button(
+                label="📥 DOWNLOAD DO DOCUMENTO FORMATADO (.DOCX)", 
+                data=dados_finais, 
+                file_name=nome_arquivo_doc, 
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
+            
+            # BOTÃO DE DOWNLOAD — FICHA DE VERIFICAÇÃO
+            nome_arquivo_txt = f"Ficha_Verificacao_{codigo_doc}.txt" if codigo_doc != "NÃO DETECTADO" else "Ficha_Verificacao.txt"
+            st.download_button(
+                label="📄 DOWNLOAD DA FICHA DE VERIFICAÇÃO (.TXT)", 
+                data=ficha_naqh_bytes, 
+                file_name=nome_arquivo_txt, 
+                mime="text/plain"
+            )
+        
+        except Exception as e:
+            st.error(f"## ❌ ERRO durante o processamento: {str(e)}")
+            st.info("Verifique se o arquivo está no formato .docx válido.")
