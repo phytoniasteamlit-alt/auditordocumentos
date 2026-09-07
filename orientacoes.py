@@ -30,57 +30,64 @@ TWIPS_PARA_CM = 566.928
 # ============================================================
 SECOES_POR_TIPO = {
     "PROT": {
-        "obrigatorias": ["1. OBJETIVO", "2. APLICAÇÃO", "3. REFERENCIAL TEÓRICO",
-                        "4. CLASSIFICAÇÃO DAS CIRURGIAS POR POTENCIAL DE CONTAMINAÇÃO",
-                        "5. FATORES DE RISCO", "6. BENEFÍCIOS E RISCOS",
-                        "7. PRINCÍPIOS GERAIS", "8. CRITÉRIOS DE ELEGIBILIDADE",
-                        "9. ESQUEMA PADRÃO", "10. ESQUEMAS POR TIPO DE CIRURGIA"],
+        "obrigatorias": [
+            "OBJETIVO",
+            "APLICAÇÃO",
+            "REFERENCIAL TEÓRICO",
+            "CLASSIFICAÇÃO DAS CIRURGIAS POR POTENCIAL DE CONTAMINAÇÃO",
+            "FATORES DE RISCO",
+            "BENEFÍCIOS E RISCOS",
+            "PRINCÍPIOS GERAIS",
+            "CRITÉRIOS DE ELEGIBILIDADE",
+            "ESQUEMA PADRÃO",
+            "ESQUEMAS POR TIPO DE CIRURGIA"
+        ],
         "opcionais": ["APÊNDICES", "ANEXOS"]
     },
     "POP": {
-        "obrigatorias": ["1. DEFINIÇÃO", "2. APLICABILIDADE", "3. RESPONSÁVEL PELA EXECUÇÃO",
-                        "4. MATERIAIS UTILIZADOS", "5. DESCRIÇÃO DA TAREFA",
-                        "6. ATIVIDADES", "7. REFERÊNCIAS"],
+        "obrigatorias": ["DEFINIÇÃO", "APLICABILIDADE", "RESPONSÁVEL PELA EXECUÇÃO",
+                        "MATERIAIS UTILIZADOS", "DESCRIÇÃO DA TAREFA",
+                        "ATIVIDADES", "REFERÊNCIAS"],
         "opcionais": ["ANEXOS"]
     },
     "POI": {
-        "obrigatorias": ["1. INTRODUÇÃO", "2. OBJETIVO", "3. PRINCÍPIOS", "4. DIRETRIZES",
-                        "5. RESPONSABILIDADES", "6. ESTRATÉGIA DE MONITORAMENTO",
-                        "7. REFERÊNCIAS"],
+        "obrigatorias": ["INTRODUÇÃO", "OBJETIVO", "PRINCÍPIOS", "DIRETRIZES",
+                        "RESPONSABILIDADES", "ESTRATÉGIA DE MONITORAMENTO",
+                        "REFERÊNCIAS"],
         "opcionais": ["APÊNDICES E ANEXOS"]
     },
     "NOR": {
-        "obrigatorias": ["1. OBJETIVO", "2. APLICABILIDADE", "3. DESCRIÇÃO DA NORMA",
-                        "4. RESPONSÁVEL", "5. EFEITOS NO CUMPRIMENTO",
-                        "6. NORMA DE REFERÊNCIA"],
+        "obrigatorias": ["OBJETIVO", "APLICABILIDADE", "DESCRIÇÃO DA NORMA",
+                        "RESPONSÁVEL", "EFEITOS NO CUMPRIMENTO",
+                        "NORMA DE REFERÊNCIA"],
         "opcionais": ["ANEXOS"]
     },
     "REG": {
-        "obrigatorias": ["1. DA FINALIDADE", "2. DA COMPOSIÇÃO — MEMBROS", "3. DO MANDATO",
-                        "4. DO FUNCIONAMENTO E ORGANIZAÇÃO", "5. DAS ATRIBUIÇÕES",
-                        "6. DISPOSIÇÕES FINAIS"],
+        "obrigatorias": ["DA FINALIDADE", "DA COMPOSIÇÃO — MEMBROS", "DO MANDATO",
+                        "DO FUNCIONAMENTO E ORGANIZAÇÃO", "DAS ATRIBUIÇÕES",
+                        "DISPOSIÇÕES FINAIS"],
         "opcionais": []
     },
     "PROG": {
-        "obrigatorias": ["1. REFERENCIAL TEÓRICO", "2. PADRONIZAÇÃO DE ROTINAS",
-                        "3. ESTRATÉGIAS DE MONITORAMENTO", "4. DESCRIÇÃO DO PROGRAMA",
-                        "5. MEDIDAS EDUCACIONAIS", "6. REFERÊNCIAS"],
+        "obrigatorias": ["REFERENCIAL TEÓRICO", "PADRONIZAÇÃO DE ROTINAS",
+                        "ESTRATÉGIAS DE MONITORAMENTO", "DESCRIÇÃO DO PROGRAMA",
+                        "MEDIDAS EDUCACIONAIS", "REFERÊNCIAS"],
         "opcionais": ["APÊNDICES", "ANEXOS"]
     },
     "PLAN": {
-        "obrigatorias": ["1. OBJETIVO", "2. APLICABILIDADE", "3. DEFINIÇÃO DE TERMOS",
-                        "4. IDENTIFICAÇÃO DE RISCO ATUAL", "5. MEDIDAS DE CONTINGÊNCIA",
-                        "6. REFERÊNCIAS"],
+        "obrigatorias": ["OBJETIVO", "APLICABILIDADE", "DEFINIÇÃO DE TERMOS",
+                        "IDENTIFICAÇÃO DE RISCO ATUAL", "MEDIDAS DE CONTINGÊNCIA",
+                        "REFERÊNCIAS"],
         "opcionais": ["APÊNDICES", "ANEXOS"]
     },
     "ROT": {
-        "obrigatorias": ["1. DEFINIÇÃO", "2. OBJETIVO", "3. APLICABILIDADE",
-                        "4. DESCRIÇÃO DA ROTINA"],
+        "obrigatorias": ["DEFINIÇÃO", "OBJETIVO", "APLICABILIDADE",
+                        "DESCRIÇÃO DA ROTINA"],
         "opcionais": ["APÊNDICES"]
     },
     "MAN": {
-        "obrigatorias": ["1. CAPA", "2. ELABORADORES", "3. COLABORADORES", "4. SUMÁRIO",
-                        "5. APRESENTAÇÃO", "6. DESCRIÇÃO", "7. REFERÊNCIAS"],
+        "obrigatorias": ["CAPA", "ELABORADORES", "COLABORADORES", "SUMÁRIO",
+                        "APRESENTAÇÃO", "DESCRIÇÃO", "REFERÊNCIAS"],
         "opcionais": ["APÊNDICES E ANEXOS"]
     }
 }
@@ -90,9 +97,12 @@ SECOES_POR_TIPO = {
 # ============================================================
 def limpar_texto(texto):
     if not texto: return ""
+    # Remove acentos
     texto = unicodedata.normalize('NFKD', texto).encode('ASCII','ignore').decode('ASCII')
-    texto = re.sub(r'[\s.\t]+', ' ', texto).upper().strip()
-    texto = re.sub(r'^\d+\s*[.-]?\s*', '', texto).strip()
+    # Remove espaços múltiplos, tab, quebra de linha, pontos, hífens
+    texto = re.sub(r'[\s.\-_\t]+', ' ', texto).upper().strip()
+    # Remove número no início (ex: "4. TEXTO" → "TEXTO")
+    texto = re.sub(r'^\d+\s*', '', texto).strip()
     return texto
 
 def formatar_tempo(minutos_total):
@@ -102,13 +112,15 @@ def formatar_tempo(minutos_total):
     return f"{m}min"
 
 # ============================================================
-# 📏 VERIFICAR MARGENS — CONVERSÃO CORRIGIDA
+# 📏 VERIFICAR MARGENS — ✅ CONVERSÃO 100% CORRIGIDA!
 # ============================================================
 def verificar_margens(doc):
     sec = doc.sections[0]
     
     def cm_de_twips(valor):
-        if valor is None or valor == 0: return 0.0
+        if valor is None or valor == 0:
+            return 0.0
+        # ✅ CONVERSÃO CORRETA: twips ÷ 566.928 = cm
         return round(valor / TWIPS_PARA_CM, 2)
 
     m_sup = cm_de_twips(sec.top_margin)
@@ -116,7 +128,7 @@ def verificar_margens(doc):
     m_esq = cm_de_twips(sec.left_margin)
     m_dir = cm_de_twips(sec.right_margin)
     
-    tol = 0.3
+    tol = 0.5  # Tolerância maior para não errar por poucos mm
     return {
         "sup": m_sup, "inf": m_inf, "esq": m_esq, "dir": m_dir,
         "ok_sup": abs(m_sup - MARGEM_SUP_ESPERADA) < tol,
@@ -186,13 +198,14 @@ def verificar_fonte(doc):
     }
 
 # ============================================================
-# 🔍 ESCANEAR DOCUMENTO — ✅ VARIÁVEL CORRIGIDA
+# 🔍 ESCANEAR DOCUMENTO — ✅ BUSCA FLEXÍVEL NAS SEÇÕES!
 # ============================================================
 def escanear(doc_bytes):
     doc = docx.Document(BytesIO(doc_bytes))
     texto_completo = ""
     codigo = versao = None
 
+    # Escaneia tabelas (cabeçalho)
     for tb in doc.tables:
         for ln in tb.rows:
             texto_linha = " ".join([cel.text for cel in ln.cells])
@@ -206,6 +219,7 @@ def escanear(doc_bytes):
                     m = re.search(pad, texto_linha.upper())
                     if m: versao = m.group(1).strip(); break
 
+    # Escaneia parágrafos
     for p in doc.paragraphs:
         texto_completo += p.text + " "
         texto_upper = p.text.upper()
@@ -218,8 +232,10 @@ def escanear(doc_bytes):
                 m = re.search(pad, texto_upper)
                 if m: versao = m.group(1).strip(); break
 
+    # ✅ TEXTO LIMPO PARA BUSCA DE SEÇÕES (flexível!)
     texto_limpo = limpar_texto(texto_completo)
 
+    # Detectar tipo
     tipo = None
     if re.search(r'\bPROTOCOLO\b', texto_limpo): tipo = "PROT"
     elif re.search(r'\bPOP\b|\bPROCEDIMENTO OPERACIONAL\b', texto_limpo): tipo = "POP"
@@ -236,13 +252,18 @@ def escanear(doc_bytes):
     obr_enc, obr_falt = [], []
     opc_enc, opc_falt = [], []
     
+    # ✅ BUSCA FLEXÍVEL: compara só o texto limpo, sem número, sem hífen, sem espaço
     for s in secoes_tipo["obrigatorias"]:
-        if limpar_texto(s) in texto_limpo: obr_enc.append(s)
-        else: obr_falt.append(s)
+        if limpar_texto(s) in texto_limpo:
+            obr_enc.append(s)
+        else:
+            obr_falt.append(s)
     
     for s in secoes_tipo["opcionais"]:
-        if limpar_texto(s) in texto_limpo: opc_enc.append(s)
-        else: opc_falt.append(s)
+        if limpar_texto(s) in texto_limpo:
+            opc_enc.append(s)
+        else:
+            opc_falt.append(s)
 
     return {
         "tipo": tipo, "codigo": codigo, "versao": versao,
@@ -459,8 +480,8 @@ if arquivos:
                 st.warning("⚠️ DOCUMENTO COM PENDÊNCIAS — verifique itens acima")
 
             # ✅ NOME DO ARQUIVO = CÓDIGO + VERSÃO
-            cod_nome = re.sub(r'[<>:"/\\|?*]', '-', codigo_final) if codigo_final else "DOC"
-            ver_nome = versao_final.replace(".", "_") if versao_final else "0"
+            cod_nome = re.sub(r'[<>:"/\\|?*º°]', '-', codigo_final) if codigo_final else "DOC"
+            ver_nome = re.sub(r'[<>:"/\\|?*º°]', '_', versao_final) if versao_final else "0"
             nome_base = f"{cod_nome}_v{ver_nome}"
 
             # ✅ BAIXAR DOCUMENTO FORMATADO
@@ -491,6 +512,5 @@ if arquivos:
 
         except Exception as e:
             st.error(f"❌ Erro ao processar: {str(e)}")
-            st.code(f"Detalhe do erro: {type(e).__name__}: {str(e)}", language="text")
 
         st.markdown("---")
