@@ -25,7 +25,7 @@ TAMANHO_TABELAS = 10
 TWIPS_PARA_CM = 567.0
 
 # ============================================================
-# 📋 SEÇÕES POR TIPO DE DOCUMENTO — TODOS OS TIPOS!
+# 📋 SEÇÕES POR TIPO DE DOCUMENTO
 # ============================================================
 SECOES_POR_TIPO = {
     "PROT": ["1. OBJETIVO", "2. APLICABILIDADE", "3. REFERENCIAL TEÓRICO",
@@ -73,21 +73,18 @@ def formatar_tempo(minutos_total):
     return f"{m}min"
 
 # ============================================================
-# 📏 VERIFICAR MARGENS — CONVERSÃO CORRIGIDA
+# 📏 VERIFICAR MARGENS
 # ============================================================
 def verificar_margens(doc):
     sec = doc.sections[0]
-    
     def cm_de_twips(twips_valor):
         if twips_valor is None or twips_valor == 0:
             return 0.0
         return round(twips_valor / TWIPS_PARA_CM, 2)
-    
     m_sup = cm_de_twips(sec.top_margin)
     m_inf = cm_de_twips(sec.bottom_margin)
     m_esq = cm_de_twips(sec.left_margin)
     m_dir = cm_de_twips(sec.right_margin)
-    
     tol = 0.1
     return {
         "sup": m_sup, "inf": m_inf, "esq": m_esq, "dir": m_dir,
@@ -102,13 +99,12 @@ def verificar_margens(doc):
     }
 
 # ============================================================
-# ✍️ VERIFICAR FONTE — TRATA VALORES NULOS
+# ✍️ VERIFICAR FONTE
 # ============================================================
 def verificar_fonte(doc):
     cont_corpo = {"total":0, "fonte_ok":0, "tam_ok":0, "fontes":{}, "tams":{}}
     cont_tab = {"total":0, "fonte_ok":0, "tam_ok":0, "fontes":{}, "tams":{}}
     tem_registro_historico = False
-
     for p in doc.paragraphs:
         for run in p.runs:
             cont_corpo["total"] += 1
@@ -118,7 +114,6 @@ def verificar_fonte(doc):
             cont_corpo["tams"][tam_pt] = cont_corpo["tams"].get(tam_pt,0)+1
             if nome == FONTE_CORPO: cont_corpo["fonte_ok"] += 1
             if tam_pt == TAMANHO_CORPO: cont_corpo["tam_ok"] += 1
-
     for tb in doc.tables:
         texto_tb = ""
         for ln in tb.rows:
@@ -137,10 +132,8 @@ def verificar_fonte(doc):
             texto_tb += texto_linha
         if "REGISTRO HISTORICO" in limpar_texto(texto_tb):
             tem_registro_historico = True
-
     def pct(ok, tot): return round((ok/tot*100),1) if tot else 100
     crit = 70
-
     return {
         "corpo": {
             "fontes": cont_corpo["fontes"], "tamanhos": cont_corpo["tams"],
@@ -160,57 +153,36 @@ def verificar_fonte(doc):
     }
 
 # ============================================================
-# 🔍 DETECTAR TIPO DE DOCUMENTO E SEÇÕES CORRESPONDENTES
+# 🔍 ESCANEAR DOCUMENTO
 # ============================================================
 def escanear(doc_bytes):
     doc = docx.Document(BytesIO(doc_bytes))
     texto_completo = ""
     codigo = versao = None
-
-    # Tabelas — Cabeçalho (Código e Versão)
     for tb in doc.tables:
         for ln in tb.rows:
             texto_linha = " ".join([cel.text for cel in ln.cells])
             texto_completo += texto_linha + " "
-            
             m_cod = re.search(r'C[ÓO]DIGO\s*[:：-]?\s*([A-Z0-9_\-\/.]+)', texto_linha.upper())
             if m_cod and not codigo:
                 codigo = m_cod.group(1).strip()
-            
             m_ver = re.search(r'VERS[AÃ]O\s*[:：-]?\s*(\d+(?:[.\-]\d+)*)', texto_linha.upper())
             if m_ver and not versao:
                 versao = m_ver.group(1).strip()
-
-    # Corpo do texto
     for p in doc.paragraphs:
         texto_completo += p.text + " "
-
     texto_limpo = limpar_texto(texto_completo)
-
-    # ✅ DETECTA QUALQUER TIPO — NÃO SÓ PROT!
     tipo = None
-    if re.search(r'\bPROTOCOLO\b', texto_limpo):
-        tipo = "PROT"
-    elif re.search(r'\bPOP\b|\bPROCEDIMENTO OPERACIONAL\b', texto_limpo):
-        tipo = "POP"
-    elif re.search(r'\bPOL[IÍ]TICA\b|\bPOI\b', texto_limpo):
-        tipo = "POI"
-    elif re.search(r'\bNORMA\b|\bNOR\b', texto_limpo):
-        tipo = "NOR"
-    elif re.search(r'\bREGIMENTO\b|\bREGULAMENTO\b|\bREG\b', texto_limpo):
-        tipo = "REG"
-    elif re.search(r'\bPROGRAMA\b|\bPROG\b', texto_limpo):
-        tipo = "PROG"
-    elif re.search(r'\bPLANO\b|\bPLAN\b', texto_limpo):
-        tipo = "PLAN"
-    elif re.search(r'\bROTINA\b|\bROT\b', texto_limpo):
-        tipo = "ROT"
-    elif re.search(r'\bMANUAL\b|\bMAN\b', texto_limpo):
-        tipo = "MAN"
-    else:
-        tipo = "PROT"  # Padrão se não identificar
-
-    # ✅ Usa a LISTA DE SEÇÕES CORRESPONDENTE AO TIPO DETECTADO
+    if re.search(r'\bPROTOCOLO\b', texto_limpo): tipo = "PROT"
+    elif re.search(r'\bPOP\b|\bPROCEDIMENTO OPERACIONAL\b', texto_limpo): tipo = "POP"
+    elif re.search(r'\bPOL[IÍ]TICA\b|\bPOI\b', texto_limpo): tipo = "POI"
+    elif re.search(r'\bNORMA\b|\bNOR\b', texto_limpo): tipo = "NOR"
+    elif re.search(r'\bREGIMENTO\b|\bREGULAMENTO\b|\bREG\b', texto_limpo): tipo = "REG"
+    elif re.search(r'\bPROGRAMA\b|\bPROG\b', texto_limpo): tipo = "PROG"
+    elif re.search(r'\bPLANO\b|\bPLAN\b', texto_limpo): tipo = "PLAN"
+    elif re.search(r'\bROTINA\b|\bROT\b', texto_limpo): tipo = "ROT"
+    elif re.search(r'\bMANUAL\b|\bMAN\b', texto_limpo): tipo = "MAN"
+    else: tipo = "PROT"
     secoes_esperadas = SECOES_POR_TIPO[tipo]
     encontradas = []
     faltantes = []
@@ -219,7 +191,6 @@ def escanear(doc_bytes):
             encontradas.append(secao)
         else:
             faltantes.append(secao)
-
     return {
         "tipo": tipo, "codigo": codigo, "versao": versao,
         "margens": verificar_margens(doc),
@@ -257,7 +228,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Cabeçalho
 st.markdown("""
     <div class="header-container">
         <div class="header-text">
@@ -276,7 +246,6 @@ if arquivos:
     tempo_auditor = qtd * TEMPO_POR_DOC_AUTOMATICO
     tempo_economizado = tempo_manual - tempo_auditor
 
-    # ⏱️ Relógio de economia
     st.markdown(f"""
     <div class="relogio-box">
         <div style="display:flex;justify-content:space-between;align-items:center;">
@@ -296,14 +265,12 @@ if arquivos:
 
     st.markdown("---")
 
-    # Processar cada arquivo
     for idx, arq in enumerate(arquivos, 1):
         st.subheader(f"📄 {arq.name}")
         try:
             dados = arq.read()
             r = escanear(dados)
 
-            # 📋 DADOS DO DOCUMENTO
             st.markdown("### 📋 DADOS DO DOCUMENTO")
             c1,c2 = st.columns(2)
             with c1: st.info(f"**Tipo Detectado:** {r['tipo']}")
@@ -314,8 +281,6 @@ if arquivos:
             else: st.error("**Versão:** ❌ NÃO ENCONTRADA")
 
             st.markdown("---")
-
-            # 📏 MARGENS
             st.markdown("### 📏 MARGENS — Esperado: Sup=3,0 / Inf=2,0 / Esq=3,0 / Dir=2,0 cm")
             m = r["margens"]
             col1,col2,col3,col4 = st.columns(4)
@@ -326,8 +291,6 @@ if arquivos:
             st.success("✅ TODAS AS MARGENS CONFORME") if m["todas_ok"] else st.error("❌ MARGENS NÃO CONFORME")
 
             st.markdown("---")
-
-            # ✍️ FONTES
             st.markdown("### ✍️ CORPO — Calibri 11pt")
             f = r["fonte"]["corpo"]
             st.write("Fontes encontradas:", ", ".join(f"{n} ({q})" for n,q in f["fontes"].items()))
@@ -345,14 +308,40 @@ if arquivos:
                 st.info("📋 Registro Histórico detectado")
 
             st.markdown("---")
-
-            # ============================================================
-            # ✅ CONFERÊNCIA MANUAL — SEÇÕES DO TIPO DETECTADO
-            # ============================================================
             st.markdown(f"### ✅ CONFERÊNCIA DE SEÇÕES — Tipo: {r['tipo']}")
-            st.info("💡 Marque manualmente o que encontrou no documento. O sistema já verificou automaticamente.")
+            st.info("💡 Marque manualmente o que encontrou no documento. O sistema já verificou.")
 
             secoes_usuario = []
             for secao in r["secoes_esperadas"]:
                 sistema_encontrou = secao in r["secoes_enc"]
-                marcado = st.check
+                marcado = st.checkbox(
+                    f"{secao} {'✅ (JÁ DETECTADO)' if sistema_encontrou else '⚠️ NÃO ENCONTRADO'}",
+                    value=sistema_encontrou,
+                    key=f"chk_{idx}_{limpar_texto(secao)}"
+                )
+                secoes_usuario.append((secao, marcado, sistema_encontrou))
+
+            st.markdown("#### 📊 RESULTADO DA CONFERÊNCIA")
+            for secao, marcado, sistema_encontrou in secoes_usuario:
+                if marcado and sistema_encontrou:
+                    st.success(f"✅ {secao} — CONFIRMADO")
+                elif marcado and not sistema_encontrou:
+                    st.warning(f"⚠️ {secao} — VOCÊ ENCONTROU, SISTEMA NÃO DETECTOU!")
+                elif not marcado and sistema_encontrou:
+                    st.info(f"ℹ️ {secao} — Sistema detectou, você NÃO MARCOU")
+                else:
+                    st.error(f"❌ {secao} — NÃO ENCONTRADO")
+
+            st.markdown("---")
+            aprov = m["todas_ok"] and r["codigo"] and r["versao"] and len(r["secoes_falt"])==0
+            st.success("✅ DOCUMENTO APROVADO CONFORME NORMA ZERO") if aprov else st.warning("⚠️ DOCUMENTO COM PENDÊNCIAS")
+
+            dados_format = aplicar_margens(dados)
+            nome_arq = f"{r['codigo'] or 'DOC'}_Formatado.docx"
+            st.download_button("📥 Baixar formatado", dados_format, nome_arq,
+                              "application/vnd.openxmlformats-officedocument.wordprocessingml.document", key=f"dl{idx}")
+
+        except Exception as e:
+            st.error(f"❌ ERRO: {str(e)}")
+
+        st.markdown("---")
