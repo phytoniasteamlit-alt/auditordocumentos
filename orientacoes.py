@@ -160,47 +160,34 @@ def formatar_pelas_normas(doc):
     return output.getvalue()
 
 # ============================================================
-# 📋 GERADOR DA FICHA OFICIAL DE VERIFICAÇÃO DO NAQH (MÉTODO ULTRA SEGURO)
+# 📋 GERADOR DA FICHA OFICIAL DE VERIFICAÇÃO DO NAQH (ESTRUTURA LINEAR)
 # ============================================================
 def gerar_ficha_naqh(rel):
-    def sim_nao(condicao):
+    # Função simples interna para marcar as caixas de conformidade
+    def marcar_caixa(condicao):
         if condicao:
             return "(X) SIM  ( ) NÃO"
         return "( ) SIM  (X) NÃO"
     
-    tipo_str = str(rel['tipo'])
-    cod_str = str(rel['codigo'] or 'NÃO ENCONTRADO')
-    ver_str = str(rel['versao'] or 'NÃO ENCONTRADA')
-    val_str = str(rel['validade'] or 'NÃO PREENCHIDA')
+    # Construção totalmente sequencial por adição de texto (Evita erros de lista/colchetes)
+    texto_ficha = ""
+    texto_ficha += "========================================================================\n"
+    texto_ficha += "            SECRETARIA MUNICIPAL DE SAÚDE - SEMUS\n"
+    texto_ficha += "               HOSPITAL DA CIDADE DR. JACKSON LAGO\n"
+    texto_ficha += "             FICHA DE VERIFICAÇÃO PARA APROVAÇÃO DE DOCUMENTO\n"
+    texto_ficha += "========================================================================\n\n"
     
-    status_doc = "REPROVADO - REVISAR PENDÊNCIAS"
-    if rel['aprovado']:
-        status_doc = "APROVADO - CONFORME"
-        
-    cenc = str(len(rel['secoes_encontradas']))
-    cfal = str(len(rel['secoes_faltantes']))
+    texto_ficha += "1. CABEÇALHO INSTITUCIONAL\n"
+    texto_ficha += "------------------------------------------------------------------------\n"
+    texto_ficha += "TIPO DE DOCUMENTO:     " + str(rel['tipo']) + " -> " + marcar_caixa(rel['tipo'] is not None) + "\n"
+    texto_ficha += "CÓDIGO DO DOCUMENTO:   " + str(rel['codigo'] or 'NÃO ENCONTRADO') + " -> " + marcar_caixa(rel['codigo'] is not None) + "\n"
+    texto_ficha += "VERSÃO DO DOCUMENTO:   " + str(rel['versao'] or 'NÃO ENCONTRADA') + " -> " + marcar_caixa(rel['versao'] is not None) + "\n"
+    texto_ficha += "VALIDADE EXIBIDA:      " + str(rel['validade'] or 'NÃO PREENCHIDA') + "\n\n"
     
-    linhas = [
-        "========================================================================",
-        "            SECRETARIA MUNICIPAL DE SAÚDE - SEMUS",
-        "               HOSPITAL DA CIDADE DR. JACKSON LAGO",
-        "             FICHA DE VERIFICAÇÃO PARA APROVAÇÃO DE DOCUMENTO",
-        "========================================================================",
-        "",
-        "1. CABEÇALHO INSTITUCIONAL",
-        "------------------------------------------------------------------------",
-        "TIPO DE DOCUMENTO:     " + tipo_str + " -> " + sim_nao(rel['tipo'] is not None),
-        "CÓDIGO DO DOCUMENTO:   " + cod_str + " -> " + sim_nao(rel['codigo'] is not None),
-        "VERSÃO DO DOCUMENTO:   " + ver_str + " -> " + sim_nao(rel['versao'] is not None),
-        "VALIDADE EXIBIDA:      " + val_str,
-        "",
-        "2. FORMATAÇÃO E REGRAS VISUAIS (NORMA ZERO)",
-        "------------------------------------------------------------------------",
-        "PAPEL: A4 BRANCO                         -> (X) SIM  ( ) NÃO",
-        "MARGENS CONFIGURADAS (3x3x2x2):          -> (X) SIM  ( ) NÃO",
-        "MODELO DA FONTE E TAMANHO (Calibri 11):  -> (X) SIM  ( ) NÃO",
-        "ESPAÇAMENTO ENTRE LINHAS (1,5cm):        -> (X) SIM  ( ) NÃO",
-        "ALINHAMENTO (Justificado):               -> (X) SIM  ( ) NÃO",
-        "RECUO DE PARÁGRAFO (1,25cm):             -> (X) SIM  ( ) NÃO",
-        "",
-        "3. STATUS DA ESTRUTURA DE SEÇÕES",
+    texto_ficha += "2. FORMATAÇÃO E REGRAS VISUAIS (NORMA ZERO)\n"
+    texto_ficha += "------------------------------------------------------------------------\n"
+    texto_ficha += "PAPEL: A4 BRANCO                         -> (X) SIM  ( ) NÃO\n"
+    texto_ficha += "MARGENS CONFIGURADAS (3x3x2x2):          -> (X) SIM  ( ) NÃO\n"
+    texto_ficha += "MODELO DA FONTE E TAMANHO (Calibri 11):  -> (X) SIM  ( ) NÃO\n"
+    texto_ficha += "ESPAÇAMENTO ENTRE LINHAS (1,5cm):        -> (X) SIM  ( ) NÃO\n"
+    texto_ficha += "ALINHAMENTO (Justificado):               -> (X) SIM  ( ) NÃO\n"
