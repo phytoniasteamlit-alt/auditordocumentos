@@ -25,7 +25,7 @@ def limpar_texto(texto):
 # 📋 SEÇÕES OBRIGATÓRIAS (ATUALIZADAS CONFORME QUADRO 1 DA INSTITUIÇÃO)
 # ============================================================
 SECOES_POR_TIPO = {
-    "PROT": ["1. OBJETIVO", "2. APLICABILIDADE", "3. REFERENCIAL TEÓRICO", "4. CLASSIFICAÇÃO DAS CIRURGIAS", "5. RESPONSABILIDADES", "6. MEDIDAS OBRIGATÓRIAS DE PREVENÇÃO", "7. ESTRATÉGIAS DE MONITORAMENTO", "8. REFERÊNCIAS"],
+    "PROT": ["1. OBJETIVO", "2. APLICABILIDADE", "3. REFERENCIAL TEÓRICO", "4. CLASSIFICAÇÃO DAS CIRURGIAS", "5. RESPONSABILIDADES", "6. MEDIDAS OBRIGATORIAS DE PREVENÇÃO", "7. ESTRATÉGIAS DE MONITORAMENTO", "8. REFERÊNCIAS"],
     "POP": ["1. DEFINIÇÃO", "2. APLICABILIDADE", "3. RESPONSÁVEL PELA EXECUÇÃO", "4. MATERIAIS UTILIZADOS NA REALIZAÇÃO DA TAREFA", "5. DESCRIÇÃO DOS PROCEDIMENTOS", "6. ATIVIDADES CRÍTICAS E PONTOS PROIBIDOS NA EXECUÇÃO DA TAREFA", "7. REFERÊNCIAS", "8. ANEXOS"],
     "POI": ["1. INTRODUÇÃO", "2. OBJETIVO", "3. FINALIDADE", "4. ABRANGÊNCIA", "5. RESPONSABILIDADES", "6. GESTÃO DE RISCO", "7. ANEXOS", "8. REFERÊNCIAS"],
     "NORMA": ["1. INTRODUÇÃO", "2. OBJETIVO", "3. APLICABILIDADE", "4. DESCRIÇÃO DA NORMA", "5. RESPONSÁVEIS", "6. EFEITOS DO NÃO CUMPRIMENTO DA NORMA", "7. REFERÊNCIAS"],
@@ -98,14 +98,12 @@ def auditar_documento(doc):
 # 🎨 ENGINE DE FORMATAÇÃO (ESTRITO CALIBRI CONFORME NORMA ZERO)
 # ============================================================
 def formatar_pelas_normas(doc):
-    # 1. Configuração de Margens Atualizadas (3x3x2x2)
     for section in doc.sections:
         section.top_margin = Cm(3.0)
         section.left_margin = Cm(3.0)
         section.bottom_margin = Cm(2.0)
         section.right_margin = Cm(2.0)
         
-    # 2. Formatação do Corpo de Texto Principal (Calibri 11)
     for p in doc.paragraphs:
         texto_paragrafo = p.text.strip()
         if not texto_paragrafo:
@@ -137,12 +135,11 @@ def formatar_pelas_normas(doc):
             p.paragraph_format.line_spacing = 1.5
             p.paragraph_format.space_before = Pt(0)
             p.paragraph_format.space_after = Pt(6)
-            p.paragraph_format.first_line_indent = Cm(1.25)  # Recuo padrão fixado em 1,25 cm
+            p.paragraph_format.first_line_indent = Cm(1.25)
             for r in p.runs:
                 r.font.name = 'Calibri'
                 r.font.size = Pt(11)
 
-    # 3. Formatação das Tabelas e Cabeçalhos (Calibri 10 - Espaçamento Simples)
     for tabela in doc.tables:
         for linha in tabela.rows:
             for celula in linha.cells:
@@ -160,16 +157,27 @@ def formatar_pelas_normas(doc):
     return output.getvalue()
 
 # ============================================================
-# 📋 GERADOR DA FICHA OFICIAL DE VERIFICAÇÃO DO NAQH (ESTRUTURA LINEAR)
+# 📋 GERADOR DA FICHA OFICIAL DE VERIFICAÇÃO DO NAQH (ESTRUTURA COMPATÍVEL)
 # ============================================================
 def gerar_ficha_naqh(rel):
-    # Função simples interna para marcar as caixas de conformidade
     def marcar_caixa(condicao):
         if condicao:
             return "(X) SIM  ( ) NÃO"
         return "( ) SIM  (X) NÃO"
     
-    # Construção totalmente sequencial por adição de texto (Evita erros de lista/colchetes)
+    tipo_str = str(rel['tipo'])
+    cod_str = str(rel['codigo'] or 'NÃO ENCONTRADO')
+    ver_str = str(rel['versao'] or 'NÃO ENCONTRADA')
+    val_str = str(rel['validade'] or 'NÃO PREENCHIDA')
+    
+    if rel['aprovado']:
+        status_doc = "APROVADO - CONFORME"
+    else:
+        status_doc = "REPROVADO - REVISAR PENDÊNCIAS"
+        
+    cenc = str(len(rel['secoes_encontradas']))
+    cfal = str(len(rel['secoes_faltantes']))
+    
     texto_ficha = ""
     texto_ficha += "========================================================================\n"
     texto_ficha += "            SECRETARIA MUNICIPAL DE SAÚDE - SEMUS\n"
@@ -179,10 +187,10 @@ def gerar_ficha_naqh(rel):
     
     texto_ficha += "1. CABEÇALHO INSTITUCIONAL\n"
     texto_ficha += "------------------------------------------------------------------------\n"
-    texto_ficha += "TIPO DE DOCUMENTO:     " + str(rel['tipo']) + " -> " + marcar_caixa(rel['tipo'] is not None) + "\n"
-    texto_ficha += "CÓDIGO DO DOCUMENTO:   " + str(rel['codigo'] or 'NÃO ENCONTRADO') + " -> " + marcar_caixa(rel['codigo'] is not None) + "\n"
-    texto_ficha += "VERSÃO DO DOCUMENTO:   " + str(rel['versao'] or 'NÃO ENCONTRADA') + " -> " + marcar_caixa(rel['versao'] is not None) + "\n"
-    texto_ficha += "VALIDADE EXIBIDA:      " + str(rel['validade'] or 'NÃO PREENCHIDA') + "\n\n"
+    texto_ficha += "TIPO DE DOCUMENTO:     " + tipo_str + " -> " + marcar_caixa(rel['tipo'] is not None) + "\n"
+    texto_ficha += "CÓDIGO DO DOCUMENTO:   " + cod_str + " -> " + marcar_caixa(rel['codigo'] is not None) + "\n"
+    texto_ficha += "VERSÃO DO DOCUMENTO:   " + ver_str + " -> " + marcar_caixa(rel['versao'] is not None) + "\n"
+    texto_ficha += "VALIDADE EXIBIDA:      " + val_str + "\n\n"
     
     texto_ficha += "2. FORMATAÇÃO E REGRAS VISUAIS (NORMA ZERO)\n"
     texto_ficha += "------------------------------------------------------------------------\n"
@@ -191,3 +199,5 @@ def gerar_ficha_naqh(rel):
     texto_ficha += "MODELO DA FONTE E TAMANHO (Calibri 11):  -> (X) SIM  ( ) NÃO\n"
     texto_ficha += "ESPAÇAMENTO ENTRE LINHAS (1,5cm):        -> (X) SIM  ( ) NÃO\n"
     texto_ficha += "ALINHAMENTO (Justificado):               -> (X) SIM  ( ) NÃO\n"
+    texto_ficha += "RECUO DE PARÁGRAFO (1,25cm):             -> (X) SIM  ( ) NÃO\n\n"
+    
