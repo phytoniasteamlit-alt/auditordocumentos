@@ -102,8 +102,32 @@ arquivo_word = st.file_uploader("Arraste o documento WORD (.docx) aqui para Tria
 if arquivo_word:
     dados_brutos = arquivo_word.read()
     
-    # Extração robusta de textos mantendo quebras de segurança
+    # Instancia o documento para varredura estrutural
     doc_triagem = docx.Document(BytesIO(dados_brutos))
+    
+    # 🧠 ESTRATÉGIA NOVA: Varredura de tabelas célula por célula para achar Código e Versão perfeitamente
+    codigo_doc = "NÃO DETECTADO"
+    versao_doc = "NÃO DETECTADA"
+    
+    for tabela in doc_triagem.tables:
+        for linha in tabela.rows:
+            for celula in linha.cells:
+                texto_celula = celula.text.strip()
+                texto_celula_limpo = limpar_texto(texto_celula)
+                
+                # Procura por Código na célula atual
+                if "CODIGO" in texto_celula_limpo:
+                    match = re.search(r'(PROT|POP|MAN|NOR|ROT)_[A-Z0-9_\s-]+', texto_celula, re.IGNORECASE)
+                    if match:
+                        codigo_doc = match.group(0).strip().upper().replace(" ", "")
+                
+                # Procura por Versão na célula atual
+                if "VERSAO" in texto_celula_limpo:
+                    match = re.search(r'(\d+)', texto_celula)
+                    if match:
+                        versao_doc = match.group(1).strip()
+
+    # Coleta de todos os textos para auditar seções
     elementos_texto = [p.text.strip() for p in doc_triagem.paragraphs if p.text.strip()]
     for t in doc_triagem.tables:
         for r in t.rows:
@@ -113,7 +137,7 @@ if arquivo_word:
     texto_total_raw = "  ".join(elementos_texto)
     texto_limpo_busca = limpar_texto(texto_total_raw)
     
-    # Triagem Avançada de Tipo Documental (Evita falsos positivos por conta do histórico)
+    # Triagem Avançada de Tipo Documental
     tipo_detectado = "PROTOCOLO"
     if "TIPO DE DOCUMENTO: PROTOCOLO" in texto_limpo_busca or "PROTOCOLO" in texto_limpo_busca[:500]:
         tipo_detectado = "PROTOCOLO"
@@ -125,19 +149,7 @@ if arquivo_word:
     st.markdown("---")
     st.subheader("📋 **Triagem e Auditoria de Estrutura**")
     st.write(f"🔹 **Tipo de Documento Identificado:** `{tipo_detectado}`")
-    
-    # Captura Inteligente e Flexível do Código
-    codigo_doc = "NÃO DETECTADO"
-    match_codigo = re.search(r'CODIGO\s*[:\s]*([A-Z0-9_|-]+)', texto_limpo_busca)
-    if match_codigo:
-        codigo_doc = match_codigo.group(1).strip()
     st.write(f"🔹 **Código do Documento:** `{codigo_doc}`")
-        
-    # Captura Avançada de Versão (Limpa indicadores ordinais como 5ª)
-    versao_doc = "NÃO DETECTADA"
-    match_versao = re.search(r'VERSAO\s*[:\s]*(\d+)', texto_limpo_busca)
-    if match_versao:
-        versao_doc = match_versao.group(1).strip()
     st.write(f"🔹 **Versão do Documento:** `{versao_doc}`")
 
     # Realiza a Varredura de Seções Autêntica
@@ -188,8 +200,3 @@ if arquivo_word:
         )
     with d2:
         st.download_button(
-            label="📥 DOWNLOAD DA FICHA DE VERIFICAÇÃO NAQH (.TXT)",
-            data=ficha_naqh_bytes,
-            file_name=f"Ficha_Verificacao_{codigo_doc}.txt",
-            mime="text/plain"
-        )
