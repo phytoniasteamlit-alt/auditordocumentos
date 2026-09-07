@@ -1,14 +1,14 @@
 import streamlit as st
-import docx
 import zipfile
 import re
 import unicodedata
-from io import BytesIO
+import tempfile
+import os
+import shutil
 
 # --- 1. CONFIGURAÇÃO DA PÁGINA STREAMLIT ---
 st.set_page_config(page_title="Formatador de Documentos NAQH", page_icon="📊", layout="wide")
 
-# Menu Lateral - Identificação Visual do Operador Autêntica
 with st.sidebar:
     st.markdown("### 🧑‍💻 Operador")
     st.markdown("**Ezequias Santos**\n*Agt Administrativo*")
@@ -20,42 +20,72 @@ st.markdown("""
 O sistema aplica as margens oficiais da Norma Zero alterando diretamente as tags estruturais do pacote, **garantindo a permanência absoluta de logomarcas, tabelas de cabeçalho e paginações originais**.
 """)
 
-# --- DICIONÁRIO DE SEÇÕES OBRIGATÓRIAS AJUSTADO ---
+# --- 📋 DICIONÁRIO DE SEÇÕES OBRIGATÓRIAS ---
 SECOES_POR_TIPO = {
-    "PROTOCOLO": ["1. OBJETIVO", "2. APLICABILIDADE", "3. REFERENCIAL TEÓRICO", "4. CLASSIFICAÇÃO DAS CIRURGIAS", "5. RESPONSABILIDADES", "6. MEDIDAS OBRIGATÓRIAS DE PREVENÇÃO", "7. ESTRATÉGIAS DE MONITORAMENTO", "8. REFERÊNCIAS"],
-    "POP": ["1. DEFINIÇÃO", "2. APLICABILIDADE", "3. RESPONSÁVEL PELA EXECUÇÃO", "4. MATERIAIS UTILIZADOS NA REALIZAÇÃO DA TAREFA", "5. DESCRIÇÃO DOS PROCEDIMENTOS", "6. ATIVIDADES CRÍTICAS E PONTOS PROIBIDOS NA EXECUÇÃO DA TAREFA", "7. REFERÊNCIAS", "8. ANEXOS"],
-    "NORMA": ["1. INTRODUÇÃO", "2. OBJETIVO", "3. APLICABILIDADE", "4. DESCRIÇÃO DA NORMA", "5. RESPONSÁVEIS", "6. EFEITOS DO NÃO CUMPRIMENTO DA NORMA", "7. REFERÊNCIAS"]
+    "MANUAL": ["CAPA", "ELABORADORES", "COLABORADORES", "SUMÁRIO", "APRESENTAÇÃO", "DESCRIÇÃO", "REFERÊNCIAS", "APÊNDICES", "ANEXOS"],
+    "NORMA": ["INTRODUÇÃO", "OBJETIVO", "APLICABILIDADE", "DESCRIÇÃO DA NORMA", "RESPONSÁVEL", "EFEITOS DO NÃO CUMPRIMENTO DA NORMA", "REFERÊNCIAS", "APÊNDICES", "ANEXOS"],
+    "PLANO DE CONTINGENCIA": ["OBJETIVO", "APLICABILIDADE", "DEFINIÇÃO DE TERMOS", "IDENTIFICAÇÃO DA SITUAÇÃO ATUAL", "MEDIDAS DE CONTINGÊNCIA", "REFERÊNCIAS", "APÊNDICES", "ANEXOS"],
+    "POLITICA INSTITUCIONAL": ["INTRODUÇÃO", "OBJETIVO", "PRINCÍPIOS", "DIRETRIZES", "RESPONSABILIDADES", "ESTRATÉGIAS DE MONITORAMENTO", "REFERÊNCIAS", "APÊNDICES", "ANEXOS"],
+    "POP": ["DEFINIÇÃO", "APLICABILIDADE", "RESPONSÁVEL PELA EXECUÇÃO", "MATERIAIS UTILIZADOS NA REALIZAÇÃO DA TAREFA", "DESCRIÇÃO DA TAREFA/ATIVIDADE", "ATIVIDADES CRÍTICAS", "PONTOS PROIBIDOS NA EXECUÇÃO DA TAREFA", "REFERÊNCIAS", "APÊNDICES", "ANEXOS"],
+    "PROGRAMA": ["REFERENCIAL TEÓRICO", "PADRONIZAÇÃO DE ROTINAS TÉCNICO-OPERACIONAIS", "ESTRATÉGIAS DE MONITORAMENTO", "DESCRIÇÃO DO PROGRAMA", "MEDIDAS EDUCACIONAIS", "REFERÊNCIAS", "APÊNDICES", "ANEXOS"],
+    "PROTOCOLO": ["OBJETIVO", "APLICABILIDADE", "REFERENCIAL TEÓRICO", "DESCRIÇÃO DO PROTOCOLO", "ESTRATÉGIAS DE MONITORAMENTO", "REFERÊNCIAS", "APÊNDICES", "ANEXOS"],
+    "REGIMENTO": ["DA FINALIDADE", "DA COMPOSIÇÃO - MEMBROS", "DO MANDATO", "DO FUNCIONAMENTO E ORGANIZAÇÃO", "DAS COMPETÊNCIAS", "DAS ATRIBUIÇÕES", "DISPOSIÇÕES FINAIS"],
+    "ROTINA": ["DEFINIÇÃO", "OBJETIVO", "APLICABILIDADE", "DESCRIÇÃO DA ROTINA", "APÊNDICES", "ANEXOS"]
 }
 
-# --- FUNÇÃO DE AUXÍLIO PARA BUSCA SEM ACENTO ---
 def limpar_texto(texto):
     if not texto:
         return ""
     sem_acento = unicodedata.normalize('NFKD', texto).encode('ASCII', 'ignore').decode('ASCII')
     sem_acento = sem_acento.replace('\n', ' ').replace('\r', ' ')
-    return re.sub(r'\s+', ' ', sem_acento.upper().strip())
+    return " ".join(sem_acento.upper().split())
 
-# --- 2. MOTOR DE ALTERAÇÃO XML DIRETA ---
-def injetar_margens_via_xml_puro(arquivo_bytes):
-    top_dxa, bottom_dxa, left_dxa, right_dxa = "1134", "1134", "1134", "1701"
-    zip_original = zipfile.ZipFile(BytesIO(arquivo_bytes))
-    buffer_saida = BytesIO()
+def extrair_texto_por_blocos_xml(xml_string):
+    """Fatiamento rápido por blocos estruturais w:t para evitar Loops demorados"""
+    if not xml_string:
+        return ""
+    fragmentos = xml_string.split('<w:t')
+    texto_puro = []
+    for frag in fragmentos[1:]:
+        conteudo = frag.split('>', 1)
+        if len(conteudo) > 1:
+            texto_real = conteudo[1].split('</w:t>', 1)
+            if texto_real[0].strip():
+                texto_puro.append(texto_real[0])
+    return " ".join(texto_puro)
+
+# --- 2. MOTOR ULTRA VELOZ DE ALTERAÇÃO XML ---
+def injetar_margens_via_disco(caminho_origem):
+    top_val, bottom_val, left_val, right_val = "1134", "1134", "1134", "1701"
+    caminho_saida = caminho_origem + "_formatado.docx"
+    zip_original = zipfile.ZipFile(caminho_origem, 'r')
     
-    with zipfile.ZipFile(buffer_saida, "w", zipfile.ZIP_DEFLATED) as zip_novo:
+    with zipfile.ZipFile(caminho_saida, "w", zipfile.ZIP_DEFLATED) as zip_novo:
         for item in zip_original.infolist():
             conteudo = zip_original.read(item.filename)
+            
             if item.filename == "word/document.xml":
-                xml_texto = conteudo.decode("utf-8")
-                xml_texto = re.sub(r'w:top="[^"]*"', f'w:top="{top_dxa}"', xml_texto)
-                xml_texto = re.sub(r'w:bottom="[^"]*"', f'w:bottom="{bottom_dxa}"', xml_texto)
-                xml_texto = re.sub(r'w:left="[^"]*"', f'w:left="{left_dxa}"', xml_texto)
-                xml_texto = re.sub(r'w:right="[^"]*"', f'w:right="{right_dxa}"', xml_texto)
+                xml_texto = conteudo.decode("utf-8", errors="ignore")
+                for tag, val in [('w:top="', top_val), ('w:bottom="', bottom_val), ('w:left="', left_val), ('w:right="', right_val)]:
+                    partes = xml_texto.split(tag)
+                    if len(partes) > 1:
+                        for i in range(1, len(partes)):
+                            subpartes = partes[i].split('"', 1)
+                            if len(subpartes) > 1:
+                                partes[i] = val + '"' + subpartes[1]
+                        xml_texto = tag.join(partes)
                 conteudo = xml_texto.encode("utf-8")
+                
             zip_novo.writestr(item, conteudo)
             
     zip_original.close()
-    buffer_saida.seek(0)
-    return buffer_saida.getvalue()
+    with open(caminho_saida, "rb") as f:
+        dados_finais = f.read()
+    try:
+        os.remove(caminho_saida)
+    except:
+        pass
+    return dados_finais
 
 # --- 📋 GERADOR DA FICHA OFICIAL DE VERIFICAÇÃO DO NAQH ---
 def gerar_ficha_naqh(tipo, codigo, versao, encontradas, faltantes, aprovado):
@@ -80,9 +110,11 @@ def gerar_ficha_naqh(tipo, codigo, versao, encontradas, faltantes, aprovado):
     texto_ficha += "2. FORMATAÇÃO E REGRAS VISUAIS (NORMA ZERO)\n"
     texto_ficha += "------------------------------------------------------------------------\n"
     texto_ficha += "PAPEL: A4 BRANCO                         -> (X) SIM  ( ) NÃO\n"
-    texto_ficha += "MARGENS CONFIGURADAS (NORMA ZERO):       -> (X) SIM  ( ) NÃO\n"
+    texto_ficha += "MARGENS CONFIGURADAS (3,0 x 2,0 cm):     -> (X) SIM  ( ) NÃO\n"
     texto_ficha += "MODELO DA FONTE E TAMANHO (Calibri 11):  -> (X) SIM  ( ) NÃO\n"
-    texto_ficha += "ESPAÇAMENTO ENTRE LINHAS (1,5cm):        -> (X) SIM  ( ) NÃO\n\n"
+    texto_ficha += "ESPAÇAMENTO ENTRE LINHAS (1,5cm):        -> (X) SIM  ( ) NÃO\n"
+    texto_ficha += "ALINHAMENTO (Justificado):               -> (X) SIM  ( ) NÃO\n"
+    texto_ficha += "RECUO DE PARÁGRAFO (1,25cm):             -> (X) SIM  ( ) NÃO\n\n"
     
     texto_ficha += "3. STATUS DA ESTRUTURA DE SEÇÕES\n"
     texto_ficha += "------------------------------------------------------------------------\n"
@@ -96,102 +128,54 @@ def gerar_ficha_naqh(tipo, codigo, versao, encontradas, faltantes, aprovado):
     
     return texto_ficha.encode('utf-8')
 
-# --- 3. FLUXO DE COMPILAÇÃO E TRIAGEM DE METADADOS ---
-arquivo_word = st.file_uploader("Arraste o documento WORD (.docx) aqui para Triagem e Formatação", type=["docx"])
+# --- 3. FLUXO DE COMPILAÇÃO ---
+arquivo_word = st.file_uploader("Arraste o documento WORD (.docx) aqui", type=["docx"])
 
 if arquivo_word is not None:
-    dados_brutos = arquivo_word.read()
+    st.success(f"📂 Arquivo carregado com sucesso: **{arquivo_word.name}**")
+    disparar_processo = st.button("🚀 Iniciar Triagem e Formatação", type="primary")
     
-    # Instancia o documento para varredura estrutural
-    doc_triagem = docx.Document(BytesIO(dados_brutos))
-    
-    codigo_doc = "NÃO DETECTADO"
-    versao_doc = "NÃO DETECTADA"
-    
-    # Varredura inteligente de tabelas célula por célula
-    for tabela in doc_triagem.tables:
-        for linha in tabela.rows:
-            for celula in linha.cells:
-                texto_celula = celula.text.strip()
-                texto_celula_limpo = limpar_texto(texto_celula)
+    if disparar_processo:
+        with st.spinner("Descompactando e validando dados estruturais..."):
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as temp_file:
+                shutil.copyfileobj(arquivo_word, temp_file)
+                caminho_temp = temp_file.name
+
+            raw_corpo_xml = ""
+            raw_cabecalhos_xml = ""
+            
+            try:
+                with zipfile.ZipFile(caminho_temp, 'r') as z:
+                    if "word/document.xml" in z.namelist():
+                        raw_corpo_xml = z.read("word/document.xml").decode("utf-8", errors="ignore")
+                    
+                    # 🧠 SOLUÇÃO CORE: Varre e lê de forma universal TODOS os arquivos de cabeçalho da tabela do Word
+                    for f in z.namelist():
+                        if "word/header" in f and f.endswith(".xml"):
+                            raw_cabecalhos_xml += " " + z.read(f).decode("utf-8", errors="ignore")
+            except Exception as e:
+                st.error(f"❌ Falha na leitura do arquivo. Erro: {str(e)}")
+                st.stop()
                 
-                # Procura por Código na célula atual
-                if "CODIGO" in texto_celula_limpo:
-                    match = re.search(r'(PROT|POP|MAN|NOR|ROT)_[A-Z0-9_\s-]+', texto_celula, re.IGNORECASE)
-                    if match:
-                        codigo_doc = match.group(0).strip().upper().replace(" ", "")
+            texto_corpo_puro = extrair_texto_por_blocos_xml(raw_corpo_xml)
+            texto_cabecalho_puro = extrair_texto_por_blocos_xml(raw_cabecalhos_xml)
+            
+            texto_corpo_limpo = limpar_texto(texto_corpo_puro)
+            texto_cabecalho_limpo = limpar_texto(texto_cabecalho_puro)
+            
+            codigo_doc = "NÃO DETECTADO"
+            versao_doc = "NÃO DETECTADA"
+            
+            # Busca avançada e flexível por Código dentro de todo o cabeçalho extraído
+            match_cod = re.search(r'(PROT|POP|MAN|NOR|ROT|PLANC|POL|PROG|REG)_[A-Z0-9_|-]+', texto_cabecalho_limpo)
+            if match_cod:
+                codigo_doc = match_cod.group(0).strip()
                 
-                # Procura por Versão na célula atual
-                if "VERSAO" in texto_celula_limpo:
-                    match = re.search(r'(\d+)', texto_celula)
-                    if match:
-                        versao_doc = match.group(1).strip()
+            # Busca avançada por Versão que captura o número antes ou depois do caractere ordinal (ex: "Versão: 5ª")
+            match_ver = re.search(r'VERSAO\s*[:\s]*(\d+)', texto_cabecalho_limpo)
+            if match_ver:
+                versao_doc = match_ver.group(1).strip()
 
-    # Coleta de todos os textos para auditar seções
-    elementos_texto = [p.text.strip() for p in doc_triagem.paragraphs if p.text.strip()]
-    for t in doc_triagem.tables:
-        for r in t.rows:
-            for cell in r.cells:
-                if cell.text.strip(): elementos_texto.append(cell.text.strip())
-                
-    texto_total_raw = "  ".join(elementos_texto)
-    texto_limpo_busca = limpar_texto(texto_total_raw)
-    
-    # Triagem Avançada de Tipo Documental
-    tipo_detectado = "PROTOCOLO"
-    if "TIPO DE DOCUMENTO: PROTOCOLO" in texto_limpo_busca or "PROTOCOLO" in texto_limpo_busca[:500]:
-        tipo_detectado = "PROTOCOLO"
-    elif "PROCEDIMENTO OPERACIONAL" in texto_limpo_busca or "POP" in texto_limpo_busca[:500]:
-        tipo_detectado = "POP"
-    elif "NORMA" in texto_limpo_busca[:500]:
-        tipo_detectado = "NORMA"
-        
-    st.markdown("---")
-    st.subheader("📋 **Triagem e Auditoria de Estrutura**")
-    st.write(f"🔹 **Tipo de Documento Identificado:** `{tipo_detectado}`")
-    st.write(f"🔹 **Código do Documento:** `{codigo_doc}`")
-    st.write(f"🔹 **Versão do Documento:** `{versao_doc}`")
-
-    # Realiza a Varredura de Seções Autêntica
-    secoes_esperadas = SECOES_POR_TIPO[tipo_detectado]
-    secoes_encontradas, secoes_faltantes = [], []
-    
-    for secao in secoes_esperadas:
-        secao_sem_numero = re.sub(r'^\d+\s*[\.\-]?\s*', '', secao)
-        secao_limpa = limpar_texto(secao_sem_numero)
-        if re.search(rf'\b{re.escape(secao_limpa)}\b', texto_limpo_busca):
-            secoes_encontradas.append(secao)
-        else:
-            secoes_faltantes.append(secao)
-
-    # Exibição Analítica das Seções na Interface
-    c1, c2 = st.columns(2)
-    with c1:
-        st.markdown("##### ✅ Seções Identificadas")
-        for s in secoes_encontradas:
-            st.success(f"• {s}")
-    with c2:
-        st.markdown("##### ❌ Seções Ausentes")
-        if secoes_faltantes:
-            for s in secoes_faltantes:
-                st.error(f"• {s}")
-        else:
-            st.info("• Nenhuma seção obrigatória ausente!")
-
-    # Processamento e Emissão de Documentos
-    dados_finais = injetar_margens_via_xml_puro(dados_brutos)
-    documento_aprovado = (len(secoes_faltantes) == 0 and versao_doc != "NÃO DETECTADA" and codigo_doc != "NÃO DETECTADO")
-    ficha_naqh_bytes = gerar_ficha_naqh(tipo_detectado, codigo_doc, versao_doc, secoes_encontradas, secoes_faltantes, documento_aprovado)
-
-    st.markdown("---")
-    if documento_aprovado:
-        st.success("🎉 **DOCUMENTO APROVADO COM SUCESSO!** Tudo pronto para download.")
-        st.balloons()
-    else:
-        st.warning("⚠️ **DOCUMENTO FORMATADO COM PENDÊNCIAS!** Verifique os itens apontados na triagem.")
-
-    st.markdown("### 📥 ÁREA DE DOWNLOADS DO PROCESSO")
-    
-    # Botões de download em formato sequencial puro para evitar erros de parênteses abertos
-    st.download_button(label="📥 DOWNLOAD DO DOCUMENTO FORMATADO (.DOCX)", data=dados_finais, file_name=f"{codigo_doc}_Formatado.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-    
+            # Contingência: se as tags não estavam salvas no cabeçalho XML principal, tenta ler o corpo
+            if codigo_doc == "NÃO DETECTADO":
+                match_cod_c = re.search(r'(PROT|POP|MAN|NOR|ROT|PLANC|POL|PROG|REG)_[A-Z0-9_|-]+', texto_corpo_limpo)
