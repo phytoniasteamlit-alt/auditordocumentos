@@ -1,109 +1,123 @@
 import streamlit as st
 import docx
 import re
+import unicodedata
 from io import BytesIO
 
-st.set_page_config(page_title="AUDITORIA — FINALMENTE!", page_icon="🔍", layout="wide")
+st.set_page_config(page_title="AUDITORIA — SEM ACENTO!", page_icon="🔍", layout="wide")
 
-st.title("🔍 AUDITORIA — CORRIGIDA 100%")
-st.markdown("### ✅ Código, Versão e Seções com nomes COMPLETOS")
+st.title("🔍 AUDITORIA — BUSCA SEM ACENTO")
+st.markdown("### ✅ Ignora acento, maiúscula/minúscula e espaços → ACHA TUDO!")
 
 # ============================================================
-# 📋 SEÇÕES — BUSCA PELO INÍICIO (não precisa do nome completo!)
+# 🧹 FUNÇÃO: REMOVER ACENTOS E NORMALIZAR TEXTO
+# ============================================================
+def limpar_texto(texto):
+    """Remove acentos, converte para maiúsculo, remove espaços extras"""
+    if not texto:
+        return ""
+    # Remove acentos
+    sem_acento = unicodedata.normalize('NFKD', texto).encode('ASCII', 'ignore').decode('ASCII')
+    # Maiúsculo e espaços únicos
+    return re.sub(r'\s+', ' ', sem_acento.upper().strip())
+
+# ============================================================
+# 📋 SEÇÕES — NOMES BASE (sem acento na busca)
 # ============================================================
 SECOES_POR_TIPO = {
     "PROT": [
         "1. OBJETIVO",
         "2. APLICABILIDADE",
-        "3. REFERENCIAL TEÓRICO",
-        "4. CLASSIFICAÇÃO",
+        "3. REFERENCIAL TEORICO",
+        "4. CLASSIFICACAO",
         "5. RESPONSABILIDADES",
-        "6. MEDIDAS OBRIGATÓRIAS",
-        "7. ESTRATÉGIAS DE MONITORAMENTO",
-        "8. REFERÊNCIAS"
+        "6. MEDIDAS OBRIGATORIAS",
+        "7. ESTRATEGIAS DE MONITORAMENTO",
+        "8. REFERENCIAS"
     ],
     "POP": [
-        "1. DEFINIÇÃO",
+        "1. DEFINICAO",
         "2. APLICABILIDADE",
-        "3. RESPONSÁVEL",
-        "4. DESCRIÇÃO DA EXECUÇÃO",
+        "3. RESPONSAVEL",
+        "4. DESCRICAO DA EXECUCAO",
         "5. MATERIAIS UTILIZADOS",
         "6. TARIFA",
-        "7. REFERÊNCIAS",
+        "7. REFERENCIAS",
         "8. ANEXOS"
     ],
     "POI": [
-        "1. INTRODUÇÃO",
+        "1. INTRODUCAO",
         "2. OBJETIVO",
         "3. FINALIDADE",
-        "4. ABRANGÊNCIA",
+        "4. ABRANGENCIA",
         "5. RESPONSABILIDADES",
-        "6. GESTÃO DE RISCO",
+        "6. GESTAO DE RISCO",
         "7. ANEXOS",
-        "8. REFERÊNCIAS"
+        "8. REFERENCIAS"
     ],
     "NOR": [
         "1. OBJETIVO",
         "2. APLICABILIDADE",
-        "3. DESCRIÇÃO DA NORMA",
-        "4. RESPONSÁVEL",
+        "3. DESCRICAO DA NORMA",
+        "4. RESPONSAVEL",
         "5. EFETIVO NO CUMPRIMENTO",
-        "6. NORMA DE REFERÊNCIA",
+        "6. NORMA DE REFERENCIA",
         "7. ANEXOS"
     ],
     "REG": [
         "1. FINALIDADE",
-        "2. ÂMBITO",
-        "3. COMPETÊNCIA E ORGANIZAÇÃO",
-        "4. DISPOSIÇÕES GERAIS",
-        "5. DISPOSIÇÕES FINAIS"
+        "2. AMBITO",
+        "3. COMPETENCIA E ORGANIZACAO",
+        "4. DISPOSICOES GERAIS",
+        "5. DISPOSICOES FINAIS"
     ],
     "PROG": [
-        "1. REFERENCIAL TEÓRICO",
+        "1. REFERENCIAL TEORICO",
         "2. OBJETIVOS",
         "3. METAS E INDICADORES",
-        "4. DEFINIÇÃO DE METAS",
+        "4. DEFINICAO DE METAS",
         "5. ACOMPANHAMENTO E MONITORAMENTO",
-        "6. AVALIAÇÃO DE RESULTADOS",
-        "7. REFERÊNCIAS",
+        "6. AVALIACAO DE RESULTADOS",
+        "7. REFERENCIAS",
         "8. ANEXOS"
     ],
     "PLAN": [
         "1. OBJETIVO",
         "2. APLICABILIDADE",
-        "3. DESCRIÇÃO DO CENÁRIO DE RISCO",
-        "4. MEDIDAS DE CONTINGÊNCIA",
-        "5. ESTRATÉGIAS DE RESPOSTA",
-        "6. REFERÊNCIAS",
+        "3. DESCRICAO DO CENARIO DE RISCO",
+        "4. MEDIDAS DE CONTINGENCIA",
+        "5. ESTRATEGIAS DE RESPOSTA",
+        "6. REFERENCIAS",
         "7. ANEXOS"
     ],
     "ROT": [
         "1. OBJETIVO",
         "2. APLICABILIDADE",
-        "3. DESCRIÇÃO DA ROTINA",
-        "4. RESPONSÁVEL",
-        "5. ETAPAS DE EXECUÇÃO",
-        "6. REFERÊNCIAS",
+        "3. DESCRICAO DA ROTINA",
+        "4. RESPONSAVEL",
+        "5. ETAPAS DE EXECUCAO",
+        "6. REFERENCIAS",
         "7. ANEXOS"
     ]
 }
 
 # ============================================================
-# 🧠 FUNÇÃO CORRIGIDA — ACHA TUDO!
+# 🧠 FUNÇÃO DE AUDITORIA — SEM ACENTO!
 # ============================================================
 def auditar_documento(arquivo_bytes):
     doc = docx.Document(BytesIO(arquivo_bytes))
     
-    # ✅ LÊ TUDO e LIMPA
+    # ✅ LÊ TUDO e LIMPA (sem acento, tudo maiúsculo, espaços normais)
     texto_bruto = ""
     for p in doc.paragraphs:
-        texto_bruto += p.text.upper() + "\n"
+        texto_bruto += p.text + "\n"
     for tabela in doc.tables:
         for linha in tabela.rows:
             for celula in linha.cells:
-                texto_bruto += celula.text.upper() + " "
+                texto_bruto += celula.text + " "
     
-    texto = re.sub(r'[\s#]+', ' ', texto_bruto).strip()
+    # ✅ LIMPA TUDO: sem acento, tudo maiúsculo, espaços únicos
+    texto = limpar_texto(texto_bruto)
     
     # 🔍 IDENTIFICAR TIPO
     tipo_detectado = "PROT"
@@ -112,34 +126,33 @@ def auditar_documento(arquivo_bytes):
             tipo_detectado = tipo
             break
     
-    # 🔍 CÓDIGO — CORRIGIDO: BUSCA SOMENTE DEPOIS DE "CÓDIGO:" !!!
+    # 🔍 CÓDIGO — SEM ACENTO! Busca "CODIGO:" ou "Código:" → ACHA OS DOIS!
     codigo_detectado = None
-    match_codigo = re.search(r'CÓDIGO[:\s]+([A-Z]{3,4}_[A-Z0-9]+)', texto)
+    match_codigo = re.search(r'CODIGO[:\s]+([A-Z]{3,4}_[A-Z0-9]+)', texto)
     if match_codigo and match_codigo.group(1):
         codigo_detectado = match_codigo.group(1).strip()
     
-    # 🔍 VERSÃO — ACEITA "5ª", "5°", "5", "V5" !!!
+    # 🔍 VERSÃO — SEM ACENTO! Busca "VERSAO:" ou "Versão:" → ACHA OS DOIS!
     versao_detectada = None
-    match_versao = re.search(r'VERSÃO[:\s]*[:]?\s*(?:VERSÃO|[Vv])?\s*(\d+)', texto)
+    match_versao = re.search(r'VERSAO[:\s]*(?:VERSAO|[Vv])?\s*(\d+)', texto)
     if match_versao and match_versao.group(1):
         versao_detectada = match_versao.group(1).strip()
     
     # 🔍 VALIDADE
     validade_detectada = None
-    match_validade = re.search(r'VALIDADE[:\s]*[:]?\s*([\d/]+)', texto)
+    match_validade = re.search(r'VALIDADE[:\s]*([\d/]+)', texto)
     if match_validade and match_validade.group(1):
         validade_detectada = match_validade.group(1).strip()
     
-    # 🔍 SEÇÕES — BUSCA PELO INÍCIO! Não precisa do nome inteiro!
+    # 🔍 SEÇÕES — COMPARA SEM ACENTO!
     secoes_esperadas = SECOES_POR_TIPO[tipo_detectado]
     secoes_encontradas = []
     secoes_faltantes = []
     
     for secao in secoes_esperadas:
-        secao_limpa = re.sub(r'[\s#]+', ' ', secao.upper()).strip()
-        # ✅ Busca se o texto COMEÇA com o nome da seção → encontra mesmo com resto!
-        padrao = rf'\b{re.escape(secao_limpa)}\b'
-        if re.search(padrao, texto):
+        secao_limpa = limpar_texto(secao)
+        # Busca se o texto COMEÇA com o nome da seção → encontra mesmo com resto!
+        if re.search(rf'\b{re.escape(secao_limpa)}\b', texto):
             secoes_encontradas.append(secao)
         else:
             secoes_faltantes.append(secao)
@@ -161,17 +174,17 @@ def auditar_documento(arquivo_bytes):
 # ============================================================
 # 🚀 INTERFACE
 # ============================================================
-with st.form("auditoria_final_final"):
+with st.form("auditoria_sem_acento_final"):
     arquivo_word = st.file_uploader(
         "📂 Arraste o documento WORD (.docx) AQUI",
         type=["docx"]
     )
-    enviado = st.form_submit_button("🔍 EXECUTAR AUDITORIA — FINAL", type="primary")
+    enviado = st.form_submit_button("🔍 EXECUTAR AUDITORIA — SEM ACENTO", type="primary")
 
 if enviado and arquivo_word:
     st.info(f"✅ Arquivo: **{arquivo_word.name}**")
     
-    with st.spinner("Escaneando... buscando código, versão e seções..."):
+    with st.spinner("Escaneando... ignorando acentos e diferenças..."):
         try:
             rel = auditar_documento(arquivo_word.read())
             
