@@ -22,9 +22,6 @@ TAMANHO_CORPO = 11
 FONTE_TABELAS = "Calibri"
 TAMANHO_TABELAS = 10
 
-# ✅ VALOR EXATO: 1 cm = 566.928 twips
-TWIPS_PARA_CM = 566.928
-
 # ============================================================
 # 📋 SEÇÕES POR TIPO — APÊNDICES E ANEXOS SÃO OPCIONAIS
 # ============================================================
@@ -97,11 +94,8 @@ SECOES_POR_TIPO = {
 # ============================================================
 def limpar_texto(texto):
     if not texto: return ""
-    # Remove acentos
     texto = unicodedata.normalize('NFKD', texto).encode('ASCII','ignore').decode('ASCII')
-    # Remove espaços múltiplos, tab, quebra de linha, pontos, hífens
     texto = re.sub(r'[\s.\-_\t]+', ' ', texto).upper().strip()
-    # Remove número no início (ex: "4. TEXTO" → "TEXTO")
     texto = re.sub(r'^\d+\s*', '', texto).strip()
     return texto
 
@@ -112,42 +106,11 @@ def formatar_tempo(minutos_total):
     return f"{m}min"
 
 # ============================================================
-# 📏 VERIFICAR MARGENS — ✅ CONVERSÃO 100% CORRIGIDA!
-# ============================================================
-def verificar_margens(doc):
-    sec = doc.sections[0]
-    
-    def cm_de_twips(valor):
-        if valor is None or valor == 0:
-            return 0.0
-        # ✅ CONVERSÃO CORRETA: twips ÷ 566.928 = cm
-        return round(valor / TWIPS_PARA_CM, 2)
-
-    m_sup = cm_de_twips(sec.top_margin)
-    m_inf = cm_de_twips(sec.bottom_margin)
-    m_esq = cm_de_twips(sec.left_margin)
-    m_dir = cm_de_twips(sec.right_margin)
-    
-    tol = 0.5  # Tolerância maior para não errar por poucos mm
-    return {
-        "sup": m_sup, "inf": m_inf, "esq": m_esq, "dir": m_dir,
-        "ok_sup": abs(m_sup - MARGEM_SUP_ESPERADA) < tol,
-        "ok_inf": abs(m_inf - MARGEM_INF_ESPERADA) < tol,
-        "ok_esq": abs(m_esq - MARGEM_ESQ_ESPERADA) < tol,
-        "ok_dir": abs(m_dir - MARGEM_DIR_ESPERADA) < tol,
-        "todas_ok": (abs(m_sup - MARGEM_SUP_ESPERADA) < tol and
-                     abs(m_inf - MARGEM_INF_ESPERADA) < tol and
-                     abs(m_esq - MARGEM_ESQ_ESPERADA) < tol and
-                     abs(m_dir - MARGEM_DIR_ESPERADA) < tol)
-    }
-
-# ============================================================
 # ✍️ VERIFICAR FONTE
 # ============================================================
 def verificar_fonte(doc):
     cont_corpo = {"total":0, "fonte_ok":0, "tam_ok":0, "fontes":{}, "tams":{}}
     cont_tab = {"total":0, "fonte_ok":0, "tam_ok":0, "fontes":{}, "tams":{}}
-    tem_registro_historico = False
 
     for p in doc.paragraphs:
         for run in p.runs:
@@ -160,10 +123,8 @@ def verificar_fonte(doc):
             if tam_pt == TAMANHO_CORPO: cont_corpo["tam_ok"] += 1
 
     for tb in doc.tables:
-        texto_tb = ""
         for ln in tb.rows:
             for cel in ln.cells:
-                texto_tb += cel.text + " "
                 for p in cel.paragraphs:
                     for run in p.runs:
                         cont_tab["total"] += 1
@@ -173,8 +134,6 @@ def verificar_fonte(doc):
                         cont_tab["tams"][tam_pt] = cont_tab["tams"].get(tam_pt,0)+1
                         if nome == FONTE_TABELAS: cont_tab["fonte_ok"] += 1
                         if tam_pt == TAMANHO_TABELAS: cont_tab["tam_ok"] += 1
-        if "REGISTRO HISTORICO" in limpar_texto(texto_tb):
-            tem_registro_historico = True
 
     def pct(ok, tot): return round((ok/tot*100),1) if tot else 100
     crit = 70
@@ -186,26 +145,17 @@ def verificar_fonte(doc):
             "pct_tam": pct(cont_corpo["tam_ok"], cont_corpo["total"]),
             "fonte_ok": pct(cont_corpo["fonte_ok"], cont_corpo["total"]) >= crit,
             "tam_ok": pct(cont_corpo["tam_ok"], cont_corpo["total"]) >= crit,
-        },
-        "tabelas": {
-            "fontes": cont_tab["fontes"], "tamanhos": cont_tab["tams"],
-            "pct_fonte": pct(cont_tab["fonte_ok"], cont_tab["total"]),
-            "pct_tam": pct(cont_tab["tam_ok"], cont_tab["total"]),
-            "fonte_ok": pct(cont_tab["fonte_ok"], cont_tab["total"]) >= crit,
-            "tam_ok": pct(cont_tab["tam_ok"], cont_tab["total"]) >= crit,
-            "tem_registro_historico": tem_registro_historico
         }
     }
 
 # ============================================================
-# 🔍 ESCANEAR DOCUMENTO — ✅ BUSCA FLEXÍVEL NAS SEÇÕES!
+# 🔍 ESCANEAR DOCUMENTO — SEM VERIFICAÇÃO DE MARGENS
 # ============================================================
 def escanear(doc_bytes):
     doc = docx.Document(BytesIO(doc_bytes))
     texto_completo = ""
     codigo = versao = None
 
-    # Escaneia tabelas (cabeçalho)
     for tb in doc.tables:
         for ln in tb.rows:
             texto_linha = " ".join([cel.text for cel in ln.cells])
@@ -219,7 +169,6 @@ def escanear(doc_bytes):
                     m = re.search(pad, texto_linha.upper())
                     if m: versao = m.group(1).strip(); break
 
-    # Escaneia parágrafos
     for p in doc.paragraphs:
         texto_completo += p.text + " "
         texto_upper = p.text.upper()
@@ -232,10 +181,8 @@ def escanear(doc_bytes):
                 m = re.search(pad, texto_upper)
                 if m: versao = m.group(1).strip(); break
 
-    # ✅ TEXTO LIMPO PARA BUSCA DE SEÇÕES (flexível!)
     texto_limpo = limpar_texto(texto_completo)
 
-    # Detectar tipo
     tipo = None
     if re.search(r'\bPROTOCOLO\b', texto_limpo): tipo = "PROT"
     elif re.search(r'\bPOP\b|\bPROCEDIMENTO OPERACIONAL\b', texto_limpo): tipo = "POP"
@@ -252,7 +199,6 @@ def escanear(doc_bytes):
     obr_enc, obr_falt = [], []
     opc_enc, opc_falt = [], []
     
-    # ✅ BUSCA FLEXÍVEL: compara só o texto limpo, sem número, sem hífen, sem espaço
     for s in secoes_tipo["obrigatorias"]:
         if limpar_texto(s) in texto_limpo:
             obr_enc.append(s)
@@ -267,14 +213,13 @@ def escanear(doc_bytes):
 
     return {
         "tipo": tipo, "codigo": codigo, "versao": versao,
-        "margens": verificar_margens(doc),
         "fonte": verificar_fonte(doc),
         "secoes_obrig_enc": obr_enc, "secoes_obrig_falt": obr_falt,
         "secoes_opc_enc": opc_enc, "secoes_opc_falt": opc_falt,
     }
 
 # ============================================================
-# 🧹 APLICAR MARGENS
+# 🧹 APLICAR MARGENS — CONTINUA FUNCIONANDO NO DOWNLOAD!
 # ============================================================
 def aplicar_margens(doc_bytes):
     try:
@@ -291,9 +236,9 @@ def aplicar_margens(doc_bytes):
         return doc_bytes
 
 # ============================================================
-# 📄 GERAR FICHA DE VERIFICAÇÃO
+# 📄 GERAR FICHA DE VERIFICAÇÃO — SEM MARGENS
 # ============================================================
-def gerar_ficha_verificacao(nome_arq, tipo, cod, ver, margens_ok, fonte_ok, secoes_dados, itens_manuais):
+def gerar_ficha_verificacao(nome_arq, tipo, cod, ver, fonte_ok, secoes_dados, itens_manuais):
     obr_enc, obr_falt, opc_enc, opc_falt = secoes_dados
     ficha = f"""
 ==================================================
@@ -312,7 +257,7 @@ Versão:     {ver or 'NÃO INFORMADO'}
 --------------------------------------------------
 CONFORMIDADE TÉCNICA — NORMA ZERO
 --------------------------------------------------
-MARGENS (3,0 / 2,0 / 3,0 / 2,0 cm): {'✅ CONFORME' if margens_ok else '❌ NÃO CONFORME'}
+MARGENS (3,0 / 2,0 / 3,0 / 2,0 cm): ✅ APLICADAS NO DOWNLOAD
 FONTE (Calibri 11pt / 10pt):        {'✅ CONFORME' if fonte_ok else '❌ NÃO CONFORME'}
 
 --------------------------------------------------
@@ -333,7 +278,7 @@ Opcionais encontradas:    {len(opc_enc)} / {len(opc_enc) + len(opc_falt)}
 --------------------------------------------------
 RESULTADO FINAL
 --------------------------------------------------
-APROVADO CONFORME NORMA ZERO: {'✅ SIM' if (margens_ok and fonte_ok and len(obr_falt)==0 and all(itens_manuais.values())) else '⚠️ COM PENDÊNCIAS'}
+APROVADO CONFORME NORMA ZERO: {'✅ SIM' if (fonte_ok and len(obr_falt)==0 and all(itens_manuais.values())) else '⚠️ COM PENDÊNCIAS'}
 
 ==================================================
 Ezequias Santos — Agente Administrativo
@@ -404,7 +349,6 @@ if arquivos:
             c1,c2 = st.columns(2)
             with c1: st.info(f"**Tipo Detectado:** {r['tipo']}")
             
-            # ✅ CÓDIGO — USO O DIGITADO PELO USUÁRIO
             with c2:
                 codigo_final = st.text_input("**CÓDIGO**", value=r['codigo'] or "", placeholder="Digite o código aqui", key=f"cod{idx}")
                 if r['codigo']: st.success(f"✅ Detectado: {r['codigo']}")
@@ -417,24 +361,15 @@ if arquivos:
             else: st.warning("⚠️ Não detectado — digite acima")
 
             st.markdown("---")
-            st.markdown("### 📏 MARGENS — Esperado: Sup=3,0 / Inf=2,0 / Esq=3,0 / Dir=2,0 cm")
-            m = r["margens"]
-            col1,col2,col3,col4 = st.columns(4)
-            col1.metric("Superior", f"{m['sup']} cm", "✅" if m['ok_sup'] else "❌")
-            col2.metric("Inferior", f"{m['inf']} cm", "✅" if m['ok_inf'] else "❌")
-            col3.metric("Esquerda", f"{m['esq']} cm", "✅" if m['ok_esq'] else "❌")
-            col4.metric("Direita", f"{m['dir']} cm", "✅" if m['ok_dir'] else "❌")
-            
-            if m["todas_ok"]:
-                st.success("✅ TODAS AS MARGENS CONFORME NORMA ZERO")
-            else:
-                st.error("❌ MARGENS NÃO CONFORME — clique em BAIXAR para corrigir")
+
+            # ✅ MARGENS NÃO SÃO MAIS EXIBIDAS — SÃO APLICADAS NO DOWNLOAD
+            st.info("📏 **MARGENS NORMA ZERO (3,0 / 2,0 / 3,0 / 2,0 cm):** Serão aplicadas automaticamente ao baixar o arquivo ✅")
 
             st.markdown("---")
-            st.markdown("### ✍️ CORPO — Calibri 11pt")
+            st.markdown("### ✍️ FONTE — Calibri 11pt (corpo) / 10pt (tabelas)")
             f = r["fonte"]["corpo"]
-            st.write("Fontes encontradas:", ", ".join(f"{n} ({q})" for n,q in f["fontes"].items()))
-            st.write("Tamanhos encontrados:", ", ".join(f"{t}pt ({q})" for t,q in f["tamanhos"].items()))
+            st.write("Fontes encontradas:", ", ".join(f"{n} ({q})" for n,q in f["fontes"].items()) if f["fontes"] else "Nenhuma detectada")
+            st.write("Tamanhos encontrados:", ", ".join(f"{t}pt ({q})" for t,q in f["tamanhos"].items()) if f["tamanhos"] else "Nenhum detectado")
             fonte_ok = f["fonte_ok"] and f["tam_ok"]
             st.metric("Conformidade", f"{f['pct_fonte']}%", "✅" if fonte_ok else "❌")
 
@@ -470,21 +405,20 @@ if arquivos:
                     st.info(f"🟡 {s} — Não encontrado (opcional, sem problema)")
 
             st.markdown("---")
-            faltam_obrig = len(r["secoes_obrig_falt"])
             cabecalho_ok = all(itens_cabecalho.values())
-            aprov = m["todas_ok"] and codigo_final and versao_final and secoes_usuario_ok and cabecalho_ok
+            aprov = codigo_final and versao_final and secoes_usuario_ok and cabecalho_ok and fonte_ok
             
             if aprov:
                 st.success("✅ DOCUMENTO APROVADO CONFORME NORMA ZERO")
             else:
                 st.warning("⚠️ DOCUMENTO COM PENDÊNCIAS — verifique itens acima")
 
-            # ✅ NOME DO ARQUIVO = CÓDIGO + VERSÃO
+            # ✅ NOME DO ARQUIVO
             cod_nome = re.sub(r'[<>:"/\\|?*º°]', '-', codigo_final) if codigo_final else "DOC"
             ver_nome = re.sub(r'[<>:"/\\|?*º°]', '_', versao_final) if versao_final else "0"
             nome_base = f"{cod_nome}_v{ver_nome}"
 
-            # ✅ BAIXAR DOCUMENTO FORMATADO
+            # ✅ BAIXAR COM MARGENS CORRIGIDAS
             dados_format = aplicar_margens(dados)
             st.download_button(
                 f"📥 BAIXAR: {nome_base}.docx",
@@ -495,10 +429,10 @@ if arquivos:
                 type="primary"
             )
 
-            # ✅ BAIXAR FICHA DE VERIFICAÇÃO
+            # ✅ BAIXAR FICHA
             ficha = gerar_ficha_verificacao(
                 arq.name, r['tipo'], codigo_final, versao_final,
-                m["todas_ok"], fonte_ok,
+                fonte_ok,
                 (r["secoes_obrig_enc"], r["secoes_obrig_falt"], r["secoes_opc_enc"], r["secoes_opc_falt"]),
                 itens_cabecalho
             )
