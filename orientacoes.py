@@ -105,10 +105,10 @@ if arquivo_word:
     # Instancia o documento para varredura estrutural
     doc_triagem = docx.Document(BytesIO(dados_brutos))
     
-    # 🧠 ESTRATÉGIA NOVA: Varredura de tabelas célula por célula para achar Código e Versão perfeitamente
     codigo_doc = "NÃO DETECTADO"
     versao_doc = "NÃO DETECTADA"
     
+    # Varredura inteligente de tabelas célula por célula
     for tabela in doc_triagem.tables:
         for linha in tabela.rows:
             for celula in linha.cells:
@@ -200,3 +200,4 @@ if arquivo_word:
         )
     with d2:
         st.download_button(
+            label="📥 DOWNLOAD DA FICHA DE VERIFICAÇÃO NAQH (.TXT)",
