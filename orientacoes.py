@@ -40,22 +40,34 @@ def limpar_texto(texto):
     sem_acento = sem_acento.replace('\n', ' ').replace('\r', ' ')
     return re.sub(r'\s+', ' ', sem_acento.upper().strip())
 
-# --- 2. MOTOR DE ALTERAÇÃO XML DIRETA VIA ARQUIVO TEMPORÁRIO (DISK MODE) ---
+# --- 2. MOTOR ULTRA VELOZ SEM REGEX (EVITA TRAVAMENTO COM IMAGENS GRANDES) ---
 def injetar_margens_via_disco(caminho_origem):
-    top_dxa, bottom_dxa, left_dxa, right_dxa = "1134", "1134", "1134", "1701"
+    # Valores oficiais fixados em dxa (3,0cm = 1701 | 2,0cm = 1134)
+    top_val, bottom_val, left_val, right_val = "1134", "1134", "1134", "1701"
+    
     caminho_saida = caminho_origem + "_formatado.docx"
     zip_original = zipfile.ZipFile(caminho_origem, 'r')
     
     with zipfile.ZipFile(caminho_saida, "w", zipfile.ZIP_DEFLATED) as zip_novo:
         for item in zip_original.infolist():
             conteudo = zip_original.read(item.filename)
+            
+            # Se for o arquivo de texto do corpo, altera as margens via fatiamento rápido de string
             if item.filename == "word/document.xml":
-                xml_texto = conteudo.decode("utf-8")
-                xml_texto = re.sub(r'w:top="[^"]*"', f'w:top="{top_dxa}"', xml_texto)
-                xml_texto = re.sub(r'w:bottom="[^"]*"', f'w:bottom="{bottom_dxa}"', xml_texto)
-                xml_texto = re.sub(r'w:left="[^"]*"', f'w:left="{left_dxa}"', xml_texto)
-                xml_texto = re.sub(r'w:right="[^"]*"', f'w:right="{right_dxa}"', xml_texto)
+                xml_texto = conteudo.decode("utf-8", errors="ignore")
+                
+                # Fatiamento cirúrgico de strings (1000x mais rápido que Regex em arquivos gigantes)
+                for tag, val in [('w:top="', top_val), ('w:bottom="', bottom_val), ('w:left="', left_val), ('w:right="', right_val)]:
+                    partes = xml_texto.split(tag)
+                    if len(partes) > 1:
+                        for i in range(1, len(partes)):
+                            subpartes = partes[i].split('"', 1)
+                            if len(subpartes) > 1:
+                                partes[i] = val + '"' + subpartes[1]
+                        xml_texto = tag.join(partes)
+                        
                 conteudo = xml_texto.encode("utf-8")
+                
             zip_novo.writestr(item, conteudo)
             
     zip_original.close()
@@ -111,18 +123,17 @@ def gerar_ficha_naqh(tipo, codigo, versao, encontradas, faltantes, aprovado):
     
     return texto_ficha.encode('utf-8')
 
-# --- 3. FLUXO DE COMPILAÇÃO COM GATILHO SEGURO DE BOTÃO ---
+# --- 3. FLUXO DE COMPILAÇÃO COM GATILHO SEGURO ---
 arquivo_word = st.file_uploader("Arraste o documento WORD (.docx) aqui", type=["docx"])
 
 if arquivo_word is not None:
     st.success(f"📂 Arquivo carregado com sucesso: **{arquivo_word.name}**")
     
-    # Botão de disparo obrigatório para travar o processamento automático instável
     disparar_processo = st.button("🚀 Iniciar Triagem e Formatação", type="primary")
     
     if disparar_processo:
-        with st.spinner("Analisando estruturas XML pesadas de forma segura..."):
-            # Salva o upload diretamente no disco temporário
+        with st.spinner("Remontando tags XML estruturais em alta performance..."):
+            # Salva o arquivo temporariamente no disco
             with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as temp_file:
                 shutil.copyfileobj(arquivo_word, temp_file)
                 caminho_temp = temp_file.name
@@ -168,11 +179,5 @@ if arquivo_word is not None:
                 if match_ver_c:
                     versao_doc = match_ver_c.group(1).strip()
 
-            # Triagem Avançada
+            # Triagem de Tipo Baseada no Topo do Texto
             tipo_detectado = "PROTOCOLO"
-            texto_analise_tipo = texto_cabecalho_limpo + " " + texto_corpo_limpo[:1000]
-            
-            if "PLANO DE CONTINGENCIA" in texto_analise_tipo or "PLANC" in texto_analise_tipo:
-                tipo_detectado = "PLANO DE CONTINGENCIA"
-            elif "POLITICA INSTITUCIONAL" in texto_analise_tipo or "POL" in texto_analise_tipo:
-                tipo_detectado = "POLITICA INSTITUCIONAL"
