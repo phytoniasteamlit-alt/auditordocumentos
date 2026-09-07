@@ -22,7 +22,6 @@ TAMANHO_CORPO = 11
 FONTE_TABELAS = "Calibri"
 TAMANHO_TABELAS = 10
 
-# ✅ CORRIGIDO: 1 cm = 567 twips (valor EXATO)
 TWIPS_PARA_CM = 567.0
 
 # ============================================================
@@ -59,15 +58,12 @@ SECOES_POR_TIPO = {
 }
 
 # ============================================================
-# 🧹 FUNÇÕES AUXILIARES — MAIS FLEXÍVEIS
+# 🧹 FUNÇÕES AUXILIARES
 # ============================================================
 def limpar_texto(texto):
     if not texto: return ""
-    # Remove acentos
     texto = unicodedata.normalize('NFKD', texto).encode('ASCII','ignore').decode('ASCII')
-    # Remove pontos, espaços múltiplos, tabulações e deixa tudo maiúsculo
     texto = re.sub(r'[\s.\t]+', ' ', texto).upper().strip()
-    # Remove o número inicial da seção (ex: "1. OBJETIVO" → "OBJETIVO")
     texto = re.sub(r'^\d+\s*', '', texto).strip()
     return texto
 
@@ -78,24 +74,20 @@ def formatar_tempo(minutos_total):
     return f"{m}min"
 
 # ============================================================
-# 📏 VERIFICAR MARGENS — ✅ CORRIGIDO O ERRO PRINCIPAL!
+# 📏 VERIFICAR MARGENS
 # ============================================================
 def verificar_margens(doc):
     sec = doc.sections[0]
-    
     def cm_de_twips(twips_valor):
         if twips_valor is None or twips_valor == 0:
             return 0.0
-        # ✅ DIVISÃO CORRETA twips / 567 = cm
         valor_cm = twips_valor / TWIPS_PARA_CM
         return round(valor_cm, 2)
-    
     m_sup = cm_de_twips(sec.top_margin)
     m_inf = cm_de_twips(sec.bottom_margin)
     m_esq = cm_de_twips(sec.left_margin)
     m_dir = cm_de_twips(sec.right_margin)
-    
-    tol = 0.15  # Margem de tolerância maior para não errar por pouca coisa
+    tol = 0.15
     return {
         "sup": m_sup, "inf": m_inf, "esq": m_esq, "dir": m_dir,
         "ok_sup": abs(m_sup - MARGEM_SUP_ESPERADA) < tol,
@@ -167,20 +159,18 @@ def verificar_fonte(doc):
     }
 
 # ============================================================
-# 🔍 ESCANEAR DOCUMENTO — ✅ BUSCA CÓDIGO+VERSÃO MELHORADA
+# 🔍 ESCANEAR DOCUMENTO — ✅ CORRIGIDO O PARÊNTESE!
 # ============================================================
 def escanear(doc_bytes):
-    doc = docx.Document(BytesIO(doc_bytes)))
+    doc = docx.Document(BytesIO(doc_bytes))  # ✅ AQUI ESTAVA O ERRO — tirei o ) sobrando
     texto_completo = ""
     codigo = versao = None
 
-    # Tabelas (cabeçalho) — busca CÓDIGO e VERSÃO
     for tb in doc.tables:
         for ln in tb.rows:
             texto_linha = " ".join([cel.text for cel in ln.cells])
             texto_completo += texto_linha + " "
             
-            # ✅ BUSCA MAIS FLEXÍVEL: aceita variações de formatação
             if not codigo:
                 m_cod = re.search(r'C[ÓO]DIGO\s*[:：=\-]?\s*([A-Z0-9_\-\/\.]+)', texto_linha.upper())
                 if m_cod:
@@ -191,13 +181,11 @@ def escanear(doc_bytes):
                 if m_ver:
                     versao = m_ver.group(1).strip()
 
-    # Corpo do texto
     for p in doc.paragraphs:
         texto_completo += p.text + " "
 
     texto_limpo = limpar_texto(texto_completo)
 
-    # ✅ DETECTAR TIPO
     tipo = None
     if re.search(r'\bPROTOCOLO\b', texto_limpo): tipo = "PROT"
     elif re.search(r'\bPOP\b|\bPROCEDIMENTO OPERACIONAL\b', texto_limpo): tipo = "POP"
@@ -210,14 +198,12 @@ def escanear(doc_bytes):
     elif re.search(r'\bMANUAL\b|\bMAN\b', texto_limpo): tipo = "MAN"
     else: tipo = "PROT"
 
-    # ✅ SEÇÕES — COMPARAÇÃO FLEXÍVEL (ignora número e formatação)
     secoes_esperadas = SECOES_POR_TIPO[tipo]
     encontradas = []
     faltantes = []
     
     for secao in secoes_esperadas:
         secao_limpa = limpar_texto(secao)
-        # Procura a seção APENAS pelo nome (sem o número)
         if secao_limpa in texto_limpo:
             encontradas.append(secao)
         else:
