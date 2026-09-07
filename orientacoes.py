@@ -1,5 +1,4 @@
 import streamlit as st
-import docx
 import zipfile
 import re
 import unicodedata
@@ -19,7 +18,7 @@ st.markdown("""
 O sistema aplica as margens oficiais da Norma Zero alterando diretamente as tags estruturais do pacote, **garantindo a permanência absoluta de logomarcas, tabelas de cabeçalho e paginações originais**.
 """)
 
-# --- 📋 DICIONÁRIO COMPLETO ATUALIZADO RIGOROSAMENTE CONFORME AS TABELAS INSTITUCIONAIS ---
+# --- 📋 DICIONÁRIO DE SEÇÕES OBRIGATÓRIAS ---
 SECOES_POR_TIPO = {
     "MANUAL": ["CAPA", "ELABORADORES", "COLABORADORES", "SUMÁRIO", "APRESENTAÇÃO", "DESCRIÇÃO", "REFERÊNCIAS", "APÊNDICES", "ANEXOS"],
     "NORMA": ["INTRODUÇÃO", "OBJETIVO", "APLICABILIDADE", "DESCRIÇÃO DA NORMA", "RESPONSÁVEL", "EFEITOS DO NÃO CUMPRIMENTO DA NORMA", "REFERÊNCIAS", "APÊNDICES", "ANEXOS"],
@@ -108,72 +107,72 @@ arquivo_word = st.file_uploader("Arraste o documento WORD (.docx) aqui para Tria
 if arquivo_word is not None:
     dados_brutos = arquivo_word.read()
     
-    # Extrator de Código e Versão do cabeçalho oculto do ZIP
-    texto_cabecalhos_zip = ""
+    # Extração de textos lendo diretamente o XML compactado (Velocidade instantânea à prova de travamentos)
+    texto_corpo_xml = ""
+    texto_cabecalhos_xml = ""
+    
     try:
         with zipfile.ZipFile(BytesIO(dados_brutos)) as z:
+            # Lê o texto principal do documento
+            if "word/document.xml" in z.namelist():
+                xml_content = z.read("word/document.xml").decode("utf-8", errors="ignore")
+                texto_corpo_xml = re.sub(r'<[^>]+>', ' ', xml_content)
+                
+            # Lê as tabelas ocultas de cabeçalho
             for f in z.namelist():
                 if "word/header" in f and f.endswith(".xml"):
                     xml_content = z.read(f).decode("utf-8", errors="ignore")
-                    texto_puro = re.sub(r'<[^>]+>', ' ', xml_content)
-                    texto_cabecalhos_zip += " " + texto_puro
+                    texto_cabecalhos_xml += " " + re.sub(r'<[^>]+>', ' ', xml_content)
     except:
-        pass
+        st.error("❌ Falha na leitura interna do pacote compactado (.docx). Certifique-se de que o arquivo não está corrompido.")
+        st.stop()
         
-    texto_cabecalho_limpo = limpar_texto(texto_cabecalhos_zip)
+    texto_corpo_limpo = limpar_texto(texto_corpo_xml)
+    texto_cabecalho_limpo = limpar_texto(texto_cabecalhos_xml)
     
     codigo_doc = "NÃO DETECTADO"
     versao_doc = "NÃO DETECTADA"
     
+    # Captura o Código direto do cabeçalho XML
     match_cod = re.search(r'(PROT|POP|MAN|NOR|ROT|PLANC|POL|PROG|REG)_[A-Z0-9_|-]+', texto_cabecalho_limpo)
     if match_cod:
         codigo_doc = match_cod.group(0).strip()
         
+    # Captura a Versão direto do cabeçalho XML
     match_ver = re.search(r'VERSAO\s*[:\s]*(\d+)', texto_cabecalho_limpo)
     if match_ver:
         versao_doc = match_ver.group(1).strip()
 
-    # Coleta texto do corpo para auditar seções
-    doc_triagem = docx.Document(BytesIO(dados_brutos))
-    elementos_texto = [p.text.strip() for p in doc_triagem.paragraphs if p.text.strip()]
-    for t in doc_triagem.tables:
-        for r in t.rows:
-            for cell in r.cells:
-                if cell.text.strip(): elementos_texto.append(cell.text.strip())
-                
-    texto_total_raw = "  ".join(elementos_texto)
-    texto_limpo_busca = limpar_texto(texto_total_raw)
-    
+    # Se falhou no cabeçalho, varre o corpo como contingência
     if codigo_doc == "NÃO DETECTADO":
-        match_cod_c = re.search(r'(PROT|POP|MAN|NOR|ROT|PLANC|POL|PROG|REG)_[A-Z0-9_|-]+', texto_limpo_busca)
+        match_cod_c = re.search(r'(PROT|POP|MAN|NOR|ROT|PLANC|POL|PROG|REG)_[A-Z0-9_|-]+', texto_corpo_limpo)
         if match_cod_c:
             codigo_doc = match_cod_c.group(0).strip()
             
     if versao_doc == "NÃO DETECTADA":
-        match_ver_c = re.search(r'VERSAO\s*[:\s]*(\d+)', texto_limpo_busca)
+        match_ver_c = re.search(r'VERSAO\s*[:\s]*(\d+)', texto_corpo_limpo)
         if match_ver_c:
             versao_doc = match_ver_c.group(1).strip()
 
-    # 🧠 TRIAGEM ULTRA ISOLADA (Foca apenas no início do arquivo para evitar conflito com histórico)
-    texto_inicio_documento = texto_limpo_busca[:1000]
-    
+    # Triagem Avançada baseada estritamente nas primeiras linhas do texto limpo do Word
     tipo_detectado = "PROTOCOLO"
-    if "PROTOCOLO" in texto_inicio_documento or "PROT_" in texto_inicio_documento or "PROT " in texto_inicio_documento:
-        tipo_detectado = "PROTOCOLO"
-    elif "PROCEDIMENTO OPERACIONAL" in texto_inicio_documento or "POP_" in texto_inicio_documento or "POP " in texto_inicio_documento:
-        tipo_detectado = "POP"
-    elif "PLANO DE CONTINGENCIA" in texto_inicio_documento or "PLANC_" in texto_inicio_documento:
+    texto_analise_tipo = texto_cabecalho_limpo + " " + texto_corpo_limpo[:1000]
+    
+    if "PLANO DE CONTINGENCIA" in texto_analise_tipo or "PLANC" in texto_analise_tipo:
         tipo_detectado = "PLANO DE CONTINGENCIA"
-    elif "POLITICA INSTITUCIONAL" in texto_inicio_documento or "POL_" in texto_inicio_documento:
+    elif "POLITICA INSTITUCIONAL" in texto_analise_tipo or "POL" in texto_analise_tipo:
         tipo_detectado = "POLITICA INSTITUCIONAL"
-    elif "PROGRAMA" in texto_inicio_documento or "PROG_" in texto_inicio_documento:
+    elif "PROCEDIMENTO OPERACIONAL" in texto_analise_tipo or "POP" in texto_analise_tipo:
+        tipo_detectado = "POP"
+    elif "PROGRAMA" in texto_analise_tipo or "PROG" in texto_analise_tipo:
         tipo_detectado = "PROGRAMA"
-    elif "REGIMENTO" in texto_inicio_documento or "REG_" in texto_inicio_documento:
+    elif "REGIMENTO" in texto_analise_tipo or "REG" in texto_analise_tipo:
         tipo_detectado = "REGIMENTO"
-    elif "ROTINA" in texto_inicio_documento or "ROT_" in texto_inicio_documento:
+    elif "ROTINA" in texto_analise_tipo or "ROT" in texto_analise_tipo:
         tipo_detectado = "ROTINA"
-    elif "MANUAL" in texto_inicio_documento or "MAN_" in texto_inicio_documento:
+    elif "MANUAL" in texto_analise_tipo or "MAN" in texto_analise_tipo:
         tipo_detectado = "MANUAL"
-    elif "NORMA" in texto_inicio_documento or "NOR_" in texto_inicio_documento:
+    elif "NORMA" in texto_analise_tipo or "NOR_" in texto_analise_tipo:
         tipo_detectado = "NORMA"
-        
+    elif "PROTOCOLO" in texto_analise_tipo or "PROT" in texto_analise_tipo:
+        tipo_detectado = "PROTOCOLO"
