@@ -1,150 +1,163 @@
-import streamlit as st
-import pandas as pd
-import zipfile
-import mailbox
-import io
-import os
-import re
-from docx import Document
-from datetime import datetime, timedelta
-from email.utils import parsedate_to_datetime
-import plotly.express as px
+# ==================================================
+# 🛡️ REGRA DE OURO — CÓDIGO + VERSÃO = CHAVE ÚNICA
+# ==================================================
+# SEM CÓDIGO OU SEM VERSÃO → NÃO ENTRA NO FLUXO → DEVOLVE
+# CÓDIGO + VERSÃO IGUAL → MESMO DOCUMENTO MESMA VERSÃO → ATUALIZA APENAS VAZIOS
+# CÓDIGO IGUAL + VERSÃO DIFERENTE → DOCUMENTO NOVO → LINHA NOVA
+# NADA É APAGADO. TODAS AS VERSÕES SÃO PRESERVADAS.
+# ==================================================
 
-st.set_page_config(page_title="Auditor NAQH - Hospital da Cidade", layout="wide")
-
-st.title("🏥 Auditoria Científica de Documentos - Norma Zero")
-st.subheader("Hospital da Cidade Dr. Jackson Lago")
-
-st.sidebar.header("📥 Carga de Arquivos do Hospital")
-arquivo_excel = st.sidebar.file_uploader("1. Selecione a Planilha Oficial (.xlsx)", type=["xlsx"])
-arquivo_zip = st.sidebar.file_uploader("2. Selecione o ZIP do Takeout (1.2 GB)", type=["zip"])
-
-def formatar_data_gmail(data_cabecalho):
-    try:
-        if data_cabecalho:
-            dt = parsedate_to_datetime(data_cabecalho)
-            return dt.strftime("%d/%m/%Y")
-    except:
-        pass
-    return None
-
-def extrair_data_aprovacao_interna_memoria(conteudo_binario):
-    """Abre o arquivo Word na memória e valida se existe aprovação real da Norma Zero"""
-    try:
-        doc = Document(io.BytesIO(conteudo_binario))
-        for tabela in doc.tables:
-            for linha in tabela.rows:
-                texto_linha = [celula.text.strip() for celula in linha.cells]
-                text_completo = " ".join(texto_linha)
-                if "Data aprovação:" in text_completo:
-                    data = text_completo.split("Data aprovação:")[-1].split("Validade:")[0].strip()
-                    # Garante que é uma data digitada (contém barras) e ignora a máscara padrão 'dd/mm/aaaa'
-                    if data and "dd/mm" not in data.lower() and "/" in data:
-                        return data
-    except:
-        pass
-    return None
-
-if arquivo_excel and arquivo_zip:
-    st.sidebar.success("Buffers validados e protegidos contra colisão.")
+def validar_dados_obrigatorios(codigo, versao, data_aprovacao=None):
+    """
+    VALIDAÇÃO OBRIGATÓRIA antes de qualquer coisa
+    Retorna: (valido: bool, motivo: str)
+    """
+    # Regra Dourada: SEM CÓDIGO → NÃO ENTRA
+    if not codigo or str(codigo).strip().upper() in ["", "NAN", "NONE"]:
+        return False, "❌ DEVOLVIDO: SEM CÓDIGO — Não pode iniciar verificação"
     
-    if st.button("🚀 Executar Auditoria Reversa e Rastreio Seguro"):
-        with st.spinner("Filtrando e-mails caóticos e analisando apenas anexos oficiais .docx..."):
-            try:
-                # 1. Carrega a planilha sem modificar os tipos originais de texto
-                df_oficial = pd.read_excel(arquivo_excel, dtype=str)
-                df_oficial.columns = df_oficial.columns.str.strip()
-                
-                codigos_na_planilha = set(df_oficial["CÓD. DO DOCUMENTO"].dropna().str.strip().str.upper())
-                SEU_EMAIL = "documentos.soc2@gmail.com"
-                documentos_fantasmas = []
-                
-                # 2. Abre o giga-arquivo local na memória do Ryzen 5
-                with zipfile.ZipFile(arquivo_zip, 'r') as z:
-                    path_mbox = [f for f in z.namelist() if f.endswith('.mbox')]
-                    if not path_mbox:
-                        st.error("Erro: Arquivo de e-mails (.mbox) não localizado dentro do arquivo ZIP.")
-                    else:
-                        with z.open(path_mbox) as mbox_file:
-                            mbox = mailbox.mbox(io.BytesIO(mbox_file.read()))
-                            
-                            # --- ETAPA 1: AUDITORIA REVERSA (MAPEIA DOCUMENTOS FORA DA PLANILHA) ---
-                            for msg in mbox:
-                                assunto = str(msg["subject"]).strip().upper()
-                                data_msg = formatar_data_gmail(msg["date"])
-                                remetente = str(msg["from"])
-                                
-                                # TRAVA REGEX ESTRITA
-                                match_codigo = re.search(r'\b(POP|ROT|NOR|PROT|REG|MANUAL)_[A-Z0-9_]+', assunto)
-                                if match_codigo:
-                                    codigo_detectado = match_codigo.group(0).strip()
-                                    
-                                    possui_docx = False
-                                    if msg.is_multipart():
-                                        for part in msg.walk():
-                                            filename = part.get_filename()
-                                            if filename and filename.endswith(".docx"):
-                                                possui_docx = True
-                                                break
-                                                
-                                    if possui_docx and codigo_detectado not in codigos_na_planilha:
-                                        if not any(f['Código'] == codigo_detectado for f in documentos_fantasmas):
-                                            documentos_fantasmas.append({
-                                                "Código": codigo_detectado,
-                                                "Assunto do E-mail": assunto,
-                                                "Último Tráfego Detectado": data_msg,
-                                                "Origem/Remetente": remetente,
-                                                "Tipo": "DOCUMENTO NORMA ZERO OCULTO"
-                                            })
-                            
-                            # --- ETAPA 2: PREENCHIMENTO SEGURO DA SUA PLANILHA (MÁQUINA DE ESTADOS) ---
-                            for idx, linha in df_oficial.iterrows():
-                                codigo_doc = str(linha["CÓD. DO DOCUMENTO"]).strip().upper()
-                                versao_doc = str(linha["VERSÃO"]).strip().lower()
-                                
-                                if pd.isna(codigo_doc) or codigo_doc in ["NAN", ""]:
-                                    continue
-                                
-                                # FILTRO CRÍTICO ANTI-CONFUSÃO
-                                emails_do_doc = [m for m in mbox if codigo_doc in str(m["subject"]).upper()]
-                                if not emails_do_doc:
-                                    continue
-                                    
-                                if versao_doc != "nan" and versao_doc != "":
-                                    if "1" in versao_doc:
-                                        emails_do_doc = [m for m in emails_do_doc if "2ª" not in str(m["subject"]).lower() and "3ª" not in str(m["subject"]).lower()]
-                                    elif "2" in versao_doc:
-                                        emails_do_doc = [m for m in emails_do_doc if "2ª" in str(m["subject"]).lower() or "v2" in str(m["subject"]).lower()]
-                                
-                                if not emails_do_doc:
-                                    continue
-                                    
-                                # CORREÇÃO TÉCNICA: Captura o primeiro e-mail indexado
-                                primeiro_email = emails_do_doc[0]
-                                
-                                # TRAVA DE SEGURANÇA MÁXIMA
-                                if pd.isna(df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 1ª VERIFICAÇÃO"]) or str(df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 1ª VERIFICAÇÃO"]).strip() == "":
-                                    df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 1ª VERIFICAÇÃO"] = formatar_data_gmail(primeiro_email["date"])
-                                
-                                df_oficial.at[idx, "1ª VERIFICAÇÃO EZEQUIAS"] = "OK"
-                                
-                                # Estimativa inteligente (D+1)
-                                if pd.isna(df_oficial.at[idx, "INÍCIO DA 1ª VERIFICAÇÃO DO RESPONSÁVEL"]) or str(df_oficial.at[idx, "INÍCIO DA 1ª VERIFICAÇÃO DO RESPONSÁVEL"]).strip() == "":
-                                    data_ref = df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 1ª VERIFICAÇÃO"]
-                                    if pd.notna(data_ref) and str(data_ref).strip() != "":
-                                        try:
-                                            dt_ref = datetime.strptime(str(data_ref), '%d/%m/%Y')
-                                            df_oficial.at[idx, "INÍCIO DA 1ª VERIFICAÇÃO DO RESPONSÁVEL"] = (dt_ref + timedelta(days=1)).strftime('%d/%m/%Y')
-                                        except:
-                                            pass
-                                
-                                # Rastreio da 2ª Verificação
-                                emails_2v = [m for m in emails_do_doc if SEU_EMAIL not in str(m["from"]) and m != primeiro_email]
-                                if emails_2v:
-                                    # CORREÇÃO TÉCNICA: Captura o primeiro e-mail indexado da 2a fase
-                                    segundo_email = emails_2v[0]
-                                    
-                                    if pd.isna(df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 2ª VERIFICAÇÃO"]) or str(df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 2ª VERIFICAÇÃO"]).strip() == "":
-                                        df_oficial.at[idx, "DATA DE RECEBIMENTO PARA 2ª VERIFICAÇÃO"] = formatar_data_gmail(segundo_email["date"])
-                                        df_oficial.at[idx, "2ª VERIFICAÇÃO EZEQUIAS"] = "OK"
-                                        
+    # Regra Dourada: SEM VERSÃO → NÃO ENTRA
+    if not versao or str(versao).strip() in ["", "NAN", "NONE"]:
+        return False, "❌ DEVOLVIDO: SEM VERSÃO — Não pode iniciar verificação"
+    
+    # Tem os dois → PODE ENTRAR
+    return True, "✅ VÁLIDO: Código + Versão presentes"
+
+
+def criar_chave_unica(codigo, versao):
+    """Cria a identidade única do documento"""
+    cod = str(codigo).strip().upper().replace(" ", "")
+    ver = str(versao).strip().replace(" ", "")
+    return f"{cod}||VERSAO:{ver}"
+
+
+def auditoria_comparativa(df_planilha, lista_emails):
+    # ── PASSO 1: Construir índice de TODOS os documentos já registrados ──
+    existentes = {}  # { CHAVE_UNICA: numero_linha }
+    ultimas_versoes = {}  # { CODIGO: ULTIMA_VERSAO }
+
+    for idx, linha in df_planilha.iterrows():
+        cod = str(linha.get("Código", "")).strip().upper()
+        ver = str(linha.get("Versão", "")).strip()
+        
+        if cod and ver and cod != "NAN":
+            chave = criar_chave_unica(cod, ver)
+            existentes[chave] = idx
+            
+            # Rastrear última versão de cada código
+            if cod not in ultimas_versoes:
+                ultimas_versoes[cod] = []
+            ultimas_versoes[cod].append(int(ver) if ver.isdigit() else ver)
+
+    # ── PASSO 2: Listas de relatórios ──
+    novas_linhas = []
+    devolvidos_sem_dados = []
+    relatorio_faltantes = []
+    relatorio_parados = []
+    relatorio_nao_devolvidos = []
+
+    data_hoje = datetime.now()
+
+    # ── PASSO 3: Processar cada e-mail recebido ──
+    for email in lista_emails:
+        assunto = email.get("assunto", "")
+        data_email = email.get("data_recebimento")
+        corpo = email.get("corpo", "")
+        anexos = email.get("anexos", [])
+
+        codigo_doc, versao_doc, data_aprov_doc = None, None, None
+
+        # Extrair de cada anexo (Word/PDF)
+        for nome_arq, conteudo in anexos:
+            if nome_arq.lower().endswith(".docx"):
+                c, v, d = extrair_dados_docx(conteudo)
+            elif nome_arq.lower().endswith(".pdf"):
+                c, v, d = extrair_dados_pdf(conteudo)
+            else:
+                continue
+            if c: codigo_doc = c
+            if v: versao_doc = v
+            if d: data_aprov_doc = d
+
+        # ==================================================
+        # 🔴 REGRA DE OURO — VALIDAÇÃO OBRIGATÓRIA
+        # ==================================================
+        valido, motivo = validar_dados_obrigatorios(codigo_doc, versao_doc, data_aprov_doc)
+        
+        if not valido:
+            # ❌ SEM CÓDIGO OU SEM VERSÃO → DEVOLVE → NÃO ENTRA NA PLANILHA
+            devolvidos_sem_dados.append({
+                "Assunto": assunto,
+                "Data Recebimento": data_email.strftime("%d/%m/%Y") if data_email else "Desconhecida",
+                "Motivo": motivo,
+                "Código recebido": codigo_doc or "---",
+                "Versão recebida": versao_doc or "---"
+            })
+            continue  # ⛔ PARA AQUI. NÃO FAZ MAIS NADA.
+
+        # ✅ TEM CÓDIGO + VERSÃO → PODE SEGUIR
+        chave_unica = criar_chave_unica(codigo_doc, versao_doc)
+
+        # ── CASO A: Documento JÁ EXISTE na planilha → SÓ PREENCHE VAZIOS ──
+        if chave_unica in existentes:
+            # Já está registrado → NÃO CRIAR NOVA LINHA
+            # O sistema só vai preencher as células vazias dessa linha existente
+            continue
+
+        # ── CASO B: Documento NOVO — mesma versão? Não, nova versão! ──
+        # Mesmo Código, Versão Diferente = DOCUMENTO NOVO → LINHA NOVA
+        if codigo_doc in [ch.split("||")[0] for ch in existentes.keys()]:
+            # É uma NOVA VERSÃO de um documento já existente
+            status = "NOVA VERSÃO DETECTADA"
+        else:
+            # É um DOCUMENTO TOTALMENTE NOVO
+            status = "NOVO DOCUMENTO"
+
+        # ── Verificar se veio APROVADO direto ──
+        if data_aprov_doc:
+            relatorio_faltantes.append({
+                "Código": codigo_doc,
+                "Versão": versao_doc,
+                "Data Aprovação": data_aprov_doc,
+                "Status": f"✅ APROVADO — {status}",
+                "Data Recebimento": data_email.strftime("%d/%m/%Y") if data_email else "---"
+            })
+            novas_linhas.append({
+                "Código": codigo_doc,
+                "Versão": versao_doc,
+                "Data de Aprovação": data_aprov_doc,
+                "Status": "APROVADO",
+                "Data de Recebimento": data_email.strftime("%d/%m/%Y") if data_email else None
+            })
+            continue
+
+        # ── CASO C: Documento parado sem análise ──
+        if data_email and (data_hoje - data_email).days > PRAZO_DOC_PARADO:
+            relatorio_parados.append({
+                "Código": codigo_doc,
+                "Versão": versao_doc,
+                "Dias parado sem análise": (data_hoje - data_email).days,
+                "Data Recebimento": data_email.strftime("%d/%m/%Y"),
+                "Assunto": assunto
+            })
+
+        # ── CASO D: Enviado ao Setor sem devolução ──
+        if "encaminhado ao setor" in corpo.lower() or "devolvido ao setor" in corpo.lower():
+            if data_email and (data_hoje - data_email).days > PRAZO_ALERTA_NAO_DEVOLVIDO:
+                relatorio_nao_devolvidos.append({
+                    "Código": codigo_doc,
+                    "Versão": versao_doc,
+                    "Dias sem devolução": (data_hoje - data_email).days,
+                    "Data envio ao setor": data_email.strftime("%d/%m/%Y")
+                })
+
+    # ==================================================
+    # ✅ RETORNA TUDO SEPARADO
+    # ==================================================
+    return {
+        "novas_linhas": novas_linhas,
+        "devolvidos_sem_dados": devolvidos_sem_dados,  # ❌ Sem código/versão
+        "faltantes_aprovados": relatorio_faltantes,     # ✅ Aprovados que faltavam
+        "parados_sem_analise": relatorio_parados,       # ⚠️ Parados
+        "sem_devolucao_setor": relatorio_nao_devolvidos  # ⏹ Setor não devolveu
+    }
