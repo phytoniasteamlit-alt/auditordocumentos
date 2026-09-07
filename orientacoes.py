@@ -38,13 +38,35 @@ def limpar_texto(texto):
         return ""
     sem_acento = unicodedata.normalize('NFKD', texto).encode('ASCII', 'ignore').decode('ASCII')
     sem_acento = sem_acento.replace('\n', ' ').replace('\r', ' ')
-    return re.sub(r'\s+', ' ', sem_acento.upper().strip())
+    # Limpeza simples de espaços múltiplos sem usar motores Regex pesados
+    return " ".join(sem_acento.upper().split())
 
-# --- 2. MOTOR ULTRA VELOZ SEM REGEX (EVITA TRAVAMENTO COM IMAGENS GRANDES) ---
-def injetar_margens_via_disco(caminho_origem):
-    # Valores oficiais fixados em dxa (3,0cm = 1701 | 2,0cm = 1134)
-    top_val, bottom_val, left_val, right_val = "1134", "1134", "1134", "1701"
+def extrair_texto_xml_seguro(xml_string):
+    """Extrai texto de tags XML sem usar expressões regulares de risco (Loop de Fatiamento Nativo)"""
+    resultado = []
+    em_tag = False
+    buffer_texto = []
     
+    # Processa caractere por caractere (Incomparavelmente mais estável para arquivos de texto gigantes)
+    for char in xml_string:
+        if char == '<':
+            em_tag = True
+            if buffer_texto:
+                resultado.append("".join(buffer_texto))
+                buffer_texto = []
+        elif char == '>':
+            em_tag = False
+        elif not em_tag:
+            buffer_texto.append(char)
+            
+    if buffer_texto:
+        resultado.append("".join(buffer_texto))
+        
+    return " ".join(resultado)
+
+# --- 2. MOTOR ULTRA VELOZ SEM REGEX ---
+def injetar_margens_via_disco(caminho_origem):
+    top_val, bottom_val, left_val, right_val = "1134", "1134", "1134", "1701"
     caminho_saida = caminho_origem + "_formatado.docx"
     zip_original = zipfile.ZipFile(caminho_origem, 'r')
     
@@ -52,11 +74,10 @@ def injetar_margens_via_disco(caminho_origem):
         for item in zip_original.infolist():
             conteudo = zip_original.read(item.filename)
             
-            # Se for o arquivo de texto do corpo, altera as margens via fatiamento rápido de string
             if item.filename == "word/document.xml":
                 xml_texto = conteudo.decode("utf-8", errors="ignore")
                 
-                # Fatiamento cirúrgico de strings (1000x mais rápido que Regex em arquivos gigantes)
+                # Fatiamento linear estável de tags de configuração de página
                 for tag, val in [('w:top="', top_val), ('w:bottom="', bottom_val), ('w:left="', left_val), ('w:right="', right_val)]:
                     partes = xml_texto.split(tag)
                     if len(partes) > 1:
@@ -132,52 +153,40 @@ if arquivo_word is not None:
     disparar_processo = st.button("🚀 Iniciar Triagem e Formatação", type="primary")
     
     if disparar_processo:
-        with st.spinner("Remontando tags XML estruturais em alta performance..."):
+        with st.spinner("Remontando texto estrutural em tempo recorde..."):
             # Salva o arquivo temporariamente no disco
             with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as temp_file:
                 shutil.copyfileobj(arquivo_word, temp_file)
                 caminho_temp = temp_file.name
 
-            texto_corpo_xml = ""
-            texto_cabecalhos_xml = ""
+            raw_corpo_xml = ""
+            raw_cabecalhos_xml = ""
             
             try:
                 with zipfile.ZipFile(caminho_temp, 'r') as z:
                     if "word/document.xml" in z.namelist():
-                        xml_content = z.read("word/document.xml").decode("utf-8", errors="ignore")
-                        texto_corpo_xml = re.sub(r'<[^>]+>', ' ', xml_content)
+                        raw_corpo_xml = z.read("word/document.xml").decode("utf-8", errors="ignore")
                         
                     for f in z.namelist():
                         if "word/header" in f and f.endswith(".xml"):
-                            xml_content = z.read(f).decode("utf-8", errors="ignore")
-                            texto_cabecalhos_xml += " " + re.sub(r'<[^>]+>', ' ', xml_content)
+                            raw_cabecalhos_xml += " " + z.read(f).decode("utf-8", errors="ignore")
             except Exception as e:
                 st.error(f"❌ Falha na leitura interna do arquivo. Erro: {str(e)}")
                 st.stop()
                 
-            texto_corpo_limpo = limpar_texto(texto_corpo_xml)
-            texto_cabecalho_limpo = limpar_texto(texto_cabecalhos_xml)
+            # Extração linear blindada de texto puro (Sem usar expressões regulares)
+            texto_corpo_puro = extrair_texto_xml_seguro(raw_corpo_xml)
+            texto_cabecalho_puro = extrair_texto_xml_seguro(raw_cabecalhos_xml)
+            
+            texto_corpo_limpo = limpar_texto(texto_corpo_puro)
+            texto_cabecalho_limpo = limpar_texto(texto_cabecalho_puro)
             
             codigo_doc = "NÃO DETECTADO"
             versao_doc = "NÃO DETECTADA"
             
+            # Buscas estruturadas básicas e rápidas
             match_cod = re.search(r'(PROT|POP|MAN|NOR|ROT|PLANC|POL|PROG|REG)_[A-Z0-9_|-]+', texto_cabecalho_limpo)
             if match_cod:
                 codigo_doc = match_cod.group(0).strip()
                 
             match_ver = re.search(r'VERSAO\s*[:\s]*(\d+)', texto_cabecalho_limpo)
-            if match_ver:
-                versao_doc = match_ver.group(1).strip()
-
-            if codigo_doc == "NÃO DETECTADO":
-                match_cod_c = re.search(r'(PROT|POP|MAN|NOR|ROT|PLANC|POL|PROG|REG)_[A-Z0-9_|-]+', texto_corpo_limpo)
-                if match_cod_c:
-                    codigo_doc = match_cod_c.group(0).strip()
-                    
-            if versao_doc == "NÃO DETECTADA":
-                match_ver_c = re.search(r'VERSAO\s*[:\s]*(\d+)', texto_corpo_limpo)
-                if match_ver_c:
-                    versao_doc = match_ver_c.group(1).strip()
-
-            # Triagem de Tipo Baseada no Topo do Texto
-            tipo_detectado = "PROTOCOLO"
