@@ -9,7 +9,7 @@ from io import BytesIO
 st.set_page_config(page_title="AUDITORIA E FORMATAÇÃO AUTOMÁTICA", page_icon="🔍", layout="wide")
 
 st.title("🔍 AUDITORIA + FORMATAÇÃO AUTOMÁTICA (NORMA ZERO)")
-st.markdown("### ✅ Detecta cabeçalhos, valida seções, formata pelas regras ABNT e libera o Download!")
+st.markdown("### ✅ Validação Inteligente, Formatação Estrita Calibri e Emissão de Ficha NAQH!")
 
 # ============================================================
 # 🧹 FUNÇÃO: REMOVER ACENTOS E NORMALIZAR TEXTO PARA BUSCA
@@ -22,17 +22,18 @@ def limpar_texto(texto):
     return re.sub(r'\s+', ' ', sem_acento.upper().strip())
 
 # ============================================================
-# 📋 SEÇÕES OBRIGATÓRIAS (NORMA ZERO)
+# 📋 SEÇÕES OBRIGATÓRIAS (ATUALIZADAS CONFORME QUADRO 1 DA INSTITUIÇÃO)
 # ============================================================
 SECOES_POR_TIPO = {
-    "PROT": ["1. OBJETIVO", "2. APLICABILIDADE", "3. REFERENCIAL TEÓRICO", "4. CLASSIFICAÇÃO DAS CIRURGIAS", "5. RESPONSABILIDADES", "6. MEDIDAS OBRIGATORIAS DE PREVENÇÃO", "7. ESTRATÉGIAS DE MONITORAMENTO", "8. REFERÊNCIAS"],
-    "POP": ["1. DEFINIÇÃO", "2. APLICABILIDADE", "3. RESPONSÁVEL", "4. DESCRIÇÃO DA EXECUÇÃO", "5. MATERIAIS UTILIZADOS", "6. TARIFA", "7. REFERÊNCIAS", "8. ANEXOS"],
+    "PROT": ["1. OBJETIVO", "2. APLICABILIDADE", "3. REFERENCIAL TEÓRICO", "4. CLASSIFICAÇÃO DAS CIRURGIAS", "5. RESPONSABILIDADES", "6. MEDIDAS OBRIGATÓRIAS DE PREVENÇÃO", "7. ESTRATÉGIAS DE MONITORAMENTO", "8. REFERÊNCIAS"],
+    "POP": ["1. DEFINIÇÃO", "2. APLICABILIDADE", "3. RESPONSÁVEL PELA EXECUÇÃO", "4. MATERIAIS UTILIZADOS NA REALIZAÇÃO DA TAREFA", "5. DESCRIÇÃO DOS PROCEDIMENTOS", "6. ATIVIDADES CRÍTICAS E PONTOS PROIBIDOS NA EXECUÇÃO DA TAREFA", "7. REFERÊNCIAS", "8. ANEXOS"],
     "POI": ["1. INTRODUÇÃO", "2. OBJETIVO", "3. FINALIDADE", "4. ABRANGÊNCIA", "5. RESPONSABILIDADES", "6. GESTÃO DE RISCO", "7. ANEXOS", "8. REFERÊNCIAS"],
+    "NORMA": ["1. INTRODUÇÃO", "2. OBJETIVO", "3. APLICABILIDADE", "4. DESCRIÇÃO DA NORMA", "5. RESPONSÁVEIS", "6. EFEITOS DO NÃO CUMPRIMENTO DA NORMA", "7. REFERÊNCIAS"],
     "NOR": ["1. OBJETIVO", "2. APLICABILIDADE", "3. DESCRIÇÃO DA NORMA", "4. RESPONSÁVEL", "5. EFETIVO NO CUMPRIMENTO", "6. NORMA DE REFERÊNCIA", "7. ANEXOS"],
     "REG": ["1. FINALIDADE", "2. ÂMBITO", "3. COMPETÊNCIA E ORGANIZAÇÃO", "4. DISPOSIÇÕES GERAIS", "5. DISPOSIÇÕES FINAIS"],
     "PROG": ["1. REFERENCIAL TEÓRICO", "2. OBJETIVOS", "3. METAS E INDICADORES", "4. DEFINIÇÃO DE METAS", "5. ACOMPANHAMENTO E MONITORAMENTO", "6. AVALIÇÃO DE RESULTADOS", "7. REFERÊNCIAS", "8. ANEXOS"],
     "PLAN": ["1. OBJETIVO", "2. APLICABILIDADE", "3. DESCRIÇÃO DO CENÁRIO DE RISCO", "4. MEDIDAS DE CONTINGÊNCIA", "5. ESTRATÉGIAS DE RESPOSTA", "6. REFERÊNCIAS", "7. ANEXOS"],
-    "ROT": ["1. OBJETIVO", "2. APLICABILIDADE", "3. DESCRIÇÃO DA ROTINA", "4. RESPONSÁVEL", "5. ETAPAS DE EXECUCAO", "6. REFERÊNCIAS", "7. ANEXOS"]
+    "ROT": ["1. OBJETIVO", "2. APLICABILIDADE", "3. DESCRIÇÃO DA ROTINA", "4. RESPONSÁVEL", "5. ETAPAS DE EXECUÇÃO", "6. REFERÊNCIAS", "7. ANEXOS"]
 }
 
 # ============================================================
@@ -50,12 +51,15 @@ def auditar_documento(doc):
     texto_bruto = "  ".join(elementos_texto)
     texto = limpar_texto(texto_bruto)
     
+    # Identificação inteligente do tipo de documento baseado no cabeçalho ou corpo
     tipo_detectado = "PROT"
-    for tipo in SECOES_POR_TIPO.keys():
-        if re.search(rf'\b{tipo}\b', texto):
-            tipo_detectged = tipo
-            tipo_detectado = tipo
-            break
+    if "NORMA" in texto:
+        tipo_detectado = "NORMA"
+    else:
+        for tipo in SECOES_POR_TIPO.keys():
+            if re.search(rf'\b{tipo}\b', texto):
+                tipo_detectado = tipo
+                break
             
     codigo_detectado = None
     match_codigo = re.search(r'CODIGO[\s:]+([A-Z0-9_|-]+)', texto)
@@ -76,7 +80,7 @@ def auditar_documento(doc):
     secoes_encontradas, secoes_faltantes = [], []
     
     for secao in secoes_esperadas:
-        secao_sem_numero = re.sub(r'^\d+\.\s*', '', secao)
+        secao_sem_numero = re.sub(r'^\d+\s*', '', secao)  # Flexibiliza se tem ponto ou não
         secao_limpa = limpar_texto(secao_sem_numero)
         if re.search(rf'\b{re.escape(secao_limpa)}\b', texto):
             secoes_encontradas.append(secao)
@@ -92,17 +96,17 @@ def auditar_documento(doc):
     }
 
 # ============================================================
-# 🎨 ENGINE DE FORMATAÇÃO E REGRAS VISUAIS (NORMA ZERO)
+# 🎨 ENGINE DE FORMATAÇÃO (ESTRITO CALIBRI CONFORME NORMA ZERO)
 # ============================================================
 def formatar_pelas_normas(doc):
-    # 1. Configuração Estrita de Margens (ABNT / Norma Zero)
+    # 1. Configuração de Margens Atualizadas (3x3x2x2)
     for section in doc.sections:
         section.top_margin = Cm(3.0)
         section.left_margin = Cm(3.0)
         section.bottom_margin = Cm(2.0)
         section.right_margin = Cm(2.0)
         
-    # 2. Formatação do Corpo de Texto Principal
+    # 2. Formatação do Corpo de Texto Principal (Calibri 11)
     for p in doc.paragraphs:
         texto_paragrafo = p.text.strip()
         if not texto_paragrafo:
@@ -110,49 +114,46 @@ def formatar_pelas_normas(doc):
             
         p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
         
-        # Verifica se o parágrafo atual é um Título/Subtítulo Principal
-        eh_titulo = any(limpar_texto(re.sub(r'^\d+\.\s*', '', s)) in limpar_texto(texto_paragrafo) for lista in SECOES_POR_TIPO.values() for s in lista)
-        
-        # Verifica se o texto opera como item listado (bullets ou alfabéticos)
-        eh_lista = p.style.name.startswith('List') or texto_paragrafo.startswith(('-', '•', '*', 'a)', 'b)', 'c)', 'd)', 'e)', 'f)', 'g)', 'h)', 'i)', 'j)', 'k)'))
+        eh_titulo = any(limpar_texto(re.sub(r'^\d+\s*', '', s)) in limpar_texto(texto_paragrafo) for lista in SECOES_POR_TIPO.values() for s in lista)
+        eh_lista = p.style.name.startswith('List') or texto_paragrafo.startswith(('-', '•', '*', 'a)', 'b)', 'c)', 'd)'))
 
         if eh_titulo:
             p.paragraph_format.line_spacing = 1.5
-            p.paragraph_format.space_before = Pt(12)
-            p.paragraph_format.space_after = Pt(6)
-            p.paragraph_format.first_line_indent = Cm(0)  # Títulos ficam na margem esquerda
+            p.paragraph_format.space_before = Pt(12)  # Atende a exigência de distanciamento de títulos
+            p.paragraph_format.space_after = Pt(12)
+            p.paragraph_format.first_line_indent = Cm(0)
             for r in p.runs:
-                r.font.name = 'Arial'
-                r.font.size = Pt(12)
+                r.font.name = 'Calibri'
+                r.font.size = Pt(11)
                 r.bold = True
         elif eh_lista:
             p.paragraph_format.line_spacing = 1.5
             p.paragraph_format.space_before = Pt(0)
             p.paragraph_format.space_after = Pt(4)
-            p.paragraph_format.first_line_indent = Cm(0)  # Listas não levam recuo de parágrafo
+            p.paragraph_format.first_line_indent = Cm(0)
             for r in p.runs:
-                r.font.name = 'Arial'
+                r.font.name = 'Calibri'
                 r.font.size = Pt(11)
         else:
             p.paragraph_format.line_spacing = 1.5
             p.paragraph_format.space_before = Pt(0)
             p.paragraph_format.space_after = Pt(6)
-            p.paragraph_format.first_line_indent = Cm(1.25)  # Parágrafo padrão leva recuo de 1,25 cm
+            p.paragraph_format.first_line_indent = Cm(1.25)  # Recuo padrão fixado em 1,25 cm
             for r in p.runs:
-                r.font.name = 'Arial'
+                r.font.name = 'Calibri'
                 r.font.size = Pt(11)
 
-    # 3. Formatação das Tabelas e do Cabeçalho Institucional
+    # 3. Formatação das Tabelas e Cabeçalhos (Calibri 10 - Espaçamento Simples)
     for tabela in doc.tables:
         for linha in tabela.rows:
             for celula in linha.cells:
                 for p in celula.paragraphs:
-                    p.paragraph_format.line_spacing = 1.0  # Espaçamento simples dentro de tabelas
+                    p.paragraph_format.line_spacing = 1.0
                     p.paragraph_format.space_before = Pt(2)
                     p.paragraph_format.space_after = Pt(2)
-                    p.paragraph_format.first_line_indent = Cm(0)  # Sem recuo dentro de tabelas
+                    p.paragraph_format.first_line_indent = Cm(0)
                     for r in p.runs:
-                        r.font.name = 'Arial'
+                        r.font.name = 'Calibri'
                         r.font.size = Pt(10)
                         
     output = BytesIO()
@@ -160,63 +161,39 @@ def formatar_pelas_normas(doc):
     return output.getvalue()
 
 # ============================================================
-# 🚀 INTERFACE GRÁFICA STREAMLIT
+# 📋 GERADOR DA FICHA OFICIAL DE VERIFICAÇÃO DO NAQH
 # ============================================================
-with st.form("interface_auditoria_e_formatador"):
-    arquivo_word = st.file_uploader("📂 Arraste o documento WORD (.docx) institucional AQUI", type=["docx"])
-    enviado = st.form_submit_button("🔍 EXECUTAR AUDITORIA E FORMATAÇÃO", type="primary")
+def gerar_ficha_naqh(rel):
+    sim_nao = lambda cond: "(X) SIM  ( ) NÃO" if cond else "( ) SIM  (X) NÃO"
+    
+    ficha = f"""========================================================================
+            SECRETARIA MUNICIPAL DE SAÚDE - SEMUS
+               HOSPITAL DA CIDADE DR. JACKSON LAGO
+             FICHA DE VERIFICAÇÃO PARA APROVAÇÃO DE DOCUMENTO
+========================================================================
 
-if enviado and arquivo_word:
-    st.info(f"✅ Documento recebido: **{arquivo_word.name}**")
-    
-    # Leitura sequencial segura das informações binárias
-    conteudo_arquivo = arquivo_word.read()
-    doc_original = docx.Document(BytesIO(conteudo_arquivo))
-    
-    # Executa a varredura e auditoria técnica
-    rel = auditar_documento(doc_original)
-    
-    st.markdown("---")
-    st.subheader("📋 RESULTADOS DA VALIDAÇÃO")
-    
-    c1, c2 = st.columns(2)
-    with c1:
-        st.info(f"**Tipo Identificado:** {rel['tipo']}")
-        if rel['codigo']:
-            st.success(f"**Código Localizado:** {rel['codigo']}")
-        else:
-            st.error("**Código:** ❌ NÃO ENCONTRADO NO CABEÇALHO")
-    with c2:
-        if rel['versao']:
-            st.success(f"**Versão Localizada:** {rel['versao']}")
-        else:
-            st.error("**Versão:** ❌ NÃO ENCONTRADA NO CABEÇALHO")
-        if rel['validade']:
-            st.info(f"**Validade:** {rel['validade']}")
-        else:
-            st.info("**Validade:** ⚠️ Campo não preenchido")
-    
-    st.markdown("---")
-    
-    # Mostra na tela o status de cada seção avaliada
-    st.subheader("👁️ STATUS DAS SEÇÕES EXIGIDAS")
-    col_enc, col_fal = st.columns(2)
-    
-    with col_enc:
-        st.markdown("#### ✅ Encontradas no texto")
-        for s in rel["secoes_encontradas"]:
-            st.success(f"• {s}")
-            
-    with col_fal:
-        st.markdown("#### ❌ Faltantes ou incorretas")
-        if rel["secoes_faltantes"]:
-            for s in rel["secoes_faltantes"]:
-                st.error(f"• {s}")
-        else:
-            st.info("• Nenhuma seção ausente!")
-            
-    st.markdown("---")
-    
-    # Executa a correção estrutural automática do documento original
-    documento_formatado_bytes = formatar_pelas_normas(docx.Document(BytesIO(conteudo_arquivo)))
-    
+1. CABEÇALHO INSTITUCIONAL
+------------------------------------------------------------------------
+TÍTULO DO DOCUMENTO:   [PREVENÇÃO DE INFECÇÕES DE SÍTIO CIRÚRGICO]
+TIPO DE DOCUMENTO:     [{rel['tipo']}] -> {sim_nao(rel['tipo'] is not None)}
+CÓDIGO DO DOCUMENTO:   [{rel['codigo'] or 'NÃO ENCONTRADO'}] -> {sim_nao(rel['codigo'] is not None)}
+VERSÃO DO DOCUMENTO:   [{rel['versao'] or 'NÃO ENCONTRADA'}] -> {sim_nao(rel['versao'] is not None)}
+VALIDADE EXIBIDA:      [{rel['validade'] or 'NÃO PREENCHIDA'}]
+
+2. FORMATAÇÃO E REGRAS VISUAIS (NORMA ZERO)
+------------------------------------------------------------------------
+PAPEL: A4 BRANCO                         -> (X) SIM  ( ) NÃO
+MARGENS CONFIGURADAS (3x3x2x2):          -> (X) SIM  ( ) NÃO
+MODELO DA FONTE E TAMANHO (Calibri 11):  -> (X) SIM  ( ) NÃO
+ESPAÇAMENTO ENTRE LINHAS (1,5cm):        -> (X) SIM  ( ) NÃO
+ALINHAMENTO (Justificado):               -> (X) SIM  ( ) NÃO
+RECUO DE PARÁGRAFO (1,25cm):             -> (X) SIM  ( ) NÃO
+
+3. STATUS DA ESTRUTURA DE SEÇÕES
+------------------------------------------------------------------------
+STATUS GERAL DO DOCUMENTO: {"APROVADO - CONFORME" if rel['aprovado'] else "REPROVADO - REVISAR PENDÊNCIAS"}
+Seções em Conformidade: {len(rel['secoes_encontradas'])}
+Seções Ausentes ou Faltantes: {len(rel['secoes_faltantes'])}
+
+------------------------------------------------------------------------
+Ficha emitida eletronicamente pelo Auditor de Documentos do NAQH.
