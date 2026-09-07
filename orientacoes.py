@@ -20,7 +20,7 @@ st.markdown("""
 O sistema aplica as margens oficiais da Norma Zero alterando diretamente as tags estruturais do pacote, **garantindo a permanência absoluta de logomarcas, tabelas de cabeçalho e paginações originais**.
 """)
 
-# --- DICIONÁRIO DE SEÇÕES OBRIGATÓRIAS (NORMA ZERO) ---
+# --- DICIONÁRIO DE SEÇÕES OBRIGATÓRIAS AJUSTADO ---
 SECOES_POR_TIPO = {
     "PROTOCOLO": ["1. OBJETIVO", "2. APLICABILIDADE", "3. REFERENCIAL TEÓRICO", "4. CLASSIFICAÇÃO DAS CIRURGIAS", "5. RESPONSABILIDADES", "6. MEDIDAS OBRIGATÓRIAS DE PREVENÇÃO", "7. ESTRATÉGIAS DE MONITORAMENTO", "8. REFERÊNCIAS"],
     "POP": ["1. DEFINIÇÃO", "2. APLICABILIDADE", "3. RESPONSÁVEL PELA EXECUÇÃO", "4. MATERIAIS UTILIZADOS NA REALIZAÇÃO DA TAREFA", "5. DESCRIÇÃO DOS PROCEDIMENTOS", "6. ATIVIDADES CRÍTICAS E PONTOS PROIBIDOS NA EXECUÇÃO DA TAREFA", "7. REFERÊNCIAS", "8. ANEXOS"],
@@ -35,31 +35,22 @@ def limpar_texto(texto):
     sem_acento = sem_acento.replace('\n', ' ').replace('\r', ' ')
     return re.sub(r'\s+', ' ', sem_acento.upper().strip())
 
-# --- 2. MOTOR DE ALTERAÇÃO XML DIRETA (SUA LÓGICA CORE PRESERVADA) ---
+# --- 2. MOTOR DE ALTERAÇÃO XML DIRETA ---
 def injetar_margens_via_xml_puro(arquivo_bytes):
-    """
-    Modifica as margens da folha no código XML nativo do Word sem alterar o corpo do texto.
-    Mantendo a sua configuração estável de 1134 dxa (2.0 cm) e 1701 dxa (3.0 cm).
-    """
     top_dxa, bottom_dxa, left_dxa, right_dxa = "1134", "1134", "1134", "1701"
-    
     zip_original = zipfile.ZipFile(BytesIO(arquivo_bytes))
     buffer_saida = BytesIO()
     
     with zipfile.ZipFile(buffer_saida, "w", zipfile.ZIP_DEFLATED) as zip_novo:
         for item in zip_original.infolist():
             conteudo = zip_original.read(item.filename)
-            
             if item.filename == "word/document.xml":
                 xml_texto = conteudo.decode("utf-8")
-                
                 xml_texto = re.sub(r'w:top="[^"]*"', f'w:top="{top_dxa}"', xml_texto)
                 xml_texto = re.sub(r'w:bottom="[^"]*"', f'w:bottom="{bottom_dxa}"', xml_texto)
                 xml_texto = re.sub(r'w:left="[^"]*"', f'w:left="{left_dxa}"', xml_texto)
                 xml_texto = re.sub(r'w:right="[^"]*"', f'w:right="{right_dxa}"', xml_texto)
-                
                 conteudo = xml_texto.encode("utf-8")
-                
             zip_novo.writestr(item, conteudo)
             
     zip_original.close()
@@ -83,7 +74,7 @@ def gerar_ficha_naqh(tipo, codigo, versao, encontradas, faltantes, aprovado):
     texto_ficha += "1. CABEÇALHO INSTITUCIONAL\n"
     texto_ficha += "------------------------------------------------------------------------\n"
     texto_ficha += "TIPO DE DOCUMENTO:     " + str(tipo) + " -> " + marcar_caixa(tipo is not None) + "\n"
-    texto_ficha += "CÓDIGO DO DOCUMENTO:   " + str(codigo) + " -> " + marcar_caixa(codigo != "PROT_SCIH005") + "\n"
+    texto_ficha += "CÓDIGO DO DOCUMENTO:   " + str(codigo) + " -> " + marcar_caixa(codigo != "NÃO DETECTADO") + "\n"
     texto_ficha += "VERSÃO DO DOCUMENTO:   " + str(versao) + " -> " + marcar_caixa(versao != "NÃO DETECTADA") + "\n\n"
     
     texto_ficha += "2. FORMATAÇÃO E REGRAS VISUAIS (NORMA ZERO)\n"
@@ -111,7 +102,7 @@ arquivo_word = st.file_uploader("Arraste o documento WORD (.docx) aqui para Tria
 if arquivo_word:
     dados_brutos = arquivo_word.read()
     
-    # Extração de textos para auditoria completa
+    # Extração robusta de textos mantendo quebras de segurança
     doc_triagem = docx.Document(BytesIO(dados_brutos))
     elementos_texto = [p.text.strip() for p in doc_triagem.paragraphs if p.text.strip()]
     for t in doc_triagem.tables:
@@ -119,34 +110,37 @@ if arquivo_word:
             for cell in r.cells:
                 if cell.text.strip(): elementos_texto.append(cell.text.strip())
                 
-    texto_total_raw = " ".join(elementos_texto)
+    texto_total_raw = "  ".join(elementos_texto)
     texto_limpo_busca = limpar_texto(texto_total_raw)
     
-    # Triagem do Tipo Documental Expandida
+    # Triagem Avançada de Tipo Documental (Evita falsos positivos por conta do histórico)
     tipo_detectado = "PROTOCOLO"
-    if "NORMA" in texto_limpo_busca:
-        tipo_detectado = "NORMA"
-    elif "PROCEDIMENTO OPERACIONAL" in texto_limpo_busca or "POP" in texto_limpo_busca:
+    if "TIPO DE DOCUMENTO: PROTOCOLO" in texto_limpo_busca or "PROTOCOLO" in texto_limpo_busca[:500]:
+        tipo_detectado = "PROTOCOLO"
+    elif "PROCEDIMENTO OPERACIONAL" in texto_limpo_busca or "POP" in texto_limpo_busca[:500]:
         tipo_detectado = "POP"
+    elif "NORMA" in texto_limpo_busca[:500]:
+        tipo_detectado = "NORMA"
         
     st.markdown("---")
     st.subheader("📋 **Triagem e Auditoria de Estrutura**")
     st.write(f"🔹 **Tipo de Documento Identificado:** `{tipo_detectado}`")
     
-    # Extração Inteligente de Código e Versão
-    codigo_doc = "PROT_SCIH005"
-    match_codigo = re.search(r'\b(PROT|POP|MAN|NOR|ROT)_[A-Z0-9_\s-]+\b', texto_total_raw, re.IGNORECASE)
+    # Captura Inteligente e Flexível do Código
+    codigo_doc = "NÃO DETECTADO"
+    match_codigo = re.search(r'CODIGO\s*[:\s]*([A-Z0-9_|-]+)', texto_limpo_busca)
     if match_codigo:
-        codigo_doc = match_codigo.group(0).strip().upper().replace(" ", "")
+        codigo_doc = match_codigo.group(1).strip()
     st.write(f"🔹 **Código do Documento:** `{codigo_doc}`")
         
+    # Captura Avançada de Versão (Limpa indicadores ordinais como 5ª)
     versao_doc = "NÃO DETECTADA"
-    match_versao = re.search(r'VERSAO[\s:]*(\d+)', texto_limpo_busca)
+    match_versao = re.search(r'VERSAO\s*[:\s]*(\d+)', texto_limpo_busca)
     if match_versao:
         versao_doc = match_versao.group(1).strip()
     st.write(f"🔹 **Versão do Documento:** `{versao_doc}`")
 
-    # Realiza a Varredura de Seções Sem Acento
+    # Realiza a Varredura de Seções Autêntica
     secoes_esperadas = SECOES_POR_TIPO[tipo_detectado]
     secoes_encontradas, secoes_faltantes = [], []
     
@@ -158,7 +152,7 @@ if arquivo_word:
         else:
             secoes_faltantes.append(secao)
 
-    # Exibição do Status das Seções na Tela
+    # Exibição Analítica das Seções na Interface
     c1, c2 = st.columns(2)
     with c1:
         st.markdown("##### ✅ Seções Identificadas")
@@ -172,20 +166,18 @@ if arquivo_word:
         else:
             st.info("• Nenhuma seção obrigatória ausente!")
 
-    # Processamento das margens via injeção XML direta (Segurança absoluta)
+    # Processamento e Emissão de Documentos
     dados_finais = injetar_margens_via_xml_puro(dados_brutos)
-    
-    # Geração automática da ficha NAQH preenchida
-    documento_aprovado = (len(secoes_faltantes) == 0 and versao_doc != "NÃO DETECTADA")
+    documento_aprovado = (len(secoes_faltantes) == 0 and versao_doc != "NÃO DETECTADA" and codigo_doc != "NÃO DETECTADO")
     ficha_naqh_bytes = gerar_ficha_naqh(tipo_detectado, codigo_doc, versao_doc, secoes_encontradas, secoes_faltantes, documento_aprovado)
 
     st.markdown("---")
     if documento_aprovado:
         st.success("🎉 **DOCUMENTO APROVADO COM SUCESSO!** Tudo pronto para download.")
     else:
-        st.warning("⚠️ **DOCUMENTO FORMATADO COM PENDÊNCIAS!** Verifique as seções ausentes na triagem.")
+        st.warning("⚠️ **DOCUMENTO FORMATADO COM PENDÊNCIAS!** Verifique os itens apontados na triagem.")
 
-    # Exibição paralela dos dois botões estáveis na interface
+    # Exibição paralela dos botões de download homologados
     d1, d2 = st.columns(2)
     with d1:
         st.download_button(
