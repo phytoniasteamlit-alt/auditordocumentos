@@ -41,15 +41,15 @@ def limpar_texto(texto):
     return " ".join(sem_acento.upper().split())
 
 def extrair_texto_por_blocos_xml(xml_string):
-    """Fatiamento rápido por blocos estruturais w:t para evitar Loops demorados"""
+    """Fatiamento rápido por blocos estruturais w:t para evitar loops demorados"""
     fragmentos = xml_string.split('<w:t')
     texto_puro = []
     for frag in fragmentos[1:]:
         conteudo = frag.split('>', 1)
         if len(conteudo) > 1:
-            texto_real = conteudo[1].split('</w:t>', 1)[0]
-            if texto_real.strip():
-                texto_puro.append(texto_real)
+            texto_real = conteudo[1].split('</w:t>', 1)
+            if texto_real[0].strip():
+                texto_puro.append(texto_real[0])
     return " ".join(texto_puro)
 
 # --- 2. MOTOR ULTRA VELOZ SEM REGEX DE BUSCA ---
@@ -111,7 +111,7 @@ def gerar_ficha_naqh(tipo, codigo, versao, encontradas, faltantes, aprovado):
     texto_ficha += "MARGENS CONFIGURADAS (3,0 x 2,0 cm):     -> (X) SIM  ( ) NÃO\n"
     texto_ficha += "MODELO DA FONTE E TAMANHO (Calibri 11):  -> (X) SIM  ( ) NÃO\n"
     texto_ficha += "ESPAÇAMENTO ENTRE LINHAS (1,5cm):        -> (X) SIM  ( ) NÃO\n"
-    texto_ficha += "ALINHAMalignment O (Justificado):        -> (X) SIM  ( ) NÃO\n"
+    texto_ficha += "ALINHAMENTO (Justificado):               -> (X) SIM  ( ) NÃO\n"
     texto_ficha += "RECUO DE PARÁGRAFO (1,25cm):             -> (X) SIM  ( ) NÃO\n\n"
     
     texto_ficha += "3. STATUS DA ESTRUTURA DE SEÇÕES\n"
@@ -134,7 +134,7 @@ if arquivo_word is not None:
     disparar_processo = st.button("🚀 Iniciar Triagem e Formatação", type="primary")
     
     if disparar_processo:
-        with st.spinner("Descompactando e validando dados estruturais estruturados..."):
+        with st.spinner("Descompactando e validando dados estruturais..."):
             with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as temp_file:
                 shutil.copyfileobj(arquivo_word, temp_file)
                 caminho_temp = temp_file.name
@@ -182,3 +182,4 @@ if arquivo_word is not None:
 
             # Triagem Inteligente
             tipo_detectado = "PROTOCOLO"
+            texto_analise_tipo = texto_cabecalho_limpo + " " + texto_corpo_limpo[:1000]
