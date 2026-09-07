@@ -43,7 +43,6 @@ def limpar_texto(texto):
 # --- 2. MOTOR DE ALTERAÇÃO XML DIRETA VIA ARQUIVO TEMPORÁRIO (DISK MODE) ---
 def injetar_margens_via_disco(caminho_origem):
     top_dxa, bottom_dxa, left_dxa, right_dxa = "1134", "1134", "1134", "1701"
-    
     caminho_saida = caminho_origem + "_formatado.docx"
     zip_original = zipfile.ZipFile(caminho_origem, 'r')
     
@@ -112,75 +111,68 @@ def gerar_ficha_naqh(tipo, codigo, versao, encontradas, faltantes, aprovado):
     
     return texto_ficha.encode('utf-8')
 
-# --- 3. FLUXO DE COMPILAÇÃO ---
-arquivo_word = st.file_uploader("Arraste o documento WORD (.docx) aqui para Triagem e Formatação", type=["docx"])
+# --- 3. FLUXO DE COMPILAÇÃO COM GATILHO SEGURO DE BOTÃO ---
+arquivo_word = st.file_uploader("Arraste o documento WORD (.docx) aqui", type=["docx"])
 
 if arquivo_word is not None:
-    st.info(f"⚡ Processando documento pesado de forma otimizada: **{arquivo_word.name}**")
+    st.success(f"📂 Arquivo carregado com sucesso: **{arquivo_word.name}**")
     
-    # Salva o upload diretamente no disco temporário do servidor para liberar a memória RAM
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as temp_file:
-        shutil.copyfileobj(arquivo_word, temp_file)
-        caminho_temp = temp_file.name
+    # Botão de disparo obrigatório para travar o processamento automático instável
+    disparar_processo = st.button("🚀 Iniciar Triagem e Formatação", type="primary")
+    
+    if disparar_processo:
+        with st.spinner("Analisando estruturas XML pesadas de forma segura..."):
+            # Salva o upload diretamente no disco temporário
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as temp_file:
+                shutil.copyfileobj(arquivo_word, temp_file)
+                caminho_temp = temp_file.name
 
-    texto_corpo_xml = ""
-    texto_cabecalhos_xml = ""
-    
-    try:
-        with zipfile.ZipFile(caminho_temp, 'r') as z:
-            if "word/document.xml" in z.namelist():
-                xml_content = z.read("word/document.xml").decode("utf-8", errors="ignore")
-                texto_corpo_xml = re.sub(r'<[^>]+>', ' ', xml_content)
-                
-            for f in z.namelist():
-                if "word/header" in f and f.endswith(".xml"):
-                    xml_content = z.read(f).decode("utf-8", errors="ignore")
-                    texto_cabecalhos_xml += " " + re.sub(r'<[^>]+>', ' ', xml_content)
-    except Exception as e:
-        st.error(f"❌ Falha na leitura interna do arquivo. Erro: {str(e)}")
-        st.stop()
-        
-    texto_corpo_limpo = limpar_texto(texto_corpo_xml)
-    texto_cabecalho_limpo = limpar_texto(texto_cabecalhos_xml)
-    
-    codigo_doc = "NÃO DETECTADO"
-    versao_doc = "NÃO DETECTADA"
-    
-    match_cod = re.search(r'(PROT|POP|MAN|NOR|ROT|PLANC|POL|PROG|REG)_[A-Z0-9_|-]+', texto_cabecalho_limpo)
-    if match_cod:
-        codigo_doc = match_cod.group(0).strip()
-        
-    match_ver = re.search(r'VERSAO\s*[:\s]*(\d+)', texto_cabecalho_limpo)
-    if match_ver:
-        versao_doc = match_ver.group(1).strip()
-
-    if codigo_doc == "NÃO DETECTADO":
-        match_cod_c = re.search(r'(PROT|POP|MAN|NOR|ROT|PLANC|POL|PROG|REG)_[A-Z0-9_|-]+', texto_corpo_limpo)
-        if match_cod_c:
-            codigo_doc = match_cod_c.group(0).strip()
+            texto_corpo_xml = ""
+            texto_cabecalhos_xml = ""
             
-    if versao_doc == "NÃO DETECTADA":
-        match_ver_c = re.search(r'VERSAO\s*[:\s]*(\d+)', texto_corpo_limpo)
-        if match_ver_c:
-            versao_doc = match_ver_c.group(1).strip()
+            try:
+                with zipfile.ZipFile(caminho_temp, 'r') as z:
+                    if "word/document.xml" in z.namelist():
+                        xml_content = z.read("word/document.xml").decode("utf-8", errors="ignore")
+                        texto_corpo_xml = re.sub(r'<[^>]+>', ' ', xml_content)
+                        
+                    for f in z.namelist():
+                        if "word/header" in f and f.endswith(".xml"):
+                            xml_content = z.read(f).decode("utf-8", errors="ignore")
+                            texto_cabecalhos_xml += " " + re.sub(r'<[^>]+>', ' ', xml_content)
+            except Exception as e:
+                st.error(f"❌ Falha na leitura interna do arquivo. Erro: {str(e)}")
+                st.stop()
+                
+            texto_corpo_limpo = limpar_texto(texto_corpo_xml)
+            texto_cabecalho_limpo = limpar_texto(texto_cabecalhos_xml)
+            
+            codigo_doc = "NÃO DETECTADO"
+            versao_doc = "NÃO DETECTADA"
+            
+            match_cod = re.search(r'(PROT|POP|MAN|NOR|ROT|PLANC|POL|PROG|REG)_[A-Z0-9_|-]+', texto_cabecalho_limpo)
+            if match_cod:
+                codigo_doc = match_cod.group(0).strip()
+                
+            match_ver = re.search(r'VERSAO\s*[:\s]*(\d+)', texto_cabecalho_limpo)
+            if match_ver:
+                versao_doc = match_ver.group(1).strip()
 
-    # Triagem Avançada
-    tipo_detectado = "PROTOCOLO"
-    texto_analise_tipo = texto_cabecalho_limpo + " " + texto_corpo_limpo[:1000]
-    
-    if "PLANO DE CONTINGENCIA" in texto_analise_tipo or "PLANC" in texto_analise_tipo:
-        tipo_detectado = "PLANO DE CONTINGENCIA"
-    elif "POLITICA INSTITUCIONAL" in texto_analise_tipo or "POL" in texto_analise_tipo:
-        tipo_detectado = "POLITICA INSTITUCIONAL"
-    elif "PROCEDIMENTO OPERACIONAL" in texto_analise_tipo or "POP" in texto_analise_tipo:
-        tipo_detectado = "POP"
-    elif "PROGRAMA" in texto_analise_tipo or "PROG" in texto_analise_tipo:
-        tipo_detectado = "PROGRAMA"
-    elif "REGIMENTO" in texto_analise_tipo or "REG" in texto_analise_tipo:
-        tipo_detectado = "REGIMENTO"
-    elif "ROTINA" in texto_analise_tipo or "ROT" in texto_analise_tipo:
-        tipo_detectado = "ROTINA"
-    elif "MANUAL" in texto_analise_tipo or "MAN" in texto_analise_tipo:
-        tipo_detectado = "MANUAL"
-    elif "NORMA" in texto_analise_tipo or "NOR_" in texto_analise_tipo:
-        tipo_detectado = "NORMA"
+            if codigo_doc == "NÃO DETECTADO":
+                match_cod_c = re.search(r'(PROT|POP|MAN|NOR|ROT|PLANC|POL|PROG|REG)_[A-Z0-9_|-]+', texto_corpo_limpo)
+                if match_cod_c:
+                    codigo_doc = match_cod_c.group(0).strip()
+                    
+            if versao_doc == "NÃO DETECTADA":
+                match_ver_c = re.search(r'VERSAO\s*[:\s]*(\d+)', texto_corpo_limpo)
+                if match_ver_c:
+                    versao_doc = match_ver_c.group(1).strip()
+
+            # Triagem Avançada
+            tipo_detectado = "PROTOCOLO"
+            texto_analise_tipo = texto_cabecalho_limpo + " " + texto_corpo_limpo[:1000]
+            
+            if "PLANO DE CONTINGENCIA" in texto_analise_tipo or "PLANC" in texto_analise_tipo:
+                tipo_detectado = "PLANO DE CONTINGENCIA"
+            elif "POLITICA INSTITUCIONAL" in texto_analise_tipo or "POL" in texto_analise_tipo:
+                tipo_detectado = "POLITICA INSTITUCIONAL"
