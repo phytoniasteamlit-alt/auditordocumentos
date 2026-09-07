@@ -3,22 +3,22 @@ import docx
 import re
 from io import BytesIO
 
-st.set_page_config(page_title="AUDITORIA — ACHA TUDO!", page_icon="🔍", layout="wide")
+st.set_page_config(page_title="AUDITORIA — FINALMENTE!", page_icon="🔍", layout="wide")
 
-st.title("🔍 AUDITORIA — VERSÃO CORRIGIDA")
-st.markdown("### ✅ Código completo • Versão com '5ª' • Seções com espaços e #")
+st.title("🔍 AUDITORIA — CORRIGIDA 100%")
+st.markdown("### ✅ Código, Versão e Seções com nomes COMPLETOS")
 
 # ============================================================
-# 📋 SEÇÕES — NOMES EXATOS
+# 📋 SEÇÕES — BUSCA PELO INÍICIO (não precisa do nome completo!)
 # ============================================================
 SECOES_POR_TIPO = {
     "PROT": [
         "1. OBJETIVO",
         "2. APLICABILIDADE",
         "3. REFERENCIAL TEÓRICO",
-        "4. CLASSIFICAÇÃO DAS CIRURGIAS",
+        "4. CLASSIFICAÇÃO",
         "5. RESPONSABILIDADES",
-        "6. MEDIDAS OBRIGATÓRIAS DE PREVENÇÃO",
+        "6. MEDIDAS OBRIGATÓRIAS",
         "7. ESTRATÉGIAS DE MONITORAMENTO",
         "8. REFERÊNCIAS"
     ],
@@ -89,12 +89,12 @@ SECOES_POR_TIPO = {
 }
 
 # ============================================================
-# 🧠 FUNÇÃO DE AUDITORIA — CORRIGIDA
+# 🧠 FUNÇÃO CORRIGIDA — ACHA TUDO!
 # ============================================================
 def auditar_documento(arquivo_bytes):
     doc = docx.Document(BytesIO(arquivo_bytes))
     
-    # ✅ LÊ TUDO e LIMPA: remove #, espaços excessivos, quebras de linha
+    # ✅ LÊ TUDO e LIMPA
     texto_bruto = ""
     for p in doc.paragraphs:
         texto_bruto += p.text.upper() + "\n"
@@ -103,23 +103,22 @@ def auditar_documento(arquivo_bytes):
             for celula in linha.cells:
                 texto_bruto += celula.text.upper() + " "
     
-    # ✅ LIMPA O TEXTO: remove #, espaços múltiplos, tabulações
-    texto = re.sub(r'[#\s]+', ' ', texto_bruto).strip()
+    texto = re.sub(r'[\s#]+', ' ', texto_bruto).strip()
     
     # 🔍 IDENTIFICAR TIPO
-    tipo_detectado = "PROT"  # Padrão
+    tipo_detectado = "PROT"
     for tipo in SECOES_POR_TIPO.keys():
         if re.search(rf'\b{tipo}[_ /]', texto) or re.search(rf'\b{tipo}\b', texto):
             tipo_detectado = tipo
             break
     
-    # 🔍 CÓDIGO — CORRIGIDO: pega TUDO (PROT_SCH005 completo!)
+    # 🔍 CÓDIGO — CORRIGIDO: BUSCA SOMENTE DEPOIS DE "CÓDIGO:" !!!
     codigo_detectado = None
-    match_codigo = re.search(rf'{tipo_detectado}[_ ]?[A-Z0-9]+', texto)
-    if match_codigo:
-        codigo_detectado = re.sub(r'\s+', '', match_codigo.group(0))  # remove espaços
+    match_codigo = re.search(r'CÓDIGO[:\s]+([A-Z]{3,4}_[A-Z0-9]+)', texto)
+    if match_codigo and match_codigo.group(1):
+        codigo_detectado = match_codigo.group(1).strip()
     
-    # 🔍 VERSÃO — CORRIGIDO: aceita "5ª", "5", "V5.1"
+    # 🔍 VERSÃO — ACEITA "5ª", "5°", "5", "V5" !!!
     versao_detectada = None
     match_versao = re.search(r'VERSÃO[:\s]*[:]?\s*(?:VERSÃO|[Vv])?\s*(\d+)', texto)
     if match_versao and match_versao.group(1):
@@ -131,14 +130,16 @@ def auditar_documento(arquivo_bytes):
     if match_validade and match_validade.group(1):
         validade_detectada = match_validade.group(1).strip()
     
-    # 🔍 SEÇÕES — CORRIGIDO: compara TEXTO LIMPO
+    # 🔍 SEÇÕES — BUSCA PELO INÍCIO! Não precisa do nome inteiro!
     secoes_esperadas = SECOES_POR_TIPO[tipo_detectado]
     secoes_encontradas = []
     secoes_faltantes = []
     
     for secao in secoes_esperadas:
-        secao_limpa = re.sub(r'[#\s]+', ' ', secao.upper()).strip()
-        if secao_limpa in texto:
+        secao_limpa = re.sub(r'[\s#]+', ' ', secao.upper()).strip()
+        # ✅ Busca se o texto COMEÇA com o nome da seção → encontra mesmo com resto!
+        padrao = rf'\b{re.escape(secao_limpa)}\b'
+        if re.search(padrao, texto):
             secoes_encontradas.append(secao)
         else:
             secoes_faltantes.append(secao)
@@ -160,17 +161,17 @@ def auditar_documento(arquivo_bytes):
 # ============================================================
 # 🚀 INTERFACE
 # ============================================================
-with st.form("auditoria_final_corrigida"):
+with st.form("auditoria_final_final"):
     arquivo_word = st.file_uploader(
         "📂 Arraste o documento WORD (.docx) AQUI",
         type=["docx"]
     )
-    enviado = st.form_submit_button("🔍 EXECUTAR AUDITORIA", type="primary")
+    enviado = st.form_submit_button("🔍 EXECUTAR AUDITORIA — FINAL", type="primary")
 
 if enviado and arquivo_word:
     st.info(f"✅ Arquivo: **{arquivo_word.name}**")
     
-    with st.spinner("Escaneando..."):
+    with st.spinner("Escaneando... buscando código, versão e seções..."):
         try:
             rel = auditar_documento(arquivo_word.read())
             
@@ -178,10 +179,19 @@ if enviado and arquivo_word:
             c1, c2 = st.columns(2)
             with c1:
                 st.info(f"**Tipo:** {rel['tipo']}")
-                st.success(f"**Código:** {rel['codigo'] if rel['codigo'] else '❌ NÃO ENCONTRADO'}")
+                if rel['codigo']:
+                    st.success(f"**Código:** {rel['codigo']}")
+                else:
+                    st.error("**Código:** ❌ NÃO ENCONTRADO")
             with c2:
-                st.success(f"**Versão:** {rel['versao'] if rel['versao'] else '❌ NÃO ENCONTRADA'}")
-                st.info(f"**Validade:** {rel['validade'] if rel['validade'] else '⚠️ Não obrigatória'}")
+                if rel['versao']:
+                    st.success(f"**Versão:** {rel['versao']}")
+                else:
+                    st.error("**Versão:** ❌ NÃO ENCONTRADA")
+                if rel['validade']:
+                    st.info(f"**Validade:** {rel['validade']}")
+                else:
+                    st.info("**Validade:** ⚠️ Não obrigatória")
             
             st.markdown("---")
             st.subheader("✅ SEÇÕES ENCONTRADAS")
@@ -197,10 +207,10 @@ if enviado and arquivo_word:
             
             st.markdown("---")
             if rel["aprovado"]:
-                st.success("## ✅ APROVADO!")
+                st.success("## ✅ APROVADO — DOCUMENTO CONFORME!")
                 st.balloons()
             else:
-                st.error("## ❌ REPROVADO")
+                st.error("## ❌ REPROVADO — Verifique os itens acima")
         
         except Exception as e:
             st.error(f"## ❌ ERRO: {str(e)}")
