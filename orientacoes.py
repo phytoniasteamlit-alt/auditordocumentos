@@ -112,7 +112,7 @@ def formatar_pelas_normas(doc):
         # Verifica se o parágrafo atual é um Título/Subtítulo Principal
         eh_titulo = any(limpar_texto(re.sub(r'^\d+\.\s*', '', s)) in limpar_texto(texto_paragrafo) for lista in SECOES_POR_TIPO.values() for s in lista)
         
-        # Verifica se o texto opera como item listado (bullets ou alfabéticos)
+        # Verifica se o text opera como item listado (bullets ou alfabéticos)
         eh_lista = p.style.name.startswith('List') or texto_paragrafo.startswith(('-', '•', '*', 'a)', 'b)', 'c)', 'd)', 'e)', 'f)', 'g)', 'h)', 'i)', 'j)', 'k)'))
 
         if eh_titulo:
@@ -168,52 +168,55 @@ with st.form("interface_auditoria_e_formatador"):
 if enviado and arquivo_word:
     st.info(f"✅ Documento recebido: **{arquivo_word.name}**")
     
-    # Inicializa variáveis para controle de escopo seguro
-    rel = None
+    # Carrega o documento original de forma sequencial e segura
     conteudo_arquivo = arquivo_word.read()
+    doc_original = docx.Document(BytesIO(conteudo_arquivo))
     
-    try:
-        # Carrega o documento original na memória e roda a auditoria
-        doc_original = docx.Document(BytesIO(conteudo_arquivo))
-        rel = auditar_documento(doc_original)
-        
-        st.markdown("---")
-        st.subheader("📋 RESULTADOS DA VALIDAÇÃO")
-        
-        c1, c2 = st.columns(2)
-        with c1:
-            st.info(f"**Tipo Identificado:** {rel['tipo']}")
-            if rel['codigo']:
-                st.success(f"**Código Localizado:** {rel['codigo']}")
-            else:
-                st.error("**Código:** ❌ NÃO ENCONTRADO NO CABEÇALHO")
-        with c2:
-            if rel['versao']:
-                st.success(f"**Versão Localizada:** {rel['versao']}")
-            else:
-                st.error("**Versão:** ❌ NÃO ENCONTRADA NO CABEÇALHO")
-            if rel['validade']:
-                st.info(f"**Validade:** {rel['validade']}")
-            else:
-                st.info("**Validade:** ⚠️ Campo não preenchido")
-        
-        st.markdown("---")
-        
-        # Mostra na tela o status de cada seção avaliada
-        st.subheader("👁️ STATUS DAS SEÇÕES EXIGIDAS")
-        col_enc, col_fal = st.columns(2)
-        
-        with col_enc:
-            st.markdown("#### ✅ Encontradas no texto")
-            for s in rel["secoes_encontradas"]:
-                st.success(f"• {s}")
-                
-        with col_fal:
-            st.markdown("#### ❌ Faltantes ou incorretas")
-            if rel["secoes_faltantes"]:
-                for s in rel["secoes_faltantes"]:
-                    st.error(f"• {s}")
-            else:
-                st.info("• Nenhuma seção ausente!")
-                
-    except Exception as e:
+    # Executa a varredura e auditoria técnica
+    rel = auditar_documento(doc_original)
+    
+    st.markdown("---")
+    st.subheader("📋 RESULTADOS DA VALIDAÇÃO")
+    
+    c1, c2 = st.columns(2)
+    with c1:
+        st.info(f"**Tipo Identificado:** {rel['tipo']}")
+        if rel['codigo']:
+            st.success(f"**Código Localizado:** {rel['codigo']}")
+        else:
+            st.error("**Código:** ❌ NÃO ENCONTRADO NO CABEÇALHO")
+    with c2:
+        if rel['versao']:
+            st.success(f"**Versão Localizada:** {rel['versao']}")
+        else:
+            st.error("**Versão:** ❌ NÃO ENCONTRADA NO CABEÇALHO")
+        if rel['validade']:
+            st.info(f"**Validade:** {rel['validade']}")
+        else:
+            st.info("**Validade:** ⚠️ Campo não preenchido")
+    
+    st.markdown("---")
+    
+    # Mostra na tela o status de cada seção avaliada
+    st.subheader("👁️ STATUS DAS SEÇÕES EXIGIDAS")
+    col_enc, col_fal = st.columns(2)
+    
+    with col_enc:
+        st.markdown("#### ✅ Encontradas no texto")
+        for s in rel["secoes_encontradas"]:
+            st.success(f"• {s}")
+            
+    with col_fal:
+        st.markdown("#### ❌ Faltantes ou incorretas")
+        if rel["secoes_faltantes"]:
+            for s in rel["secoes_faltantes"]:
+                st.error(f"• {s}")
+        else:
+            st.info("• Nenhuma seção ausente!")
+            
+    st.markdown("---")
+    
+    # Executa a correção do design estrutural pelas regras de estilo da Norma Zero
+    documento_formatado_bytes = formatar_pelas_normas(docx.Document(BytesIO(conteudo_arquivo)))
+    
+    if rel["aprovado"]:
