@@ -7,7 +7,7 @@ from io import BytesIO
 st.set_page_config(page_title="AUDITORIA — Detecção + Manual", page_icon="🔍", layout="wide")
 
 st.title("🔍 AUDITORIA — Detecção Automática + Confirmação Manual")
-st.markdown("### ✅ Sistema tenta detectar → Você confirma/corrige manualmente se precisar")
+st.markdown("### ✅ Sistema tenta detectar → Você confirma/corrige manualmente")
 
 # ============================================================
 # 🧹 REMOVER ACENTOS
@@ -165,12 +165,12 @@ def auditar_documento(arquivo_bytes):
             linha_texto = " ".join([cel.text for cel in linha.cells])
             texto_completo += linha_texto + " "
             
-            # ✅ CÓDIGO — EXATO: "Código: PROT_SCHI005"
-            cod_match = re.search(r'CÓDIGO|Código[:\s]*[:]?\s*([A-Z]{2,5}[_\s][A-Z0-9]+)', linha_texto, re.IGNORECASE)
+            # ✅ CÓDIGO — aceita vários formatos
+            cod_match = re.search(r'CÓDIGO|Código[:\s]*[:]?\s*([A-Z]{2,5}[_\s]?[A-Z0-9]+)', linha_texto, re.IGNORECASE)
             if cod_match and cod_match.group(1):
                 codigo_detectado = re.sub(r'\s+', '_', cod_match.group(1).strip())
             
-            # ✅ VERSÃO — EXATO: "Versão: 5ª" → pega só o número
+            # ✅ VERSÃO — pega o número antes de "ª"
             ver_match = re.search(r'VERSÃO|Versão[:\s]*[:]?\s*(\d+)', linha_texto, re.IGNORECASE)
             if ver_match and ver_match.group(1):
                 versao_detectada = ver_match.group(1).strip()
@@ -209,36 +209,26 @@ def auditar_documento(arquivo_bytes):
     
     # 🔍 VERIFICAR SEÇÕES
     secoes_esperadas = SECOES_POR_TIPO[tipo_detectado]
-    secoes_encontradas = []
-    secoes_faltantes = []
-    
+    secoes_encontradas_auto = []
     for secao in secoes_esperadas:
         secao_limpa = limpar_texto(secao)
         if re.search(rf'\b{re.escape(secao_limpa)}\b', texto_limpo):
-            secoes_encontradas.append(secao)
-        else:
-            secoes_faltantes.append(secao)
+            secoes_encontradas_auto.append(secao)
     
     return {
         "tipo": tipo_detectado,
         "codigo": codigo_detectado,
         "versao": versao_detectada,
         "validade": validade_detectada,
-        "secoes_encontradas": secoes_encontradas,
-        "secoes_faltantes": secoes_faltantes
+        "secoes_detectadas": secoes_encontradas_auto
     }
 
 # ============================================================
-# 🚀 INTERFACE PRINCIPAL
+# 🚀 INTERFACE PRINCIPAL — TUDO DENTRO DO FORMULÁRIO!
 # ============================================================
-with st.form("auditoria_com_confirmacao_manual"):
-    arquivo_word = st.file_uploader(
-        "📂 Arraste o documento WORD (.docx) AQUI",
-        type=["docx"]
-    )
-    enviado = st.form_submit_button("🔍 EXECUTAR DETECÇÃO", type="primary")
+arquivo_word = st.file_uploader("📂 Arraste o documento WORD (.docx) AQUI", type=["docx"])
 
-if enviado and arquivo_word:
+if arquivo_word:
     st.info(f"✅ Arquivo carregado: **{arquivo_word.name}**")
     
     with st.spinner("Detectando informações..."):
@@ -247,137 +237,124 @@ if enviado and arquivo_word:
             rel = auditar_documento(dados_brutos)
             
             # ============================================================
-            # ✅ ÁREA DE CONFIRMAÇÃO / CORREÇÃO MANUAL
+            # ✅ FORMULÁRIO DE CONFIRMAÇÃO — TUDO DENTRO!
             # ============================================================
             st.markdown("---")
-            st.subheader("📋 INFORMAÇÕES DETECTADAS — CONFIRME OU CORRIJA ABAIXO")
+            st.subheader("📋 INFORMAÇÕES DETECTADAS — CONFIRME OU CORRIJA")
             
-            col1, col2 = st.columns(2)
-            with col1:
-                tipo_detectado = st.selectbox(
-                    "**Tipo de Documento**",
-                    options=list(SECOES_POR_TIPO.keys()),
-                    index=list(SECOES_POR_TIPO.keys()).index(rel["tipo"])
-                )
-                codigo_doc = st.text_input(
-                    "**Código do Documento**",
-                    value=rel["codigo"] or "",
-                    placeholder="Ex: PROT_SCHI005"
-                )
-            with col2:
-                versao_doc = st.text_input(
-                    "**Versão**",
-                    value=rel["versao"] or "",
-                    placeholder="Ex: 5"
-                )
-                validade_doc = st.text_input(
-                    "**Validade**",
-                    value=rel["validade"] or "",
-                    placeholder="Ex: xx/xx/2030 (opcional)"
-                )
+            with st.form("form_confirmacao"):
+                col1, col2 = st.columns(2)
+                with col1:
+                    tipo_detectado = st.selectbox(
+                        "**Tipo de Documento**",
+                        options=list(SECOES_POR_TIPO.keys()),
+                        index=list(SECOES_POR_TIPO.keys()).index(rel["tipo"])
+                    )
+                    codigo_doc = st.text_input(
+                        "**Código do Documento**",
+                        value=rel["codigo"] or "",
+                        placeholder="Ex: PROT_SCHI005"
+                    )
+                with col2:
+                    versao_doc = st.text_input(
+                        "**Versão**",
+                        value=rel["versao"] or "",
+                        placeholder="Ex: 5"
+                    )
+                    validade_doc = st.text_input(
+                        "**Validade**",
+                        value=rel["validade"] or "",
+                        placeholder="Ex: xx/xx/2030 (opcional)"
+                    )
+                
+                st.markdown("---")
+                st.subheader("✅ SEÇÕES — MARQUE QUAIS ESTÃO PRESENTES")
+                st.markdown("O sistema marcou as que achou. Confirme e ajuste:")
+                
+                secoes_esperadas = SECOES_POR_TIPO[tipo_detectado]
+                checks = {}
+                for secao in secoes_esperadas:
+                    valor_auto = secao in rel["secoes_detectadas"]
+                    checks[secao] = st.checkbox(secao, value=valor_auto)
+                
+                # ✅ BOTÃO DENTRO DO FORMULÁRIO!
+                confirmar = st.form_submit_button("✅ CONFIRMAR E GERAR RESULTADO", type="primary")
             
             # ============================================================
-            # ✅ SEÇÕES — MARQUE MANUALMENTE AS ENCONTRADAS
+            # ✅ APÓS CONFIRMAR — FORA DO FORMULÁRIO
             # ============================================================
-            st.markdown("---")
-            st.subheader("✅ SEÇÕES — CONFIRME QUAIS ESTÃO PRESENTES")
-            
-            secoes_esperadas = SECOES_POR_TIPO[tipo_detectado]
-            secoes_encontradas = []
-            secoes_faltantes = []
-            
-            st.markdown("Marque as seções que existem no documento:")
-            for secao in secoes_esperadas:
-                # Verifica se foi detectada automaticamente
-                detectada_auto = secao in rel["secoes_encontradas"]
-                # Checkbox para confirmação manual
-                confirmada = st.checkbox(
-                    secao,
-                    value=detectada_auto,
-                    key=f"secao_{secao}"
+            if confirmar:
+                secoes_encontradas = [s for s, marcada in checks.items() if marcada]
+                secoes_faltantes = [s for s, marcada in checks.items() if not marcada]
+                
+                codigo_doc = codigo_doc or "NÃO DETECTADO"
+                versao_doc = versao_doc or "NÃO DETECTADA"
+                
+                dados_finais = injetar_margens_via_xml_puro(dados_brutos)
+                documento_aprovado = (len(secoes_faltantes) == 0 and 
+                                      versao_doc != "NÃO DETECTADA" and 
+                                      codigo_doc != "NÃO DETECTADO")
+                ficha_bytes = gerar_ficha_naqh(
+                    tipo_detectado, codigo_doc, versao_doc, 
+                    secoes_encontradas, secoes_faltantes, documento_aprovado
                 )
-                if confirmada:
-                    secoes_encontradas.append(secao)
+                
+                # ============================================================
+                # 📊 RESULTADO FINAL
+                # ============================================================
+                st.markdown("---")
+                st.subheader("📋 RELATÓRIO FINAL CONFIRMADO")
+                
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.info(f"**Tipo:** {tipo_detectado}")
+                    if codigo_doc != "NÃO DETECTADO":
+                        st.success(f"**Código:** {codigo_doc} ✅")
+                    else:
+                        st.error("**Código:** ❌ NÃO INFORMADO")
+                with c2:
+                    if versao_doc != "NÃO DETECTADA":
+                        st.success(f"**Versão:** {versao_doc} ✅")
+                    else:
+                        st.error("**Versão:** ❌ NÃO INFORMADA")
+                    if validade_doc:
+                        st.info(f"**Validade:** {validade_doc}")
+                
+                st.markdown("---")
+                st.subheader("✅ SEÇÕES CONFIRMADAS")
+                for s in secoes_encontradas:
+                    st.success(f"✅ {s}")
+                
+                if secoes_faltantes:
+                    st.subheader("❌ SEÇÕES FALTANTES")
+                    for s in secoes_faltantes:
+                        st.error(f"❌ {s}")
                 else:
-                    secoes_faltantes.append(secao)
-            
-            # ============================================================
-            # ✅ PROCESSAMENTO FINAL E DOWNLOADS
-            # ============================================================
-            st.markdown("---")
-            if not st.form_submit_button("✅ CONFIRMAR E GERAR RESULTADO", type="primary"):
-                st.info("👆 Clique em CONFIRMAR acima após revisar os dados")
-                st.stop()
-            
-            # Garante valores padrão
-            codigo_doc = codigo_doc or "NÃO DETECTADO"
-            versao_doc = versao_doc or "NÃO DETECTADA"
-            
-            dados_finais = injetar_margens_via_xml_puro(dados_brutos)
-            documento_aprovado = (len(secoes_faltantes) == 0 and 
-                                  versao_doc != "NÃO DETECTADA" and 
-                                  codigo_doc != "NÃO DETECTADO")
-            ficha_bytes = gerar_ficha_naqh(
-                tipo_detectado, codigo_doc, versao_doc, 
-                secoes_encontradas, secoes_faltantes, documento_aprovado
-            )
-            
-            # ============================================================
-            # 📊 RESULTADO FINAL
-            # ============================================================
-            st.markdown("---")
-            st.subheader("📋 RELATÓRIO FINAL CONFIRMADO")
-            
-            c1, c2 = st.columns(2)
-            with c1:
-                st.info(f"**Tipo:** {tipo_detectado}")
-                if codigo_doc != "NÃO DETECTADO":
-                    st.success(f"**Código:** {codigo_doc} ✅")
+                    st.subheader("✅ TODAS AS SEÇÕES CONFIRMADAS!")
+                
+                st.markdown("---")
+                if documento_aprovado:
+                    st.success("🎉 **DOCUMENTO APROVADO COM SUCESSO!**")
+                    st.balloons()
                 else:
-                    st.error("**Código:** ❌ NÃO INFORMADO")
-            with c2:
-                if versao_doc != "NÃO DETECTADA":
-                    st.success(f"**Versão:** {versao_doc} ✅")
-                else:
-                    st.error("**Versão:** ❌ NÃO INFORMADA")
-                if validade_doc:
-                    st.info(f"**Validade:** {validade_doc}")
-            
-            st.markdown("---")
-            st.subheader("✅ SEÇÕES CONFIRMADAS")
-            for s in secoes_encontradas:
-                st.success(f"✅ {s}")
-            
-            if secoes_faltantes:
-                st.subheader("❌ SEÇÕES FALTANTES")
-                for s in secoes_faltantes:
-                    st.error(f"❌ {s}")
-            else:
-                st.subheader("✅ TODAS AS SEÇÕES CONFIRMADAS!")
-            
-            st.markdown("---")
-            if documento_aprovado:
-                st.success("🎉 **DOCUMENTO APROVADO COM SUCESSO!**")
-                st.balloons()
-            else:
-                st.warning("⚠️ **DOCUMENTO COM PENDÊNCIAS!** Verifique os dados.")
-            
-            # ============================================================
-            # 📥 DOWNLOADS
-            # ============================================================
-            st.markdown("### 📥 ÁREA DE DOWNLOADS")
-            nome_doc = f"{codigo_doc}_Formatado.docx" if codigo_doc != "NÃO DETECTADO" else "Documento_Formatado.docx"
-            nome_txt = f"Ficha_Verificacao_{codigo_doc}.txt" if codigo_doc != "NÃO DETECTADO" else "Ficha_Verificacao.txt"
-            
-            st.download_button(
-                "📥 DOWNLOAD DO DOCUMENTO FORMATADO (.DOCX)",
-                dados_finais, nome_doc,
-                "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            )
-            st.download_button(
-                "📄 DOWNLOAD DA FICHA DE VERIFICAÇÃO (.TXT)",
-                ficha_bytes, nome_txt, "text/plain"
-            )
+                    st.warning("⚠️ **DOCUMENTO COM PENDÊNCIAS!** Verifique os dados.")
+                
+                # ============================================================
+                # 📥 DOWNLOADS
+                # ============================================================
+                st.markdown("### 📥 ÁREA DE DOWNLOADS")
+                nome_doc = f"{codigo_doc}_Formatado.docx" if codigo_doc != "NÃO DETECTADO" else "Documento_Formatado.docx"
+                nome_txt = f"Ficha_Verificacao_{codigo_doc}.txt" if codigo_doc != "NÃO DETECTADO" else "Ficha_Verificacao.txt"
+                
+                st.download_button(
+                    "📥 DOWNLOAD DO DOCUMENTO FORMATADO (.DOCX)",
+                    dados_finais, nome_doc,
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                )
+                st.download_button(
+                    "📄 DOWNLOAD DA FICHA DE VERIFICAÇÃO (.TXT)",
+                    ficha_bytes, nome_txt, "text/plain"
+                )
         
         except Exception as e:
             st.error(f"## ❌ ERRO: {str(e)}")
