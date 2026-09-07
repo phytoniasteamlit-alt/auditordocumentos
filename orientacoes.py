@@ -51,7 +51,6 @@ def auditar_documento(doc):
     texto_bruto = "  ".join(elementos_texto)
     texto = limpar_texto(texto_bruto)
     
-    # Identificação inteligente do tipo de documento baseado no cabeçalho ou corpo
     tipo_detectado = "PROT"
     if "NORMA" in texto:
         tipo_detectado = "NORMA"
@@ -80,7 +79,7 @@ def auditar_documento(doc):
     secoes_encontradas, secoes_faltantes = [], []
     
     for secao in secoes_esperadas:
-        secao_sem_numero = re.sub(r'^\d+\s*', '', secao)  # Flexibiliza se tem ponto ou não
+        secao_sem_numero = re.sub(r'^\d+\s*', '', secao)
         secao_limpa = limpar_texto(secao_sem_numero)
         if re.search(rf'\b{re.escape(secao_limpa)}\b', texto):
             secoes_encontradas.append(secao)
@@ -119,7 +118,7 @@ def formatar_pelas_normas(doc):
 
         if eh_titulo:
             p.paragraph_format.line_spacing = 1.5
-            p.paragraph_format.space_before = Pt(12)  # Atende a exigência de distanciamento de títulos
+            p.paragraph_format.space_before = Pt(12)
             p.paragraph_format.space_after = Pt(12)
             p.paragraph_format.first_line_indent = Cm(0)
             for r in p.runs:
@@ -161,39 +160,36 @@ def formatar_pelas_normas(doc):
     return output.getvalue()
 
 # ============================================================
-# 📋 GERADOR DA FICHA OFICIAL DE VERIFICAÇÃO DO NAQH
+# 📋 GERADOR DA FICHA OFICIAL DE VERIFICAÇÃO DO NAQH (MÉTODO SEGURO)
 # ============================================================
 def gerar_ficha_naqh(rel):
-    sim_nao = lambda cond: "(X) SIM  ( ) NÃO" if cond else "( ) SIM  (X) NÃO"
+    def sim_nao(condição):
+        return "(X) SIM  ( ) NÃO" if condição else "( ) SIM  (X) NÃO"
     
-    ficha = f"""========================================================================
-            SECRETARIA MUNICIPAL DE SAÚDE - SEMUS
-               HOSPITAL DA CIDADE DR. JACKSON LAGO
-             FICHA DE VERIFICAÇÃO PARA APROVAÇÃO DE DOCUMENTO
-========================================================================
-
-1. CABEÇALHO INSTITUCIONAL
-------------------------------------------------------------------------
-TÍTULO DO DOCUMENTO:   [PREVENÇÃO DE INFECÇÕES DE SÍTIO CIRÚRGICO]
-TIPO DE DOCUMENTO:     [{rel['tipo']}] -> {sim_nao(rel['tipo'] is not None)}
-CÓDIGO DO DOCUMENTO:   [{rel['codigo'] or 'NÃO ENCONTRADO'}] -> {sim_nao(rel['codigo'] is not None)}
-VERSÃO DO DOCUMENTO:   [{rel['versao'] or 'NÃO ENCONTRADA'}] -> {sim_nao(rel['versao'] is not None)}
-VALIDADE EXIBIDA:      [{rel['validade'] or 'NÃO PREENCHIDA'}]
-
-2. FORMATAÇÃO E REGRAS VISUAIS (NORMA ZERO)
-------------------------------------------------------------------------
-PAPEL: A4 BRANCO                         -> (X) SIM  ( ) NÃO
-MARGENS CONFIGURADAS (3x3x2x2):          -> (X) SIM  ( ) NÃO
-MODELO DA FONTE E TAMANHO (Calibri 11):  -> (X) SIM  ( ) NÃO
-ESPAÇAMENTO ENTRE LINHAS (1,5cm):        -> (X) SIM  ( ) NÃO
-ALINHAMENTO (Justificado):               -> (X) SIM  ( ) NÃO
-RECUO DE PARÁGRAFO (1,25cm):             -> (X) SIM  ( ) NÃO
-
-3. STATUS DA ESTRUTURA DE SEÇÕES
-------------------------------------------------------------------------
-STATUS GERAL DO DOCUMENTO: {"APROVADO - CONFORME" if rel['aprovado'] else "REPROVADO - REVISAR PENDÊNCIAS"}
-Seções em Conformidade: {len(rel['secoes_encontradas'])}
-Seções Ausentes ou Faltantes: {len(rel['secoes_faltantes'])}
-
-------------------------------------------------------------------------
-Ficha emitida eletronicamente pelo Auditor de Documentos do NAQH.
+    # Construção estática tradicional para evitar conflito de chaves e colchetes no Python
+    linhas = [
+        "========================================================================",
+        "            SECRETARIA MUNICIPAL DE SAÚDE - SEMUS",
+        "               HOSPITAL DA CIDADE DR. JACKSON LAGO",
+        "             FICHA DE VERIFICAÇÃO PARA APROVAÇÃO DE DOCUMENTO",
+        "========================================================================",
+        "",
+        "1. CABEÇALHO INSTITUCIONAL",
+        "------------------------------------------------------------------------",
+        "TIPO DE DOCUMENTO:     [" + str(rel['tipo']) + "] -> " + sim_nao(rel['tipo'] is not None),
+        "CÓDIGO DO DOCUMENTO:   [" + str(rel['codigo'] or 'NÃO ENCONTRADO') + "] -> " + sim_nao(rel['codigo'] is not None),
+        "VERSÃO DO DOCUMENTO:   [" + str(rel['versao'] or 'NÃO ENCONTRADA') + "] -> " + sim_nao(rel['versao'] is not None),
+        "VALIDADE EXIBIDA:      [" + str(rel['validade'] or 'NÃO PREENCHIDA') + "]",
+        "",
+        "2. FORMATAÇÃO E REGRAS VISUAIS (NORMA ZERO)",
+        "------------------------------------------------------------------------",
+        "PAPEL: A4 BRANCO                         -> (X) SIM  ( ) NÃO",
+        "MARGENS CONFIGURADAS (3x3x2x2):          -> (X) SIM  ( ) NÃO",
+        "MODELO DA FONTE E TAMANHO (Calibri 11):  -> (X) SIM  ( ) NÃO",
+        "ESPAÇAMENTO ENTRE LINHAS (1,5cm):        -> (X) SIM  ( ) NÃO",
+        "ALINHAMENTO (Justificado):               -> (X) SIM  ( ) NÃO",
+        "RECUO DE PARÁGRAFO (1,25cm):             -> (X) SIM  ( ) NÃO",
+        "",
+        "3. STATUS DA ESTRUTURA DE SEÇÕES",
+        "------------------------------------------------------------------------",
+        "STATUS GERAL DO DOCUMENTO: " + ("APROVADO - CONFORME" if rel['aprovado'] else "REPROVADO - REVISAR PENDÊNCIAS"),
