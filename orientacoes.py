@@ -3,178 +3,233 @@ import docx
 import re
 import unicodedata
 from io import BytesIO
-from datetime import datetime
 
 # ============================================================
-# 🎯 CONFIGURAÇÕES DA PÁGINA
+# 🎯 CONFIGURAÇÕES
 # ============================================================
 st.set_page_config(page_title="AUDITOR NAQH NMZ", page_icon="👨‍💻", layout="wide")
 
-# ============================================================
-# 📐 PARÂMETROS DE ESTIMATIVA DE TEMPO
-# ============================================================
-TEMPO_POR_DOC_MANUAL = 20  # minutos
-TEMPO_POR_DOC_AUTOMATICO = 1  # minuto
+TEMPO_POR_DOC_MANUAL = 20
+TEMPO_POR_DOC_AUTOMATICO = 1
 
-# ============================================================
-# 📏 VALORES EXATOS — ABNT NBR 14724 / NORMA ZERO
-# ============================================================
-MARGEM_SUP_ESPERADA = 3.0   # cm
-MARGEM_INF_ESPERADA = 2.0   # cm
-MARGEM_ESQ_ESPERADA = 3.0   # cm ✅
-MARGEM_DIR_ESPERADA = 2.0   # cm ✅
+MARGEM_SUP_ESPERADA = 3.0
+MARGEM_INF_ESPERADA = 2.0
+MARGEM_ESQ_ESPERADA = 3.0
+MARGEM_DIR_ESPERADA = 2.0
 
 FONTE_CORPO = "Calibri"
 TAMANHO_CORPO = 11
-
 FONTE_TABELAS = "Calibri"
 TAMANHO_TABELAS = 10
 
-# ============================================================
-# 🧹 REMOVER ACENTOS
-# ============================================================
-def limpar_texto(texto):
-    if not texto: return ""
-    sem_acento = unicodedata.normalize('NFKD', texto).encode('ASCII', 'ignore').decode('ASCII')
-    return re.sub(r'\s+', ' ', sem_acento.upper().strip())
+TWIPS_PARA_CM = 567.0
 
 # ============================================================
-# 📋 SEÇÕES POR TIPO DE DOCUMENTO
+# 📋 SEÇÕES POR TIPO DE DOCUMENTO — TODOS OS TIPOS!
 # ============================================================
 SECOES_POR_TIPO = {
-    "PROT": ["1. OBJETIVO", "2. APLICABILIDADE", "3. REFERENCIAL TEORICO",
-             "4. DESCRICAO DO PROTOCOLO", "5. ESTRATEGIAS DE MONITORAMENTO",
-             "6. REFERENCIAS", "7. APENDICES", "8. ANEXOS"],
-    "POP": ["1. DEFINICAO", "2. APLICABILIDADE", "3. RESPONSAVEL PELA EXECUCAO",
-             "4. MATERIAIS UTILIZADOS", "5. DESCRICAO DA TAREFA",
-             "6. ATIVIDADES", "7. REFERENCIAS", "8. ANEXOS"],
-    "POI": ["1. INTRODUCAO", "2. OBJETIVO", "3. PRINCIPIOS", "4. DIRETRIZES",
-            "5. RESPONSABILIDADES", "6. ESTRATEGIA DE MONITORAMENTO",
-            "7. REFERENCIAS", "8. APENDICES E ANEXOS"],
-    "NOR": ["1. OBJETIVO", "2. APLICABILIDADE", "3. DESCRICAO DA NORMA",
-            "4. RESPONSAVEL", "5. EFEITOS NO CUMPRIMENTO",
-            "6. NORMA DE REFERENCIA", "7. ANEXOS"],
-    "REG": ["1. DA FINALIDADE", "2. DA COMPOSICAO — MEMBROS", "3. DO MANDATO",
-            "4. DO FUNCIONAMENTO E ORGANIZACAO", "5. DAS ATRIBUICOES",
-            "6. DISPOSICOES FINAIS"],
-    "PROG": ["1. REFERENCIAL TEORICO", "2. PADRONIZACAO DE ROTINAS",
-             "3. ESTRATEGIAS DE MONITORAMENTO", "4. DESCRICAO DO PROGRAMA",
-             "5. MEDIDAS EDUCACIONAIS", "6. REFERENCIAS",
-             "7. APENDICES", "8. ANEXOS"],
-    "PLAN": ["1. OBJETIVO", "2. APLICABILIDADE", "3. DEFINICAO DE TERMOS",
-             "4. IDENTIFICACAO DE RISCO ATUAL", "5. MEDIDAS DE CONTINGENCIA",
-             "6. REFERENCIAS", "7. APENDICES", "8. ANEXOS"],
-    "ROT": ["1. DEFINICAO", "2. OBJETIVO", "3. APLICABILIDADE",
-            "4. DESCRICAO DA ROTINA", "5. APENDICES"],
-    "MAN": ["1. CAPA", "2. ELABORADORES", "3. COLABORADORES", "4. SUMARIO",
-            "5. APRESENTACAO", "6. DESCRICAO", "7. REFERENCIAS",
-            "8. APENDICES E ANEXOS"]
+    "PROT": ["1. OBJETIVO", "2. APLICABILIDADE", "3. REFERENCIAL TEÓRICO",
+             "4. DESCRIÇÃO DO PROTOCOLO", "5. ESTRATÉGIAS DE MONITORAMENTO",
+             "6. REFERÊNCIAS", "7. APÊNDICES", "8. ANEXOS"],
+    "POP": ["1. DEFINIÇÃO", "2. APLICABILIDADE", "3. RESPONSÁVEL PELA EXECUÇÃO",
+             "4. MATERIAIS UTILIZADOS", "5. DESCRIÇÃO DA TAREFA",
+             "6. ATIVIDADES", "7. REFERÊNCIAS", "8. ANEXOS"],
+    "POI": ["1. INTRODUÇÃO", "2. OBJETIVO", "3. PRINCÍPIOS", "4. DIRETRIZES",
+            "5. RESPONSABILIDADES", "6. ESTRATÉGIA DE MONITORAMENTO",
+            "7. REFERÊNCIAS", "8. APÊNDICES E ANEXOS"],
+    "NOR": ["1. OBJETIVO", "2. APLICABILIDADE", "3. DESCRIÇÃO DA NORMA",
+            "4. RESPONSÁVEL", "5. EFEITOS NO CUMPRIMENTO",
+            "6. NORMA DE REFERÊNCIA", "7. ANEXOS"],
+    "REG": ["1. DA FINALIDADE", "2. DA COMPOSIÇÃO — MEMBROS", "3. DO MANDATO",
+            "4. DO FUNCIONAMENTO E ORGANIZAÇÃO", "5. DAS ATRIBUIÇÕES",
+            "6. DISPOSIÇÕES FINAIS"],
+    "PROG": ["1. REFERENCIAL TEÓRICO", "2. PADRONIZAÇÃO DE ROTINAS",
+             "3. ESTRATÉGIAS DE MONITORAMENTO", "4. DESCRIÇÃO DO PROGRAMA",
+             "5. MEDIDAS EDUCACIONAIS", "6. REFERÊNCIAS",
+             "7. APÊNDICES", "8. ANEXOS"],
+    "PLAN": ["1. OBJETIVO", "2. APLICABILIDADE", "3. DEFINIÇÃO DE TERMOS",
+             "4. IDENTIFICAÇÃO DE RISCO ATUAL", "5. MEDIDAS DE CONTINGÊNCIA",
+             "6. REFERÊNCIAS", "7. APÊNDICES", "8. ANEXOS"],
+    "ROT": ["1. DEFINIÇÃO", "2. OBJETIVO", "3. APLICABILIDADE",
+            "4. DESCRIÇÃO DA ROTINA", "5. APÊNDICES"],
+    "MAN": ["1. CAPA", "2. ELABORADORES", "3. COLABORADORES", "4. SUMÁRIO",
+            "5. APRESENTAÇÃO", "6. DESCRIÇÃO", "7. REFERÊNCIAS",
+            "8. APÊNDICES E ANEXOS"]
 }
 
 # ============================================================
-# 📏 VERIFICAR MARGENS
+# 🧹 FUNÇÕES AUXILIARES
+# ============================================================
+def limpar_texto(texto):
+    if not texto: return ""
+    texto = unicodedata.normalize('NFKD', texto).encode('ASCII','ignore').decode('ASCII')
+    texto = re.sub(r'[\s.]+', ' ', texto).upper().strip()
+    return texto
+
+def formatar_tempo(minutos_total):
+    h = int(minutos_total // 60)
+    m = int(minutos_total % 60)
+    if h > 0: return f"{h}h {m}min" if m>0 else f"{h}h"
+    return f"{m}min"
+
+# ============================================================
+# 📏 VERIFICAR MARGENS — CONVERSÃO CORRIGIDA
 # ============================================================
 def verificar_margens(doc):
     sec = doc.sections[0]
-    def twips_para_cm(v): return round(v / 567.0, 2) if v else 0.00
     
-    m_sup = twips_para_cm(sec.top_margin)
-    m_inf = twips_para_cm(sec.bottom_margin)
-    m_esq = twips_para_cm(sec.left_margin)
-    m_dir = twips_para_cm(sec.right_margin)
+    def cm_de_twips(twips_valor):
+        if twips_valor is None or twips_valor == 0:
+            return 0.0
+        return round(twips_valor / TWIPS_PARA_CM, 2)
     
-    tol = 0.05
-    ok_sup = abs(m_sup - MARGEM_SUP_ESPERADA) < tol
-    ok_inf = abs(m_inf - MARGEM_INF_ESPERADA) < tol
-    ok_esq = abs(m_esq - MARGEM_ESQ_ESPERADA) < tol
-    ok_dir = abs(m_dir - MARGEM_DIR_ESPERADA) < tol
+    m_sup = cm_de_twips(sec.top_margin)
+    m_inf = cm_de_twips(sec.bottom_margin)
+    m_esq = cm_de_twips(sec.left_margin)
+    m_dir = cm_de_twips(sec.right_margin)
     
+    tol = 0.1
     return {
         "sup": m_sup, "inf": m_inf, "esq": m_esq, "dir": m_dir,
-        "ok_sup": ok_sup, "ok_inf": ok_inf, "ok_esq": ok_esq, "ok_dir": ok_dir,
-        "todas_ok": ok_sup and ok_inf and ok_esq and ok_dir
+        "ok_sup": abs(m_sup - MARGEM_SUP_ESPERADA) < tol,
+        "ok_inf": abs(m_inf - MARGEM_INF_ESPERADA) < tol,
+        "ok_esq": abs(m_esq - MARGEM_ESQ_ESPERADA) < tol,
+        "ok_dir": abs(m_dir - MARGEM_DIR_ESPERADA) < tol,
+        "todas_ok": (abs(m_sup - MARGEM_SUP_ESPERADA) < tol and
+                     abs(m_inf - MARGEM_INF_ESPERADA) < tol and
+                     abs(m_esq - MARGEM_ESQ_ESPERADA) < tol and
+                     abs(m_dir - MARGEM_DIR_ESPERADA) < tol)
     }
 
 # ============================================================
-# ✍️ VERIFICA FONTE SEPARADA: CORPO ≠ TABELAS
+# ✍️ VERIFICAR FONTE — TRATA VALORES NULOS
 # ============================================================
-def verificar_fonte_separado(doc):
-    corpo_fontes = {}
-    corpo_tamanhos = {}
-    corpo_total = corpo_fonte_ok = corpo_tam_ok = 0
-    
+def verificar_fonte(doc):
+    cont_corpo = {"total":0, "fonte_ok":0, "tam_ok":0, "fontes":{}, "tams":{}}
+    cont_tab = {"total":0, "fonte_ok":0, "tam_ok":0, "fontes":{}, "tams":{}}
+    tem_registro_historico = False
+
     for p in doc.paragraphs:
         for run in p.runs:
-            corpo_total += 1
-            nome = run.font.name or "NÃO DEFINIDA"
-            tam = round(run.font.size.pt, 1) if run.font.size else 0
-            corpo_fontes[nome] = corpo_fontes.get(nome, 0) + 1
-            corpo_tamanhos[tam] = corpo_tamanhos.get(tam, 0) + 1
-            if nome == FONTE_CORPO: corpo_fonte_ok += 1
-            if tam == TAMANHO_CORPO: corpo_tam_ok += 1
-    
-    tabela_fontes = {}
-    tabela_tamanhos = {}
-    tabela_total = tabela_fonte_ok = tabela_tam_ok = 0
-    tem_registro_historico = False
-    
-    for tabela in doc.tables:
-        texto_tabela = ""
-        for linha in tabela.rows:
-            for celula in linha.cells:
-                texto_tabela += celula.text + " "
-                for p in celula.paragraphs:
+            cont_corpo["total"] += 1
+            nome = run.font.name or FONTE_CORPO
+            tam_pt = round(run.font.size.pt,1) if run.font.size else TAMANHO_CORPO
+            cont_corpo["fontes"][nome] = cont_corpo["fontes"].get(nome,0)+1
+            cont_corpo["tams"][tam_pt] = cont_corpo["tams"].get(tam_pt,0)+1
+            if nome == FONTE_CORPO: cont_corpo["fonte_ok"] += 1
+            if tam_pt == TAMANHO_CORPO: cont_corpo["tam_ok"] += 1
+
+    for tb in doc.tables:
+        texto_tb = ""
+        for ln in tb.rows:
+            texto_linha = ""
+            for cel in ln.cells:
+                texto_linha += cel.text + " "
+                for p in cel.paragraphs:
                     for run in p.runs:
-                        tabela_total += 1
-                        nome = run.font.name or "NÃO DEFINIDA"
-                        tam = round(run.font.size.pt, 1) if run.font.size else 0
-                        tabela_fontes[nome] = tabela_fontes.get(nome, 0) + 1
-                        tabela_tamanhos[tam] = tabela_tamanhos.get(tam, 0) + 1
-                        if nome == FONTE_TABELAS: tabela_fonte_ok += 1
-                        if tam == TAMANHO_TABELAS: tabela_tam_ok += 1
-        
-        if "REGISTRO HISTÓRICO" in texto_tabela.upper() or "REGISTRO HISTORICO" in texto_tabela.upper():
+                        cont_tab["total"] += 1
+                        nome = run.font.name or FONTE_TABELAS
+                        tam_pt = round(run.font.size.pt,1) if run.font.size else TAMANHO_TABELAS
+                        cont_tab["fontes"][nome] = cont_tab["fontes"].get(nome,0)+1
+                        cont_tab["tams"][tam_pt] = cont_tab["tams"].get(tam_pt,0)+1
+                        if nome == FONTE_TABELAS: cont_tab["fonte_ok"] += 1
+                        if tam_pt == TAMANHO_TABELAS: cont_tab["tam_ok"] += 1
+            texto_tb += texto_linha
+        if "REGISTRO HISTORICO" in limpar_texto(texto_tb):
             tem_registro_historico = True
-    
-    def calc_pct(total, ok): return round((ok/total*100),1) if total else 0
+
+    def pct(ok, tot): return round((ok/tot*100),1) if tot else 100
     crit = 70
-    
+
     return {
         "corpo": {
-            "fontes": corpo_fontes, "tamanhos": corpo_tamanhos,
-            "fonte_ok": calc_pct(corpo_total, corpo_fonte_ok) >= crit,
-            "tam_ok": calc_pct(corpo_total, corpo_tam_ok) >= crit,
-            "pct_fonte": calc_pct(corpo_total, corpo_fonte_ok),
-            "pct_tam": calc_pct(corpo_total, corpo_tam_ok),
-            "esperado_fonte": FONTE_CORPO, "esperado_tam": TAMANHO_CORPO
+            "fontes": cont_corpo["fontes"], "tamanhos": cont_corpo["tams"],
+            "pct_fonte": pct(cont_corpo["fonte_ok"], cont_corpo["total"]),
+            "pct_tam": pct(cont_corpo["tam_ok"], cont_corpo["total"]),
+            "fonte_ok": pct(cont_corpo["fonte_ok"], cont_corpo["total"]) >= crit,
+            "tam_ok": pct(cont_corpo["tam_ok"], cont_corpo["total"]) >= crit,
         },
         "tabelas": {
-            "fontes": tabela_fontes, "tamanhos": tabela_tamanhos,
-            "fonte_ok": calc_pct(tabela_total, tabela_fonte_ok) >= crit,
-            "tam_ok": calc_pct(tabela_total, tabela_tam_ok) >= crit,
-            "pct_fonte": calc_pct(tabela_total, tabela_fonte_ok),
-            "pct_tam": calc_pct(tabela_total, tabela_tam_ok),
-            "esperado_fonte": FONTE_TABELAS, "esperado_tam": TAMANHO_TABELAS,
+            "fontes": cont_tab["fontes"], "tamanhos": cont_tab["tams"],
+            "pct_fonte": pct(cont_tab["fonte_ok"], cont_tab["total"]),
+            "pct_tam": pct(cont_tab["tam_ok"], cont_tab["total"]),
+            "fonte_ok": pct(cont_tab["fonte_ok"], cont_tab["total"]) >= crit,
+            "tam_ok": pct(cont_tab["tam_ok"], cont_tab["total"]) >= crit,
             "tem_registro_historico": tem_registro_historico
         }
     }
 
 # ============================================================
-# 📊 LISTAR TABELAS
+# 🔍 DETECTAR TIPO DE DOCUMENTO E SEÇÕES CORRESPONDENTES
 # ============================================================
-def listar_tabelas(doc):
-    info = []
-    tem_cab = False
-    for i, tb in enumerate(doc.tables):
-        texto = " ".join([celula.text.upper() for celula in tb.rows[0].cells])
-        eh_cab = "CODIGO" in texto or "CÓDIGO" in texto or "VERSÃO" in texto
-        eh_hist = "REGISTRO HISTÓRICO" in texto or "REGISTRO HISTORICO" in texto
-        if eh_cab: tem_cab = True
-        info.append({"n":i+1, "lin":len(tb.rows), "col":len(tb.columns), "cab":eh_cab, "hist":eh_hist})
-    return {"total":len(doc.tables), "tem_cabecalho":tem_cab, "detalhes":info}
+def escanear(doc_bytes):
+    doc = docx.Document(BytesIO(doc_bytes))
+    texto_completo = ""
+    codigo = versao = None
+
+    # Tabelas — Cabeçalho (Código e Versão)
+    for tb in doc.tables:
+        for ln in tb.rows:
+            texto_linha = " ".join([cel.text for cel in ln.cells])
+            texto_completo += texto_linha + " "
+            
+            m_cod = re.search(r'C[ÓO]DIGO\s*[:：-]?\s*([A-Z0-9_\-\/.]+)', texto_linha.upper())
+            if m_cod and not codigo:
+                codigo = m_cod.group(1).strip()
+            
+            m_ver = re.search(r'VERS[AÃ]O\s*[:：-]?\s*(\d+(?:[.\-]\d+)*)', texto_linha.upper())
+            if m_ver and not versao:
+                versao = m_ver.group(1).strip()
+
+    # Corpo do texto
+    for p in doc.paragraphs:
+        texto_completo += p.text + " "
+
+    texto_limpo = limpar_texto(texto_completo)
+
+    # ✅ DETECTA QUALQUER TIPO — NÃO SÓ PROT!
+    tipo = None
+    if re.search(r'\bPROTOCOLO\b', texto_limpo):
+        tipo = "PROT"
+    elif re.search(r'\bPOP\b|\bPROCEDIMENTO OPERACIONAL\b', texto_limpo):
+        tipo = "POP"
+    elif re.search(r'\bPOL[IÍ]TICA\b|\bPOI\b', texto_limpo):
+        tipo = "POI"
+    elif re.search(r'\bNORMA\b|\bNOR\b', texto_limpo):
+        tipo = "NOR"
+    elif re.search(r'\bREGIMENTO\b|\bREGULAMENTO\b|\bREG\b', texto_limpo):
+        tipo = "REG"
+    elif re.search(r'\bPROGRAMA\b|\bPROG\b', texto_limpo):
+        tipo = "PROG"
+    elif re.search(r'\bPLANO\b|\bPLAN\b', texto_limpo):
+        tipo = "PLAN"
+    elif re.search(r'\bROTINA\b|\bROT\b', texto_limpo):
+        tipo = "ROT"
+    elif re.search(r'\bMANUAL\b|\bMAN\b', texto_limpo):
+        tipo = "MAN"
+    else:
+        tipo = "PROT"  # Padrão se não identificar
+
+    # ✅ Usa a LISTA DE SEÇÕES CORRESPONDENTE AO TIPO DETECTADO
+    secoes_esperadas = SECOES_POR_TIPO[tipo]
+    encontradas = []
+    faltantes = []
+    for secao in secoes_esperadas:
+        if limpar_texto(secao) in texto_limpo:
+            encontradas.append(secao)
+        else:
+            faltantes.append(secao)
+
+    return {
+        "tipo": tipo, "codigo": codigo, "versao": versao,
+        "margens": verificar_margens(doc),
+        "fonte": verificar_fonte(doc),
+        "secoes_esperadas": secoes_esperadas,
+        "secoes_enc": encontradas, "secoes_falt": faltantes
+    }
 
 # ============================================================
-# 🧹 APLICAR MARGENS CORRIGIDAS
+# 🧹 APLICAR MARGENS
 # ============================================================
 def aplicar_margens(doc_bytes):
     doc = docx.Document(BytesIO(doc_bytes))
@@ -188,188 +243,45 @@ def aplicar_margens(doc_bytes):
     return saida.getvalue()
 
 # ============================================================
-# 📄 GERAR FICHA
+# 🚀 INTERFACE PRINCIPAL
 # ============================================================
-def gerar_ficha(tipo, codigo, versao, m, f, tb, enc, falt, aprov):
-    ficha = [
-        "="*60, "FICHA DE VERIFICAÇÃO — NORMA ZERO", "="*60,
-        f"Tipo: {tipo} | Código: {codigo} | Versão: {versao}", "",
-        f"--- 📏 MARGENS (Esperado: Sup=3,0 / Inf=2,0 / Esq=3,0 / Dir=2,0 cm) ---",
-        f"Superior: {m['sup']} cm — {'✅' if m['ok_sup'] else '❌'}",
-        f"Inferior: {m['inf']} cm — {'✅' if m['ok_inf'] else '❌'}",
-        f"Esquerda: {m['esq']} cm — {'✅' if m['ok_esq'] else '❌'}",
-        f"Direita: {m['dir']} cm — {'✅' if m['ok_dir'] else '❌'}",
-        f"Margens: {'✅ TODAS CONFORME' if m['todas_ok'] else '❌ COM PENDÊNCIAS'}", "",
-        f"--- ✍️ CORPO DO TEXTO (Esperado: {FONTE_CORPO} {TAMANHO_CORPO}) ---",
-        f"Fontes: {', '.join(f'{n}({q})' for n,q in f['corpo']['fontes'].items())}",
-        f"Tamanhos: {', '.join(f'{t}pt({q})' for t,q in f['corpo']['tamanhos'].items())}",
-        f"Fonte: {f['corpo']['pct_fonte']}% — {'✅ CONFORME' if f['corpo']['fonte_ok'] else f'❌ ESPERADO: {FONTE_CORPO}'}",
-        f"Tamanho: {f['corpo']['pct_tam']}% — {'✅ CONFORME' if f['corpo']['tam_ok'] else f'❌ ESPERADO: {TAMANHO_CORPO}pt'}", "",
-        f"--- ✍️ TABELAS / FIGURAS (Esperado: {FONTE_TABELAS} {TAMANHO_TABELAS}) ---",
-        f"Fontes: {', '.join(f'{n}({q})' for n,q in f['tabelas']['fontes'].items()) or 'Nenhuma'}",
-        f"Tamanhos: {', '.join(f'{t}pt({q})' for t,q in f['tabelas']['tamanhos'].items()) or 'Nenhuma'}",
-        f"Fonte: {f['tabelas']['pct_fonte']}% — {'✅ CONFORME' if f['tabelas']['fonte_ok'] else f'❌ ESPERADO: {FONTE_TABELAS}'}",
-        f"Tamanho: {f['tabelas']['pct_tam']}% — {'✅ CONFORME' if f['tabelas']['tam_ok'] else f'❌ ESPERADO: {TAMANHO_TABELAS}pt'}",
-        f"Registro Histórico: {'✅ ENCONTRADO' if f['tabelas']['tem_registro_historico'] else 'Não encontrado'}", "",
-        f"--- 📊 TABELAS ({tb['total']} no total) ---",
-        f"Tabela Cabeçalho: {'✅ ENCONTRADA' if tb['tem_cabecalho'] else '❌ NÃO ENCONTRADA'}"
-    ]
-    for tbinfo in tb["detalhes"]:
-        marc = "📌 CABEÇALHO" if tbinfo["cab"] else "📋 REGISTRO HISTÓRICO" if tbinfo["hist"] else f"📊 Tabela {tbinfo['n']}"
-        ficha.append(f"{marc}: {tbinfo['lin']} lin × {tbinfo['col']} col")
-    ficha.extend(["", "--- 📋 SEÇÕES ENCONTRADAS ---"])
-    for s in enc: ficha.append(f"✅ {s}")
-    if falt:
-        ficha.extend(["", "--- SEÇÕES FALTANTES ---"])
-        for s in falt: ficha.append(f"❌ {s}")
-    else:
-        ficha.append("✅ TODAS AS SEÇÕES ENCONTRADAS")
-    ficha.extend(["", "="*60, f"RESULTADO FINAL: {'✅ APROVADO' if aprov else '❌ NÃO CONFORME'}", "="*60])
-    return "\n".join(ficha).encode("utf-8")
-
-# ============================================================
-# 🧠 ESCANEAR DOCUMENTO — TODOS OS ERROS CORRIGIDOS!
-# ============================================================
-def escanear(doc_bytes):
-    doc = docx.Document(BytesIO(doc_bytes))
-    texto_completo = ""
-    codigo = versao = validade = None
-    
-    for tb in doc.tables:
-        for ln in tb.rows:
-            lt = " ".join([celula.text for celula in ln.cells])
-            texto_completo += lt + " "
-            cod = re.search(r'CÓDIGO|Código[:\s]*[:]?\s*([A-Z]{2,5}[_\s]?[A-Z0-9]+)', lt, re.IGNORECASE)
-            if cod and cod.group(1) and not codigo: 
-                codigo = re.sub(r'\s+','_', cod.group(1).strip())
-            ver = re.search(r'VERSÃO|Versão[:\s]*[:]?\s*(\d+)', lt, re.IGNORECASE)
-            if ver and ver.group(1) and not versao: 
-                versao = ver.group(1).strip()
-            val = re.search(r'VALIDADE|Validade[:\s]*[:]?\s*([\d/]+)', lt, re.IGNORECASE)
-            if val and val.group(1) and not validade: 
-                validade = val.group(1).strip()
-    
-    for p in doc.paragraphs: texto_completo += p.text + " "
-    texto_limpo = limpar_texto(texto_completo)
-    
-    tipo = "PROT"
-    if re.search(r'\bPROTOCOLO\b', texto_limpo): tipo = "PROT"
-    elif re.search(r'\bPOP\b', texto_limpo): tipo = "POP"
-    elif re.search(r'\bPOLÍTICA|POLITICA|POI\b', texto_limpo): tipo = "POI"
-    elif re.search(r'\bNORMA|NOR\b', texto_limpo): tipo = "NOR"
-    elif re.search(r'\bREGIMENTO|REG\b', texto_limpo): tipo = "REG"
-    elif re.search(r'\bPROGRAMA|PROG\b', texto_limpo): tipo = "PROG"
-    elif re.search(r'\bPLANO|PLAN\b', texto_limpo): tipo = "PLAN"
-    elif re.search(r'\bROTINA|ROT\b', texto_limpo): tipo = "ROT"
-    elif re.search(r'\bMANUAL|MAN\b', texto_limpo): tipo = "MAN"
-    
-    secoes_esp = SECOES_POR_TIPO[tipo]
-    enc = [s for s in secoes_esp if limpar_texto(s) in texto_limpo]
-    falt = [s for s in secoes_esp if limpar_texto(s) not in texto_limpo]
-    
-    return {
-        "tipo": tipo, "codigo": codigo, "versao": versao, "validade": validade,
-        "margens": verificar_margens(doc),
-        "fonte": verificar_fonte_separado(doc),
-        "tabelas": listar_tabelas(doc),
-        "secoes_enc": enc, "secoes_falt": falt
-    }
-
-# ============================================================
-# ⏱️ FUNÇÃO — FORMATAR TEMPO
-# ============================================================
-def formatar_tempo(minutos_total):
-    h = int(minutos_total // 60)
-    m = int(minutos_total % 60)
-    if h > 0:
-        return f"{h}h {m}min" if m > 0 else f"{h}h"
-    return f"{m}min"
-
-# ============================================================
-# 🚀 INTERFACE PRINCIPAL — SEU NOME, TÍTULO, BONEQUINHO E RELÓGIO
-# ============================================================
-
-# Cabeçalho com título, nome e bonequinho
 st.markdown("""
     <style>
-    .header-container {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        background-color: #0F172A;
-        padding: 15px 25px;
-        border-radius: 12px;
-        margin-bottom: 20px;
-    }
-    .header-text h1 {
-        color: #FFFFFF;
-        margin: 0;
-        font-size: 28px;
-        font-weight: bold;
-    }
-    .header-text p {
-        color: #94A3B8;
-        margin: 5px 0 0 0;
-        font-size: 15px;
-    }
-    .header-emoji {
-        font-size: 50px;
-    }
-    .relogio-box {
-        background: linear-gradient(135deg, #0F766E 0%, #14B8A6 100%);
-        padding: 20px 25px;
-        border-radius: 12px;
-        margin: 15px 0;
-        color: white;
-    }
-    .economia-grande {
-        font-size: 32px;
-        font-weight: bold;
-    }
-    .base-tempo {
-        background-color: #1E293B;
-        padding: 12px 18px;
-        border-radius: 8px;
-        color: #CBD5E1;
-        font-size: 13px;
-        margin-top: 8px;
-    }
+    .header-container{display:flex;justify-content:space-between;align-items:center;background:#0F172A;padding:15px 25px;border-radius:12px;margin-bottom:20px}
+    .header-text h1{color:#FFF;margin:0;font-size:28px}
+    .header-text p{color:#94A3B8;margin:5px 0 0 0}
+    .header-emoji{font-size:50px}
+    .relogio-box{background:linear-gradient(135deg,#0F766E,#14B8A6);padding:20px 25px;border-radius:12px;color:#FFF;margin:15px 0}
+    .economia-grande{font-size:32px;font-weight:bold}
+    .base-tempo{background:#1E293B;padding:12px 18px;border-radius:8px;color:#CBD5E1;font-size:13px;margin-top:8px}
     </style>
 """, unsafe_allow_html=True)
 
-# Título principal
+# Cabeçalho
 st.markdown("""
     <div class="header-container">
         <div class="header-text">
             <h1>AUDITOR NAQH NMZ DE ALTA PRECISÃO</h1>
-            <p>Ezequias Santos — Agente Administrativo | Margens: Esq 3,0 / Dir 2,0 / Sup 3,0 / Inf 2,0 cm • Corpo Calibri 11 • Tabelas Calibri 10</p>
+            <p>Ezequias Santos — Agente Administrativo | Margens: Esq 3,0 / Dir 2,0 / Sup 3,0 / Inf 2,0 cm • Calibri 11 (corpo) / 10 (tabelas)</p>
         </div>
         <div class="header-emoji">👨‍💻</div>
     </div>
 """, unsafe_allow_html=True)
 
-# Upload do arquivo
 arquivos = st.file_uploader("📂 Envie o(s) documento(s) (.docx)", type=["docx"], accept_multiple_files=True)
 
 if arquivos:
     qtd = len(arquivos)
-    
-    # ⏱️ CÁLCULO DE ECONOMIA DE TEMPO
     tempo_manual = qtd * TEMPO_POR_DOC_MANUAL
     tempo_auditor = qtd * TEMPO_POR_DOC_AUTOMATICO
     tempo_economizado = tempo_manual - tempo_auditor
-    
-    # 🕰️ EXIBIR RELÓGIO DE ECONOMIA
+
+    # ⏱️ Relógio de economia
     st.markdown(f"""
     <div class="relogio-box">
         <div style="display:flex;justify-content:space-between;align-items:center;">
-            <div>
-                <h3 style="margin:0;">⏱️ ECONOMIA DE TEMPO</h3>
-                <p style="margin:5px 0 0 0;opacity:0.9;">Com base em {qtd} documento(s)</p>
-            </div>
-            <div class="economia-grande">
-                {formatar_tempo(tempo_economizado)}
-            </div>
+            <div><h3 style="margin:0">⏱️ ECONOMIA DE TEMPO</h3><p style="margin:5px 0 0 0;opacity:0.9;">{qtd} documento(s)</p></div>
+            <div class="economia-grande">{formatar_tempo(tempo_economizado)}</div>
         </div>
         <div style="display:flex;gap:30px;margin-top:12px;font-size:14px;">
             <span>📝 Manual: <b>{formatar_tempo(tempo_manual)}</b></span>
@@ -378,110 +290,69 @@ if arquivos:
         </div>
     </div>
     <div class="base-tempo">
-        📌 <b>Base de cálculo:</b> ~{TEMPO_POR_DOC_MANUAL}min/documento formatado manualmente vs. ~{TEMPO_POR_DOC_AUTOMATICO}min/documento com o Auditor. 
-        Estimativa considerando: abertura → ajuste de margens → padronização de fontes → conferência de seções → salvamento.
+        📌 Base: ~{TEMPO_POR_DOC_MANUAL}min/doc manualmente vs ~{TEMPO_POR_DOC_AUTOMATICO}min com o Auditor
     </div>
     """, unsafe_allow_html=True)
-    
+
     st.markdown("---")
-    
+
     # Processar cada arquivo
-    for idx, arquivo in enumerate(arquivos, 1):
-        st.subheader(f"📄 Documento {idx} de {qtd}: {arquivo.name}")
-        
-        with st.spinner(f"Verificando {arquivo.name}..."):
-            try:
-                dados = arquivo.read()
-                r = escanear(dados)
-                
-                st.markdown("---")
-                st.subheader("📋 DADOS DO DOCUMENTO")
-                c1, c2 = st.columns(2)
-                with c1: st.info(f"**Tipo:** {r['tipo']}")
-                with c2: st.success(f"**Código:** {r['codigo'] or '❌ NÃO ENCONTRADO'}")
-                st.success(f"**Versão:** {r['versao'] or '❌ NÃO ENCONTRADA'}")
-                
-                st.markdown("---")
-                st.subheader("📏 MARGENS — Esperado: Sup=3,0 / Inf=2,0 / Esq=3,0 / Dir=2,0 cm")
-                m = r["margens"]
-                col1, col2, col3, col4 = st.columns(4)
-                col1.metric("Superior", f"{m['sup']} cm", "✅" if m["ok_sup"] else "❌")
-                col2.metric("Inferior", f"{m['inf']} cm", "✅" if m["ok_inf"] else "❌")
-                col3.metric("Esquerda", f"{m['esq']} cm", "✅" if m["ok_esq"] else "❌")
-                col4.metric("Direita", f"{m['dir']} cm", "✅" if m["ok_dir"] else "❌")
-                st.success("✅ TODAS AS MARGENS CONFORME") if m["todas_ok"] else st.error("❌ MARGENS NÃO CONFORME")
-                
-                st.markdown("---")
-                st.subheader(f"✍️ CORPO DO TEXTO — Esperado: Calibri 11pt")
-                fc = r["fonte"]["corpo"]
-                st.write("**Fontes encontradas:**", ", ".join([f"{n} ({q})" for n,q in fc["fontes"].items()]))
-                st.write("**Tamanhos encontrados:**", ", ".join([f"{t}pt ({q})" for t,q in fc["tamanhos"].items()]))
-                col1, col2 = st.columns(2)
-                with col1: st.metric("Fonte Calibri", f"{fc['pct_fonte']}%", "✅ CONFORME" if fc["fonte_ok"] else "❌ DIVERGENTE")
-                with col2: st.metric("Tamanho 11pt", f"{fc['pct_tam']}%", "✅ CONFORME" if fc["tam_ok"] else "❌ DIVERGENTE")
-                
-                st.markdown("---")
-                st.subheader(f"✍️ TABELAS / FIGURAS — Esperado: Calibri 10pt")
-                ft = r["fonte"]["tabelas"]
-                if ft["fontes"]:
-                    st.write("**Fontes nas Tabelas:**", ", ".join([f"{n} ({q})" for n,q in ft["fontes"].items()]))
-                    st.write("**Tamanhos nas Tabelas:**", ", ".join([f"{t}pt ({q})" for t,q in ft["tamanhos"].items()]))
-                    col1, col2 = st.columns(2)
-                    with col1: st.metric("Fonte Calibri", f"{ft['pct_fonte']}%", "✅ CONFORME" if ft["fonte_ok"] else "⚠️ DIFERENTE")
-                    with col2: st.metric("Tamanho 10pt", f"{ft['pct_tam']}%", "✅ CONFORME" if ft["tam_ok"] else "⚠️ DIFERENTE")
-                    if ft["tem_registro_historico"]:
-                        st.info("📋 **Tabela de REGISTRO HISTÓRICO detectada** — verifique fonte/tamanho")
-                else:
-                    st.info("Nenhuma tabela com texto detectada")
-                
-                st.markdown("---")
-                st.subheader("📊 TABELAS DO DOCUMENTO")
-                tb = r["tabelas"]
-                st.write(f"**Total de tabelas:** {tb['total']}")
-                st.success("✅ Tabela do Cabeçalho encontrada") if tb["tem_cabecalho"] else st.warning("⚠️ Tabela do Cabeçalho NÃO encontrada")
-                for tbinfo in tb["detalhes"]:
-                    tipo_doc = "📌 CABEÇALHO" if tbinfo["cab"] else "📋 REGISTRO HISTÓRICO" if tbinfo["hist"] else f"📊 Tabela {tbinfo['n']}"
-                    st.write(f"{tipo_doc}: {tbinfo['lin']} linhas × {tbinfo['col']} colunas")
-                
-                st.markdown("---")
-                st.subheader("📋 SEÇÕES")
-                for s in r["secoes_enc"]: st.success(f"✅ {s}")
-                if r["secoes_falt"]:
-                    for s in r["secoes_falt"]: st.error(f"❌ {s}")
-                else:
-                    st.success("✅ TODAS AS SEÇÕES ENCONTRADAS")
-                
-                st.markdown("---")
-                aprov = m["todas_ok"] and r["codigo"] and r["versao"] and not r["secoes_falt"]
-                if aprov:
-                    st.success("🎉 **DOCUMENTO APROVADO CONFORME NORMA ZERO!**")
-                else:
-                    st.warning("⚠️ **DOCUMENTO COM PENDÊNCIAS** — verifique os itens acima")
-                
-                dados_formatados = aplicar_margens(dados)
-                ficha_bytes = gerar_ficha(r["tipo"], r["codigo"], r["versao"], m, r["fonte"], tb, r["secoes_enc"], r["secoes_falt"], aprov)
-                
-                nome_doc = f"{r['codigo']}_Formatado.docx" if r['codigo'] else f"{arquivo.name.replace('.docx','')}_Formatado.docx"
-                nome_txt = f"Ficha_{r['codigo']}.txt" if r['codigo'] else f"Ficha_{arquivo.name.replace('.docx','')}.txt"
-                
-                st.download_button(f"📥 DOWNLOAD — {nome_doc}", dados_formatados, nome_doc, 
-                                  "application/vnd.openxmlformats-officedocument.wordprocessingml.document", key=f"doc_{idx}")
-                st.download_button(f"📄 DOWNLOAD — {nome_txt}", ficha_bytes, nome_txt, "text/plain", key=f"txt_{idx}")
-            
-            except Exception as e:
-                st.error(f"## ❌ ERRO em {arquivo.name}: {str(e)}")
-        
-        st.markdown("---")
-        st.markdown("---")
-    
-    # Resumo final para apresentar à coordenadora
-    st.markdown("## 📊 RESUMO GERAL — ECONOMIA DE TEMPO")
-    st.info(f"""
-    📄 **{qtd} documento(s) processado(s)**
-    
-    ⏱️ Tempo estimado de trabalho manual: **{formatar_tempo(tempo_manual)}**
-    ⚡ Tempo gasto com o Auditor: **{formatar_tempo(tempo_auditor)}**
-    ✅ **TEMPO ECONOMIZADO: {formatar_tempo(tempo_economizado)}** — Redução de aproximadamente **{round((tempo_economizado/tempo_manual)*100)}%** do tempo de trabalho.
-    
-    📌 Base de cálculo: ~{TEMPO_POR_DOC_MANUAL}min por documento (abrir → verificar → ajustar margens → corrigir fontes → conferir seções → salvar)
-    """)
+    for idx, arq in enumerate(arquivos, 1):
+        st.subheader(f"📄 {arq.name}")
+        try:
+            dados = arq.read()
+            r = escanear(dados)
+
+            # 📋 DADOS DO DOCUMENTO
+            st.markdown("### 📋 DADOS DO DOCUMENTO")
+            c1,c2 = st.columns(2)
+            with c1: st.info(f"**Tipo Detectado:** {r['tipo']}")
+            with c2:
+                if r['codigo']: st.success(f"**Código:** {r['codigo']}")
+                else: st.error("**Código:** ❌ NÃO ENCONTRADO")
+            if r['versao']: st.success(f"**Versão:** {r['versao']}")
+            else: st.error("**Versão:** ❌ NÃO ENCONTRADA")
+
+            st.markdown("---")
+
+            # 📏 MARGENS
+            st.markdown("### 📏 MARGENS — Esperado: Sup=3,0 / Inf=2,0 / Esq=3,0 / Dir=2,0 cm")
+            m = r["margens"]
+            col1,col2,col3,col4 = st.columns(4)
+            col1.metric("Superior", f"{m['sup']} cm", "✅" if m['ok_sup'] else "❌")
+            col2.metric("Inferior", f"{m['inf']} cm", "✅" if m['ok_inf'] else "❌")
+            col3.metric("Esquerda", f"{m['esq']} cm", "✅" if m['ok_esq'] else "❌")
+            col4.metric("Direita", f"{m['dir']} cm", "✅" if m['ok_dir'] else "❌")
+            st.success("✅ TODAS AS MARGENS CONFORME") if m["todas_ok"] else st.error("❌ MARGENS NÃO CONFORME")
+
+            st.markdown("---")
+
+            # ✍️ FONTES
+            st.markdown("### ✍️ CORPO — Calibri 11pt")
+            f = r["fonte"]["corpo"]
+            st.write("Fontes encontradas:", ", ".join(f"{n} ({q})" for n,q in f["fontes"].items()))
+            st.write("Tamanhos encontrados:", ", ".join(f"{t}pt ({q})" for t,q in f["tamanhos"].items()))
+            st.metric("Conformidade", f"{f['pct_fonte']}%", "✅" if f["fonte_ok"] else "❌")
+
+            st.markdown("---")
+            st.markdown("### ✍️ TABELAS — Calibri 10pt")
+            ft = r["fonte"]["tabelas"]
+            if ft["fontes"]:
+                st.write("Fontes encontradas:", ", ".join(f"{n} ({q})" for n,q in ft["fontes"].items()))
+                st.write("Tamanhos encontrados:", ", ".join(f"{t}pt ({q})" for t,q in ft["tamanhos"].items()))
+                st.metric("Conformidade", f"{ft['pct_fonte']}%", "✅" if ft["fonte_ok"] else "❌")
+            if ft["tem_registro_historico"]:
+                st.info("📋 Registro Histórico detectado")
+
+            st.markdown("---")
+
+            # ============================================================
+            # ✅ CONFERÊNCIA MANUAL — SEÇÕES DO TIPO DETECTADO
+            # ============================================================
+            st.markdown(f"### ✅ CONFERÊNCIA DE SEÇÕES — Tipo: {r['tipo']}")
+            st.info("💡 Marque manualmente o que encontrou no documento. O sistema já verificou automaticamente.")
+
+            secoes_usuario = []
+            for secao in r["secoes_esperadas"]:
+                sistema_encontrou = secao in r["secoes_enc"]
+                marcado = st.check
