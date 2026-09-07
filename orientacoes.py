@@ -26,7 +26,7 @@ TAMANHO_TABELAS = 10
 TWIPS_PARA_CM = 566.928
 
 # ============================================================
-# 📋 SEÇÕES POR TIPO — APÊNDICES E ANEXOS SÃO OPCIONAIS!
+# 📋 SEÇÕES POR TIPO — APÊNDICES E ANEXOS SÃO OPCIONAIS
 # ============================================================
 SECOES_POR_TIPO = {
     "PROT": {
@@ -35,25 +35,25 @@ SECOES_POR_TIPO = {
                         "5. FATORES DE RISCO", "6. BENEFÍCIOS E RISCOS",
                         "7. PRINCÍPIOS GERAIS", "8. CRITÉRIOS DE ELEGIBILIDADE",
                         "9. ESQUEMA PADRÃO", "10. ESQUEMAS POR TIPO DE CIRURGIA"],
-        "opcionais": ["7. APÊNDICES", "8. ANEXOS"]
+        "opcionais": ["APÊNDICES", "ANEXOS"]
     },
     "POP": {
         "obrigatorias": ["1. DEFINIÇÃO", "2. APLICABILIDADE", "3. RESPONSÁVEL PELA EXECUÇÃO",
                         "4. MATERIAIS UTILIZADOS", "5. DESCRIÇÃO DA TAREFA",
                         "6. ATIVIDADES", "7. REFERÊNCIAS"],
-        "opcionais": ["8. ANEXOS"]
+        "opcionais": ["ANEXOS"]
     },
     "POI": {
         "obrigatorias": ["1. INTRODUÇÃO", "2. OBJETIVO", "3. PRINCÍPIOS", "4. DIRETRIZES",
                         "5. RESPONSABILIDADES", "6. ESTRATÉGIA DE MONITORAMENTO",
                         "7. REFERÊNCIAS"],
-        "opcionais": ["8. APÊNDICES E ANEXOS"]
+        "opcionais": ["APÊNDICES E ANEXOS"]
     },
     "NOR": {
         "obrigatorias": ["1. OBJETIVO", "2. APLICABILIDADE", "3. DESCRIÇÃO DA NORMA",
                         "4. RESPONSÁVEL", "5. EFEITOS NO CUMPRIMENTO",
                         "6. NORMA DE REFERÊNCIA"],
-        "opcionais": ["7. ANEXOS"]
+        "opcionais": ["ANEXOS"]
     },
     "REG": {
         "obrigatorias": ["1. DA FINALIDADE", "2. DA COMPOSIÇÃO — MEMBROS", "3. DO MANDATO",
@@ -65,23 +65,23 @@ SECOES_POR_TIPO = {
         "obrigatorias": ["1. REFERENCIAL TEÓRICO", "2. PADRONIZAÇÃO DE ROTINAS",
                         "3. ESTRATÉGIAS DE MONITORAMENTO", "4. DESCRIÇÃO DO PROGRAMA",
                         "5. MEDIDAS EDUCACIONAIS", "6. REFERÊNCIAS"],
-        "opcionais": ["7. APÊNDICES", "8. ANEXOS"]
+        "opcionais": ["APÊNDICES", "ANEXOS"]
     },
     "PLAN": {
         "obrigatorias": ["1. OBJETIVO", "2. APLICABILIDADE", "3. DEFINIÇÃO DE TERMOS",
                         "4. IDENTIFICAÇÃO DE RISCO ATUAL", "5. MEDIDAS DE CONTINGÊNCIA",
                         "6. REFERÊNCIAS"],
-        "opcionais": ["7. APÊNDICES", "8. ANEXOS"]
+        "opcionais": ["APÊNDICES", "ANEXOS"]
     },
     "ROT": {
         "obrigatorias": ["1. DEFINIÇÃO", "2. OBJETIVO", "3. APLICABILIDADE",
                         "4. DESCRIÇÃO DA ROTINA"],
-        "opcionais": ["5. APÊNDICES"]
+        "opcionais": ["APÊNDICES"]
     },
     "MAN": {
         "obrigatorias": ["1. CAPA", "2. ELABORADORES", "3. COLABORADORES", "4. SUMÁRIO",
                         "5. APRESENTAÇÃO", "6. DESCRIÇÃO", "7. REFERÊNCIAS"],
-        "opcionais": ["8. APÊNDICES E ANEXOS"]
+        "opcionais": ["APÊNDICES E ANEXOS"]
     }
 }
 
@@ -102,14 +102,13 @@ def formatar_tempo(minutos_total):
     return f"{m}min"
 
 # ============================================================
-# 📏 VERIFICAR MARGENS — ✅ CONVERSÃO 100% CORRIGIDA
+# 📏 VERIFICAR MARGENS — CONVERSÃO CORRIGIDA
 # ============================================================
 def verificar_margens(doc):
     sec = doc.sections[0]
     
     def cm_de_twips(valor):
-        if valor is None or valor == 0:
-            return 0.0
+        if valor is None or valor == 0: return 0.0
         return round(valor / TWIPS_PARA_CM, 2)
 
     m_sup = cm_de_twips(sec.top_margin)
@@ -151,9 +150,8 @@ def verificar_fonte(doc):
     for tb in doc.tables:
         texto_tb = ""
         for ln in tb.rows:
-            texto_linha = ""
             for cel in ln.cells:
-                texto_linha += cel.text + " "
+                texto_tb += cel.text + " "
                 for p in cel.paragraphs:
                     for run in p.runs:
                         cont_tab["total"] += 1
@@ -163,7 +161,6 @@ def verificar_fonte(doc):
                         cont_tab["tams"][tam_pt] = cont_tab["tams"].get(tam_pt,0)+1
                         if nome == FONTE_TABELAS: cont_tab["fonte_ok"] += 1
                         if tam_pt == TAMANHO_TABELAS: cont_tab["tam_ok"] += 1
-            texto_tb += texto_linha
         if "REGISTRO HISTORICO" in limpar_texto(texto_tb):
             tem_registro_historico = True
 
@@ -189,7 +186,7 @@ def verificar_fonte(doc):
     }
 
 # ============================================================
-# 🔍 ESCANEAR DOCUMENTO
+# 🔍 ESCANEAR DOCUMENTO — ✅ VARIÁVEL CORRIGIDA
 # ============================================================
 def escanear(doc_bytes):
     doc = docx.Document(BytesIO(doc_bytes))
@@ -200,12 +197,10 @@ def escanear(doc_bytes):
         for ln in tb.rows:
             texto_linha = " ".join([cel.text for cel in ln.cells])
             texto_completo += texto_linha + " "
-            
             if not codigo:
                 for pad in [r'C[ÓO]DIGO\s*[:：=\-]?\s*([A-Z0-9_\-\/\.]+)', r'COD[:\s]*([A-Z0-9_\-\/\.]+)']:
                     m = re.search(pad, texto_linha.upper())
                     if m: codigo = m.group(1).strip(); break
-            
             if not versao:
                 for pad in [r'VERS[AÃ]O\s*[:：=\-]?\s*(\d+(?:[.\-]\d+)*)', r'VERS[:\s]*([\d.]+)']:
                     m = re.search(pad, texto_linha.upper())
@@ -237,17 +232,17 @@ def escanear(doc_bytes):
     elif re.search(r'\bMANUAL\b|\bMAN\b', texto_limpo): tipo = "MAN"
     else: tipo = "PROT"
 
-    secoes = SECOES_POR_TIPO[tipo]
+    secoes_tipo = SECOES_POR_TIPO[tipo]
     obr_enc, obr_falt = [], []
     opc_enc, opc_falt = [], []
     
-    for secao in secao["obrigatorias"]:
-        if limpar_texto(secao) in texto_limpo: obr_enc.append(secao)
-        else: obr_falt.append(secao)
+    for s in secoes_tipo["obrigatorias"]:
+        if limpar_texto(s) in texto_limpo: obr_enc.append(s)
+        else: obr_falt.append(s)
     
-    for secao in secao["opcionais"]:
-        if limpar_texto(secao) in texto_limpo: opc_enc.append(secao)
-        else: opc_falt.append(secao)
+    for s in secoes_tipo["opcionais"]:
+        if limpar_texto(s) in texto_limpo: opc_enc.append(s)
+        else: opc_falt.append(s)
 
     return {
         "tipo": tipo, "codigo": codigo, "versao": versao,
@@ -255,7 +250,6 @@ def escanear(doc_bytes):
         "fonte": verificar_fonte(doc),
         "secoes_obrig_enc": obr_enc, "secoes_obrig_falt": obr_falt,
         "secoes_opc_enc": opc_enc, "secoes_opc_falt": opc_falt,
-        "secoes_todas": secao["obrigatorias"] + secao["opcionais"]
     }
 
 # ============================================================
@@ -278,7 +272,8 @@ def aplicar_margens(doc_bytes):
 # ============================================================
 # 📄 GERAR FICHA DE VERIFICAÇÃO
 # ============================================================
-def gerar_ficha_verificacao(nome_arq, tipo, cod, ver, margens_ok, fonte_ok, secoes_ok, itens_manuais):
+def gerar_ficha_verificacao(nome_arq, tipo, cod, ver, margens_ok, fonte_ok, secoes_dados, itens_manuais):
+    obr_enc, obr_falt, opc_enc, opc_falt = secoes_dados
     ficha = f"""
 ==================================================
           FICHA DE VERIFICAÇÃO — AUDITOR NAQH NMZ
@@ -310,13 +305,14 @@ CONFERÊNCIA MANUAL — ITENS DO CABEÇALHO
 --------------------------------------------------
 SEÇÕES DO DOCUMENTO
 --------------------------------------------------
-Seções Obrigatórias Encontradas: {len(secoes_ok[0])} / {len(secoes_ok[1])}
-Seções Opcionais: {len(secoes_ok[2])} / {len(secoes_ok[3])}
+Obrigatórias encontradas: {len(obr_enc)} / {len(obr_enc) + len(obr_falt)}
+Obrigatórias faltantes:   {len(obr_falt)}
+Opcionais encontradas:    {len(opc_enc)} / {len(opc_enc) + len(opc_falt)}
 
 --------------------------------------------------
 RESULTADO FINAL
 --------------------------------------------------
-APROVADO CONFORME NORMA ZERO: {'✅ SIM' if (margens_ok and fonte_ok and secoes_ok[1]==0 and all(itens_manuais.values())) else '⚠️ COM PENDÊNCIAS'}
+APROVADO CONFORME NORMA ZERO: {'✅ SIM' if (margens_ok and fonte_ok and len(obr_falt)==0 and all(itens_manuais.values())) else '⚠️ COM PENDÊNCIAS'}
 
 ==================================================
 Ezequias Santos — Agente Administrativo
@@ -387,7 +383,7 @@ if arquivos:
             c1,c2 = st.columns(2)
             with c1: st.info(f"**Tipo Detectado:** {r['tipo']}")
             
-            # ✅ CÓDIGO — USO O DIGITADO PELO USUÁRIO!
+            # ✅ CÓDIGO — USO O DIGITADO PELO USUÁRIO
             with c2:
                 codigo_final = st.text_input("**CÓDIGO**", value=r['codigo'] or "", placeholder="Digite o código aqui", key=f"cod{idx}")
                 if r['codigo']: st.success(f"✅ Detectado: {r['codigo']}")
@@ -439,21 +435,20 @@ if arquivos:
 
             secoes_usuario_ok = True
             st.markdown("**🔴 Obrigatórias:**")
-            for secao in r["secoes_obrig_enc"]:
-                st.success(f"✅ {secao} — DETECTADO")
-            for secao in r["secoes_obrig_falt"]:
-                marc = st.checkbox(f"⚠️ {secao} — NÃO DETECTADO (marque se encontrou)", key=f"obr_falt{idx}_{limpar_texto(secao)}")
+            for s in r["secoes_obrig_enc"]:
+                st.success(f"✅ {s} — DETECTADO")
+            for s in r["secoes_obrig_falt"]:
+                marc = st.checkbox(f"⚠️ {s} — NÃO DETECTADO (marque se encontrou)", key=f"obr_falt{idx}_{limpar_texto(s)}")
                 if not marc: secoes_usuario_ok = False
 
             if r["secoes_opc_enc"] or r["secoes_opc_falt"]:
                 st.markdown("**🟡 Opcionais (Apêndices/Anexos):**")
-                for secao in r["secoes_opc_enc"]:
-                    st.info(f"🟡 {secao} — DETECTADO (opcional)")
-                for secao in r["secoes_opc_falt"]:
-                    st.info(f"🟡 {secao} — Não encontrado (opcional, sem problema)")
+                for s in r["secoes_opc_enc"]:
+                    st.info(f"🟡 {s} — DETECTADO (opcional)")
+                for s in r["secoes_opc_falt"]:
+                    st.info(f"🟡 {s} — Não encontrado (opcional, sem problema)")
 
             st.markdown("---")
-            # ✅ APROVAÇÃO FINAL
             faltam_obrig = len(r["secoes_obrig_falt"])
             cabecalho_ok = all(itens_cabecalho.values())
             aprov = m["todas_ok"] and codigo_final and versao_final and secoes_usuario_ok and cabecalho_ok
@@ -464,7 +459,7 @@ if arquivos:
                 st.warning("⚠️ DOCUMENTO COM PENDÊNCIAS — verifique itens acima")
 
             # ✅ NOME DO ARQUIVO = CÓDIGO + VERSÃO
-            cod_nome = codigo_final.replace("/", "-") if codigo_final else "DOC"
+            cod_nome = re.sub(r'[<>:"/\\|?*]', '-', codigo_final) if codigo_final else "DOC"
             ver_nome = versao_final.replace(".", "_") if versao_final else "0"
             nome_base = f"{cod_nome}_v{ver_nome}"
 
@@ -483,11 +478,11 @@ if arquivos:
             ficha = gerar_ficha_verificacao(
                 arq.name, r['tipo'], codigo_final, versao_final,
                 m["todas_ok"], fonte_ok,
-                (r["secoes_obrig_enc"], faltam_obrig, r["secoes_opc_enc"], len(r["secoes_opc_falt"])),
+                (r["secoes_obrig_enc"], r["secoes_obrig_falt"], r["secoes_opc_enc"], r["secoes_opc_falt"]),
                 itens_cabecalho
             )
             st.download_button(
-                f"📋 BAIXAR FICHA DE VERIFICAÇÃO: {nome_base}_FICHA.txt",
+                f"📋 BAIXAR FICHA: {nome_base}_FICHA.txt",
                 ficha,
                 f"{nome_base}_FICHA.txt",
                 "text/plain",
@@ -496,5 +491,6 @@ if arquivos:
 
         except Exception as e:
             st.error(f"❌ Erro ao processar: {str(e)}")
+            st.code(f"Detalhe do erro: {type(e).__name__}: {str(e)}", language="text")
 
         st.markdown("---")
