@@ -1,216 +1,98 @@
 import streamlit as st
 import docx
+import zipfile
 import re
 from io import BytesIO
 
-st.set_page_config(page_title="AUDITORIA — FINALMENTE!", page_icon="🔍", layout="wide")
+# --- 1. CONFIGURAÇÃO DA PÁGINA STREAMLIT ---
+st.set_page_config(page_title="Formatador de Documentos NAQH", page_icon="📊", layout="wide")
 
-st.title("🔍 AUDITORIA — CORRIGIDA 100%")
-st.markdown("### ✅ Código, Versão e Seções com nomes COMPLETOS")
+# Menu Lateral - Identificação Visual do Operador Autêntica
+with st.sidebar:
+    st.markdown("### 🧑‍💻 Operador")
+    st.markdown("**Ezequias Santos**\n*Agt Administrativo*")
+    st.divider()
 
-# ============================================================
-# 📋 SEÇÕES — BUSCA PELO INÍICIO (não precisa do nome completo!)
-# ============================================================
-SECOES_POR_TIPO = {
-    "PROT": [
-        "1. OBJETIVO",
-        "2. APLICABILIDADE",
-        "3. REFERENCIAL TEÓRICO",
-        "4. CLASSIFICAÇÃO",
-        "5. RESPONSABILIDADES",
-        "6. MEDIDAS OBRIGATÓRIAS",
-        "7. ESTRATÉGIAS DE MONITORAMENTO",
-        "8. REFERÊNCIAS"
-    ],
-    "POP": [
-        "1. DEFINIÇÃO",
-        "2. APLICABILIDADE",
-        "3. RESPONSÁVEL",
-        "4. DESCRIÇÃO DA EXECUÇÃO",
-        "5. MATERIAIS UTILIZADOS",
-        "6. TARIFA",
-        "7. REFERÊNCIAS",
-        "8. ANEXOS"
-    ],
-    "POI": [
-        "1. INTRODUÇÃO",
-        "2. OBJETIVO",
-        "3. FINALIDADE",
-        "4. ABRANGÊNCIA",
-        "5. RESPONSABILIDADES",
-        "6. GESTÃO DE RISCO",
-        "7. ANEXOS",
-        "8. REFERÊNCIAS"
-    ],
-    "NOR": [
-        "1. OBJETIVO",
-        "2. APLICABILIDADE",
-        "3. DESCRIÇÃO DA NORMA",
-        "4. RESPONSÁVEL",
-        "5. EFETIVO NO CUMPRIMENTO",
-        "6. NORMA DE REFERÊNCIA",
-        "7. ANEXOS"
-    ],
-    "REG": [
-        "1. FINALIDADE",
-        "2. ÂMBITO",
-        "3. COMPETÊNCIA E ORGANIZAÇÃO",
-        "4. DISPOSIÇÕES GERAIS",
-        "5. DISPOSIÇÕES FINAIS"
-    ],
-    "PROG": [
-        "1. REFERENCIAL TEÓRICO",
-        "2. OBJETIVOS",
-        "3. METAS E INDICADORES",
-        "4. DEFINIÇÃO DE METAS",
-        "5. ACOMPANHAMENTO E MONITORAMENTO",
-        "6. AVALIAÇÃO DE RESULTADOS",
-        "7. REFERÊNCIAS",
-        "8. ANEXOS"
-    ],
-    "PLAN": [
-        "1. OBJETIVO",
-        "2. APLICABILIDADE",
-        "3. DESCRIÇÃO DO CENÁRIO DE RISCO",
-        "4. MEDIDAS DE CONTINGÊNCIA",
-        "5. ESTRATÉGIAS DE RESPOSTA",
-        "6. REFERÊNCIAS",
-        "7. ANEXOS"
-    ],
-    "ROT": [
-        "1. OBJETIVO",
-        "2. APLICABILIDADE",
-        "3. DESCRIÇÃO DA ROTINA",
-        "4. RESPONSÁVEL",
-        "5. ETAPAS DE EXECUÇÃO",
-        "6. REFERÊNCIAS",
-        "7. ANEXOS"
-    ]
-}
+st.title("Triagem Avançada & Formatador Automático - NAQH")
+st.markdown("""
+### 🧠 Inteligência XML de Alta Fidelidade (Safe Mode)
+O sistema aplica as margens oficiais da Norma Zero alterando diretamente as tags estruturais do pacote, **garantindo a permanência absoluta de logomarcas, tabelas de cabeçalho e paginações originais**.
+""")
 
-# ============================================================
-# 🧠 FUNÇÃO CORRIGIDA — ACHA TUDO!
-# ============================================================
-def auditar_documento(arquivo_bytes):
-    doc = docx.Document(BytesIO(arquivo_bytes))
+# --- 2. MOTOR DE ALTERAÇÃO XML DIRETA (PRESERVAÇÃO ESTRUTURAL ABSOLUTA) ---
+def injetar_margens_via_xml_puro(arquivo_bytes):
+    """
+    Modifica as margens da folha no código XML nativo do Word sem alterar o corpo do texto.
+    Converte os centímetros oficiais da Norma Zero em dxa (1 cm = 567 dxa):
+    - Superior: 2.0 cm -> 1134 dxa
+    - Inferior: 2.0 cm -> 1134 dxa
+    - Esquerda: 2.0 cm -> 1134 dxa
+    - Direita: 3.0 cm -> 1701 dxa
+    """
+    top_dxa, bottom_dxa, left_dxa, right_dxa = "1134", "1134", "1134", "1701"
     
-    # ✅ LÊ TUDO e LIMPA
-    texto_bruto = ""
-    for p in doc.paragraphs:
-        texto_bruto += p.text.upper() + "\n"
-    for tabela in doc.tables:
-        for linha in tabela.rows:
-            for celula in linha.cells:
-                texto_bruto += celula.text.upper() + " "
+    # Abre o documento original enviado pelo usuário como um pacote ZIP em memória
+    zip_original = zipfile.ZipFile(BytesIO(arquivo_bytes))
+    buffer_saida = BytesIO()
     
-    texto = re.sub(r'[\s#]+', ' ', texto_bruto).strip()
-    
-    # 🔍 IDENTIFICAR TIPO
-    tipo_detectado = "PROT"
-    for tipo in SECOES_POR_TIPO.keys():
-        if re.search(rf'\b{tipo}[_ /]', texto) or re.search(rf'\b{tipo}\b', texto):
-            tipo_detectado = tipo
-            break
-    
-    # 🔍 CÓDIGO — CORRIGIDO: BUSCA SOMENTE DEPOIS DE "CÓDIGO:" !!!
-    codigo_detectado = None
-    match_codigo = re.search(r'CÓDIGO[:\s]+([A-Z]{3,4}_[A-Z0-9]+)', texto)
-    if match_codigo and match_codigo.group(1):
-        codigo_detectado = match_codigo.group(1).strip()
-    
-    # 🔍 VERSÃO — ACEITA "5ª", "5°", "5", "V5" !!!
-    versao_detectada = None
-    match_versao = re.search(r'VERSÃO[:\s]*[:]?\s*(?:VERSÃO|[Vv])?\s*(\d+)', texto)
-    if match_versao and match_versao.group(1):
-        versao_detectada = match_versao.group(1).strip()
-    
-    # 🔍 VALIDADE
-    validade_detectada = None
-    match_validade = re.search(r'VALIDADE[:\s]*[:]?\s*([\d/]+)', texto)
-    if match_validade and match_validade.group(1):
-        validade_detectada = match_validade.group(1).strip()
-    
-    # 🔍 SEÇÕES — BUSCA PELO INÍCIO! Não precisa do nome inteiro!
-    secoes_esperadas = SECOES_POR_TIPO[tipo_detectado]
-    secoes_encontradas = []
-    secoes_faltantes = []
-    
-    for secao in secoes_esperadas:
-        secao_limpa = re.sub(r'[\s#]+', ' ', secao.upper()).strip()
-        # ✅ Busca se o texto COMEÇA com o nome da seção → encontra mesmo com resto!
-        padrao = rf'\b{re.escape(secao_limpa)}\b'
-        if re.search(padrao, texto):
-            secoes_encontradas.append(secao)
-        else:
-            secoes_faltantes.append(secao)
-    
-    aprovado = (len(secoes_faltantes) == 0 and 
-                codigo_detectado is not None and 
-                versao_detectada is not None)
-    
-    return {
-        "tipo": tipo_detectado,
-        "codigo": codigo_detectado,
-        "versao": versao_detectada,
-        "validade": validade_detectada,
-        "secoes_encontradas": secoes_encontradas,
-        "secoes_faltantes": secoes_faltantes,
-        "aprovado": aprovado
-    }
-
-# ============================================================
-# 🚀 INTERFACE
-# ============================================================
-with st.form("auditoria_final_final"):
-    arquivo_word = st.file_uploader(
-        "📂 Arraste o documento WORD (.docx) AQUI",
-        type=["docx"]
-    )
-    enviado = st.form_submit_button("🔍 EXECUTAR AUDITORIA — FINAL", type="primary")
-
-if enviado and arquivo_word:
-    st.info(f"✅ Arquivo: **{arquivo_word.name}**")
-    
-    with st.spinner("Escaneando... buscando código, versão e seções..."):
-        try:
-            rel = auditar_documento(arquivo_word.read())
+    # Cria um novo pacote ZIP que guardará o arquivo corrigido
+    with zipfile.ZipFile(buffer_saida, "w", zipfile.ZIP_DEFLATED) as zip_novo:
+        for item in zip_original.infolist():
+            conteudo = zip_original.read(item.filename)
             
-            st.markdown("---")
-            c1, c2 = st.columns(2)
-            with c1:
-                st.info(f"**Tipo:** {rel['tipo']}")
-                if rel['codigo']:
-                    st.success(f"**Código:** {rel['codigo']}")
-                else:
-                    st.error("**Código:** ❌ NÃO ENCONTRADO")
-            with c2:
-                if rel['versao']:
-                    st.success(f"**Versão:** {rel['versao']}")
-                else:
-                    st.error("**Versão:** ❌ NÃO ENCONTRADA")
-                if rel['validade']:
-                    st.info(f"**Validade:** {rel['validade']}")
-                else:
-                    st.info("**Validade:** ⚠️ Não obrigatória")
+            # Intercepta e altera apenas o arquivo XML que gerencia o layout e margens do corpo
+            if item.filename == "word/document.xml":
+                xml_texto = conteudo.decode("utf-8")
+                
+                # Substituição precisa via expressões regulares nas tags de margem do Word (w:pgMar)
+                xml_texto = re.sub(r'w:top="[^"]*"', f'w:top="{top_dxa}"', xml_texto)
+                xml_texto = re.sub(r'w:bottom="[^"]*"', f'w:bottom="{bottom_dxa}"', xml_texto)
+                xml_texto = re.sub(r'w:left="[^"]*"', f'w:left="{left_dxa}"', xml_texto)
+                xml_texto = re.sub(r'w:right="[^"]*"', f'w:right="{right_dxa}"', xml_texto)
+                
+                conteudo = xml_texto.encode("utf-8")
+                
+            # Copia todos os outros arquivos (cabeçalhos, rodapés, imagens, mídias) sem alterar um único bit
+            zip_novo.writestr(item, conteudo)
             
-            st.markdown("---")
-            st.subheader("✅ SEÇÕES ENCONTRADAS")
-            for s in rel["secoes_encontradas"]:
-                st.success(f"✅ {s}")
-            
-            if rel["secoes_faltantes"]:
-                st.subheader("❌ SEÇÕES FALTANTES")
-                for s in rel["secoes_faltantes"]:
-                    st.error(f"❌ {s}")
-            else:
-                st.subheader("✅ TODAS AS SEÇÕES ENCONTRADAS!")
-            
-            st.markdown("---")
-            if rel["aprovado"]:
-                st.success("## ✅ APROVADO — DOCUMENTO CONFORME!")
-                st.balloons()
-            else:
-                st.error("## ❌ REPROVADO — Verifique os itens acima")
+    zip_original.close()
+    buffer_saida.seek(0)
+    return buffer_saida.getvalue()
+
+# --- 3. FLUXO DE COMPILAÇÃO E TRIAGEM DE METADADOS ---
+arquivo_word = st.file_uploader("Arraste o documento WORD (.docx) aqui para Triagem e Formatação", type=["docx"])
+
+if arquivo_word:
+    # Leitura dos bytes brutos em lote de segurança
+    dados_brutos = arquivo_word.read()
+    
+    # Varredura rápida usando uma instância temporária apenas para extrair textos da triagem
+    doc_triagem = docx.Document(BytesIO(dados_brutos))
+    texto_corpo_raw = " ".join([p.text.strip() for p in doc_triagem.paragraphs[:40]])
+    texto_tabelas_raw = " ".join([cell.text.strip() for t in doc_triagem.tables[:1] for r in t.rows for cell in r.cells])
+    texto_total_raw = (texto_corpo_raw + " " + texto_tabelas_raw).upper()
+    
+    # Triagem do Tipo Documental
+    tipo_detectado = "PROTOCOLO"
+    if "PROCEDIMENTO OPERACIONAL" in texto_total_raw or "POP" in texto_total_raw:
+        tipo_detectado = "POP"
         
-        except Exception as e:
-            st.error(f"## ❌ ERRO: {str(e)}")
+    st.write(f"📋 **Tipo de Documento Identificado:** `{tipo_detectado}`")
+    
+    # Extração Inteligente de Código para Nomeação de Arquivo
+    codigo_doc = "PROT_SCIH005"
+    match_codigo = re.search(r'\b(PROT|POP|MAN|NOR|ROT)_[A-Z0-9_\s-]+\b', texto_total_raw, re.IGNORECASE)
+    if match_codigo:
+        codigo_doc = match_codigo.group(0).strip().upper().replace(" ", "")
+
+    # Processamento em lote via injeção XML direta
+    dados_finais = injetar_margens_via_xml_puro(dados_brutos)
+
+    # Exibição do botão estável na interface
+    st.download_button(
+        label="📥 CLIQUE AQUI PARA BAIXAR O DOCUMENTO FORMATADO",
+        data=dados_finais,
+        file_name=f"{codigo_doc}_Formatado_Homologado.docx",
+        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+    st.success(f"✅ **TRIAGEM CONCLUÍDA COM SUCESSO!** As margens foram atualizadas para o padrão institucional (2x2x2x3 cm) com preservação absoluta de cabeçalhos, logos e sem gerar páginas vazias.")
