@@ -160,13 +160,26 @@ def formatar_pelas_normas(doc):
     return output.getvalue()
 
 # ============================================================
-# 📋 GERADOR DA FICHA OFICIAL DE VERIFICAÇÃO DO NAQH (MÉTODO SEGURO)
+# 📋 GERADOR DA FICHA OFICIAL DE VERIFICAÇÃO DO NAQH (MÉTODO ULTRA SEGURO)
 # ============================================================
 def gerar_ficha_naqh(rel):
-    def sim_nao(condição):
-        return "(X) SIM  ( ) NÃO" if condição else "( ) SIM  (X) NÃO"
+    def sim_nao(condicao):
+        if condicao:
+            return "(X) SIM  ( ) NÃO"
+        return "( ) SIM  (X) NÃO"
     
-    # Construção estática tradicional para evitar conflito de chaves e colchetes no Python
+    tipo_str = str(rel['tipo'])
+    cod_str = str(rel['codigo'] or 'NÃO ENCONTRADO')
+    ver_str = str(rel['versao'] or 'NÃO ENCONTRADA')
+    val_str = str(rel['validade'] or 'NÃO PREENCHIDA')
+    
+    status_doc = "REPROVADO - REVISAR PENDÊNCIAS"
+    if rel['aprovado']:
+        status_doc = "APROVADO - CONFORME"
+        
+    cenc = str(len(rel['secoes_encontradas']))
+    cfal = str(len(rel['secoes_faltantes']))
+    
     linhas = [
         "========================================================================",
         "            SECRETARIA MUNICIPAL DE SAÚDE - SEMUS",
@@ -176,10 +189,10 @@ def gerar_ficha_naqh(rel):
         "",
         "1. CABEÇALHO INSTITUCIONAL",
         "------------------------------------------------------------------------",
-        "TIPO DE DOCUMENTO:     [" + str(rel['tipo']) + "] -> " + sim_nao(rel['tipo'] is not None),
-        "CÓDIGO DO DOCUMENTO:   [" + str(rel['codigo'] or 'NÃO ENCONTRADO') + "] -> " + sim_nao(rel['codigo'] is not None),
-        "VERSÃO DO DOCUMENTO:   [" + str(rel['versao'] or 'NÃO ENCONTRADA') + "] -> " + sim_nao(rel['versao'] is not None),
-        "VALIDADE EXIBIDA:      [" + str(rel['validade'] or 'NÃO PREENCHIDA') + "]",
+        "TIPO DE DOCUMENTO:     " + tipo_str + " -> " + sim_nao(rel['tipo'] is not None),
+        "CÓDIGO DO DOCUMENTO:   " + cod_str + " -> " + sim_nao(rel['codigo'] is not None),
+        "VERSÃO DO DOCUMENTO:   " + ver_str + " -> " + sim_nao(rel['versao'] is not None),
+        "VALIDADE EXIBIDA:      " + val_str,
         "",
         "2. FORMATAÇÃO E REGRAS VISUAIS (NORMA ZERO)",
         "------------------------------------------------------------------------",
@@ -191,5 +204,3 @@ def gerar_ficha_naqh(rel):
         "RECUO DE PARÁGRAFO (1,25cm):             -> (X) SIM  ( ) NÃO",
         "",
         "3. STATUS DA ESTRUTURA DE SEÇÕES",
-        "------------------------------------------------------------------------",
-        "STATUS GERAL DO DOCUMENTO: " + ("APROVADO - CONFORME" if rel['aprovado'] else "REPROVADO - REVISAR PENDÊNCIAS"),
