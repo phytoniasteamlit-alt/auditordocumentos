@@ -20,11 +20,17 @@ st.markdown("""
 O sistema aplica as margens oficiais da Norma Zero alterando diretamente as tags estruturais do pacote, **garantindo a permanência absoluta de logomarcas, tabelas de cabeçalho e paginações originais**.
 """)
 
-# --- DICIONÁRIO DE SEÇÕES OBRIGATÓRIAS AJUSTADO ---
+# --- DICIONÁRIO COMPLETO DE SEÇÕES OBRIGATÓRIAS (TODOS OS 9 TIPOS) ---
 SECOES_POR_TIPO = {
-    "PROTOCOLO": ["1. OBJETIVO", "2. APLICABILIDADE", "3. REFERENCIAL TEÓRICO", "4. CLASSIFICAÇÃO DAS CIRURGIAS", "5. RESPONSABILIDADES", "6. MEDIDAS OBRIGATÓRIAS DE PREVENÇÃO", "7. ESTRATÉGIAS DE MONITORAMENTO", "8. REFERÊNCIAS"],
-    "POP": ["1. DEFINIÇÃO", "2. APLICABILIDADE", "3. RESPONSÁVEL PELA EXECUÇÃO", "4. MATERIAIS UTILIZADOS NA REALIZAÇÃO DA TAREFA", "5. DESCRIÇÃO DOS PROCEDIMENTOS", "6. ATIVIDADES CRÍTICAS E PONTOS PROIBIDOS NA EXECUÇÃO DA TAREFA", "7. REFERÊNCIAS", "8. ANEXOS"],
-    "NORMA": ["1. INTRODUÇÃO", "2. OBJETIVO", "3. APLICABILIDADE", "4. DESCRIÇÃO DA NORMA", "5. RESPONSÁVEIS", "6. EFEITOS DO NÃO CUMPRIMENTO DA NORMA", "7. REFERÊNCIAS"]
+    "MANUAL": ["CAPA", "ELABORADORES", "COLABORADORES", "SUMÁRIO", "APRESENTAÇÃO", "DESCRIÇÃO", "REFERÊNCIAS", "APÊNDICES", "ANEXOS"],
+    "NORMA": ["INTRODUÇÃO", "OBJETIVO", "APLICABILIDADE", "DESCRIÇÃO DA NORMA", "RESPONSÁVEL", "EFEITOS DO NÃO CUMPRIMENTO DA NORMA", "REFERÊNCIAS", "APÊNDICES", "ANEXOS"],
+    "PLANO DE CONTINGÊNCIA": ["OBJETIVO", "APLICABILIDADE", "DEFINIÇÃO DE TERMOS", "IDENTIFICAÇÃO DA SITUAÇÃO ATUAL", "MEDIDAS DE CONTINGÊNCIA", "REFERÊNCIAS", "APÊNDICES", "ANEXOS"],
+    "POLÍTICA INSTITUCIONAL": ["INTRODUÇÃO", "OBJETIVO", "PRINCÍPIOS", "DIRETRIZES", "RESPONSABILIDADES", "ESTRATÉGIA DE MONITORAMENTO", "REFERÊNCIAS", "APÊNDICES", "ANEXOS"],
+    "POP": ["DEFINIÇÃO", "APLICABILIDADE", "RESPONSÁVEL PELA EXECUÇÃO", "MATERIAIS UTILIZADOS NA REALIZAÇÃO DA TAREFA", "DESCRIÇÃO DA TAREFA", "ATIVIDADES CRÍTICAS", "PONTOS PROIBIDOS NA EXECUÇÃO DA TAREFA", "REFERÊNCIAS", "APÊNDICES", "ANEXOS"],
+    "PROGRAMA": ["REFERENCIAL TEÓRICO", "PADRONIZAÇÃO DE ROTINAS TÉCNICOOPERACIONAIS", "ESTRATÉGIAS DE MONITORAMENTO", "DESCRIÇÃO DO PROGRAMA", "MEDIDAS EDUCACIONAIS", "REFERÊNCIAS", "APÊNDICES", "ANEXOS"],
+    "PROTOCOLO": ["OBJETIVO", "APLICABILIDADE", "REFERENCIAL TEÓRICO", "DESCRIÇÃO DO PROTOCOLO", "ESTRATÉGIAS DE MONITORAMENTO", "REFERÊNCIAS", "APÊNDICES", "ANEXOS"],
+    "REGIMENTO": ["DA FINALIDADE", "DA COMPOSIÇÃO", "DO MANDATO", "DO FUNCIONAMENTO E ORGANIZAÇÃO", "DAS COMPETÊNCIAS", "DAS ATRIBUIÇÕES", "DISPOSIÇÕES FINAIS"],
+    "ROTINA": ["DEFINIÇÃO", "OBJETIVO", "APLICABILIDADE", "DESCRIÇÃO DA ROTINA", "APÊNDICES", "ANEXOS"]
 }
 
 # --- FUNÇÃO DE AUXÍLIO PARA BUSCA SEM ACENTO ---
@@ -98,37 +104,65 @@ def gerar_ficha_naqh(tipo, codigo, versao, encontradas, faltantes, aprovado):
 
 # --- 3. FLUXO DE COMPILAÇÃO E TRIAGEM DE METADADOS ---
 arquivo_word = st.file_uploader("Arraste o documento WORD (.docx) aqui para Triagem e Formatação", type=["docx"])
-
 if arquivo_word is not None:
     dados_brutos = arquivo_word.read()
     
-    # Instancia o documento para varredura estrutural
     doc_triagem = docx.Document(BytesIO(dados_brutos))
     
     codigo_doc = "NÃO DETECTADO"
     versao_doc = "NÃO DETECTADA"
     
-    # Varredura inteligente de tabelas célula por célula
-    for tabela in doc_triagem.tables:
-        for linha in tabela.rows:
-            for celula in linha.cells:
-                texto_celula = celula.text.strip()
-                texto_celula_limpo = limpar_texto(texto_celula)
-                
-                # Procura por Código na célula atual
-                if "CODIGO" in texto_celula_limpo:
-                    match = re.search(r'(PROT|POP|MAN|NOR|ROT)_[A-Z0-9_\s-]+', texto_celula, re.IGNORECASE)
-                    if match:
-                        codigo_doc = match.group(0).strip().upper().replace(" ", "")
-                
-                # Procura por Versão na célula atual
-                if "VERSAO" in texto_celula_limpo:
-                    match = re.search(r'(\d+)', texto_celula)
-                    if match:
-                        versao_doc = match.group(1).strip()
+    # Varredura nos Cabeçalhos Oficiais do Word (Tabelas e Células)
+    for secao_doc in doc_triagem.sections:
+        header = secao_doc.header
+        if header is not None:
+            for tabela in header.tables:
+                for linha in tabela.rows:
+                    for celula in linha.cells:
+                        texto_celula = celula.text.strip()
+                        texto_celula_limpo = limpar_texto(texto_celula)
+                        
+                        if "CODIGO" in texto_celula_limpo:
+                            match = re.search(r'(PROT|POP|MAN|NOR|ROT|PLANC|POL|PROG|REG)_[A-Z0-9_\s-]+', texto_celula, re.IGNORECASE)
+                            if match:
+                                codigo_doc = match.group(0).strip().upper().replace(" ", "")
+                        
+                        if "VERSAO" in texto_celula_limpo:
+                            match = re.search(r'(\d+ª?|\d+\s*ª?)', texto_celula, re.IGNORECASE)
+                            if match:
+                                versao_doc = match.group(1).strip()
 
-    # Coleta de todos os textos para auditar seções
-    elementos_texto = [p.text.strip() for p in doc_triagem.paragraphs if p.text.strip()]
+    # Varredura de Segurança no Corpo do Texto
+    if codigo_doc == "NÃO DETECTADO" or versao_doc == "NÃO DETECTADA":
+        for tabela in doc_triagem.tables:
+            for linha in tabela.rows:
+                for celula in linha.cells:
+                    texto_celula = celula.text.strip()
+                    texto_celula_limpo = limpar_texto(texto_celula)
+                    
+                    if "CODIGO" in texto_celula_limpo and codigo_doc == "NÃO DETECTADO":
+                        match = re.search(r'(PROT|POP|MAN|NOR|ROT|PLANC|POL|PROG|REG)_[A-Z0-9_\s-]+', texto_celula, re.IGNORECASE)
+                        if match:
+                            codigo_doc = match.group(0).strip().upper().replace(" ", "")
+                    
+                    if "VERSAO" in texto_celula_limpo and versao_doc == "NÃO DETECTADA":
+                        match = re.search(r'(\d+ª?|\d+\s*ª?)', texto_celula, re.IGNORECASE)
+                        if match:
+                            versao_doc = match.group(1).strip()
+                            
+    # Consolidação do texto completo para análise estrutural
+    elementos_texto = []
+    for secao_doc in doc_triagem.sections:
+        if secao_doc.header:
+            for p in secao_doc.header.paragraphs:
+                if p.text.strip(): elementos_texto.append(p.text.strip())
+            for t in secao_doc.header.tables:
+                for r in t.rows:
+                    for cell in r.cells:
+                        if cell.text.strip(): elementos_texto.append(cell.text.strip())
+
+    for p in doc_triagem.paragraphs:
+        if p.text.strip(): elementos_texto.append(p.text.strip())
     for t in doc_triagem.tables:
         for r in t.rows:
             for cell in r.cells:
@@ -137,61 +171,6 @@ if arquivo_word is not None:
     texto_total_raw = "  ".join(elementos_texto)
     texto_limpo_busca = limpar_texto(texto_total_raw)
     
-    # Triagem Avançada de Tipo Documental
-    tipo_detectado = "PROTOCOLO"
-    if "TIPO DE DOCUMENTO: PROTOCOLO" in texto_limpo_busca or "PROTOCOLO" in texto_limpo_busca[:500]:
-        tipo_detectado = "PROTOCOLO"
-    elif "PROCEDIMENTO OPERACIONAL" in texto_limpo_busca or "POP" in texto_limpo_busca[:500]:
-        tipo_detectado = "POP"
-    elif "NORMA" in texto_limpo_busca[:500]:
-        tipo_detectado = "NORMA"
-        
-    st.markdown("---")
-    st.subheader("📋 **Triagem e Auditoria de Estrutura**")
-    st.write(f"🔹 **Tipo de Documento Identificado:** `{tipo_detectado}`")
-    st.write(f"🔹 **Código do Documento:** `{codigo_doc}`")
-    st.write(f"🔹 **Versão do Documento:** `{versao_doc}`")
-
-    # Realiza a Varredura de Seções Autêntica
-    secoes_esperadas = SECOES_POR_TIPO[tipo_detectado]
-    secoes_encontradas, secoes_faltantes = [], []
-    
-    for secao in secoes_esperadas:
-        secao_sem_numero = re.sub(r'^\d+\s*[\.\-]?\s*', '', secao)
-        secao_limpa = limpar_texto(secao_sem_numero)
-        if re.search(rf'\b{re.escape(secao_limpa)}\b', texto_limpo_busca):
-            secoes_encontradas.append(secao)
-        else:
-            secoes_faltantes.append(secao)
-
-    # Exibição Analítica das Seções na Interface
-    c1, c2 = st.columns(2)
-    with c1:
-        st.markdown("##### ✅ Seções Identificadas")
-        for s in secoes_encontradas:
-            st.success(f"• {s}")
-    with c2:
-        st.markdown("##### ❌ Seções Ausentes")
-        if secoes_faltantes:
-            for s in secoes_faltantes:
-                st.error(f"• {s}")
-        else:
-            st.info("• Nenhuma seção obrigatória ausente!")
-
-    # Processamento e Emissão de Documentos
-    dados_finais = injetar_margens_via_xml_puro(dados_brutos)
-    documento_aprovado = (len(secoes_faltantes) == 0 and versao_doc != "NÃO DETECTADA" and codigo_doc != "NÃO DETECTADO")
-    ficha_naqh_bytes = gerar_ficha_naqh(tipo_detectado, codigo_doc, versao_doc, secoes_encontradas, secoes_faltantes, documento_aprovado)
-
-    st.markdown("---")
-    if documento_aprovado:
-        st.success("🎉 **DOCUMENTO APROVADO COM SUCESSO!** Tudo pronto para download.")
-        st.balloons()
-    else:
-        st.warning("⚠️ **DOCUMENTO FORMATADO COM PENDÊNCIAS!** Verifique os itens apontados na triagem.")
-
-    st.markdown("### 📥 ÁREA DE DOWNLOADS DO PROCESSO")
-    
-    # Botões de download em formato sequencial puro para evitar erros de parênteses abertos
-    st.download_button(label="📥 DOWNLOAD DO DOCUMENTO FORMATADO (.DOCX)", data=dados_finais, file_name=f"{codigo_doc}_Formatado.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+    # Motor Avançado de Classificação de Documentos (Baseado em Termos/Prefixos)
+    tipo_detectado = "PROTOCOLO"  # Valor padrão
     
