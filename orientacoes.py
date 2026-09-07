@@ -53,6 +53,7 @@ def auditar_documento(doc):
     tipo_detectado = "PROT"
     for tipo in SECOES_POR_TIPO.keys():
         if re.search(rf'\b{tipo}\b', texto):
+            tipo_detectged = tipo
             tipo_detectado = tipo
             break
             
@@ -112,7 +113,7 @@ def formatar_pelas_normas(doc):
         # Verifica se o parágrafo atual é um Título/Subtítulo Principal
         eh_titulo = any(limpar_texto(re.sub(r'^\d+\.\s*', '', s)) in limpar_texto(texto_paragrafo) for lista in SECOES_POR_TIPO.values() for s in lista)
         
-        # Verifica se o text opera como item listado (bullets ou alfabéticos)
+        # Verifica se o texto opera como item listado (bullets ou alfabéticos)
         eh_lista = p.style.name.startswith('List') or texto_paragrafo.startswith(('-', '•', '*', 'a)', 'b)', 'c)', 'd)', 'e)', 'f)', 'g)', 'h)', 'i)', 'j)', 'k)'))
 
         if eh_titulo:
@@ -168,7 +169,7 @@ with st.form("interface_auditoria_e_formatador"):
 if enviado and arquivo_word:
     st.info(f"✅ Documento recebido: **{arquivo_word.name}**")
     
-    # Carrega o documento original de forma sequencial e segura
+    # Leitura sequencial segura das informações binárias
     conteudo_arquivo = arquivo_word.read()
     doc_original = docx.Document(BytesIO(conteudo_arquivo))
     
@@ -216,7 +217,6 @@ if enviado and arquivo_word:
             
     st.markdown("---")
     
-    # Executa a correção do design estrutural pelas regras de estilo da Norma Zero
+    # Executa a correção estrutural automática do documento original
     documento_formatado_bytes = formatar_pelas_normas(docx.Document(BytesIO(conteudo_arquivo)))
     
-    if rel["aprovado"]:
