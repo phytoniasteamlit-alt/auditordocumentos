@@ -2,7 +2,9 @@ import streamlit as st
 import zipfile
 import re
 import unicodedata
-from io import BytesIO
+import tempfile
+import os
+import shutil
 
 # --- 1. CONFIGURAÇÃO DA PÁGINA STREAMLIT ---
 st.set_page_config(page_title="Formatador de Documentos NAQH", page_icon="📊", layout="wide")
@@ -38,13 +40,14 @@ def limpar_texto(texto):
     sem_acento = sem_acento.replace('\n', ' ').replace('\r', ' ')
     return re.sub(r'\s+', ' ', sem_acento.upper().strip())
 
-# --- 2. MOTOR DE ALTERAÇÃO XML DIRETA ---
-def injetar_margens_via_xml_puro(arquivo_bytes):
+# --- 2. MOTOR DE ALTERAÇÃO XML DIRETA VIA ARQUIVO TEMPORÁRIO (DISK MODE) ---
+def injetar_margens_via_disco(caminho_origem):
     top_dxa, bottom_dxa, left_dxa, right_dxa = "1134", "1134", "1134", "1701"
-    zip_original = zipfile.ZipFile(BytesIO(arquivo_bytes))
-    buffer_saida = BytesIO()
     
-    with zipfile.ZipFile(buffer_saida, "w", zipfile.ZIP_DEFLATED) as zip_novo:
+    caminho_saida = caminho_origem + "_formatado.docx"
+    zip_original = zipfile.ZipFile(caminho_origem, 'r')
+    
+    with zipfile.ZipFile(caminho_saida, "w", zipfile.ZIP_DEFLATED) as zip_novo:
         for item in zip_original.infolist():
             conteudo = zip_original.read(item.filename)
             if item.filename == "word/document.xml":
@@ -57,8 +60,16 @@ def injetar_margens_via_xml_puro(arquivo_bytes):
             zip_novo.writestr(item, conteudo)
             
     zip_original.close()
-    buffer_saida.seek(0)
-    return buffer_saida.getvalue()
+    
+    with open(caminho_saida, "rb") as f:
+        dados_finais = f.read()
+        
+    try:
+        os.remove(caminho_saida)
+    except:
+        pass
+        
+    return dados_finais
 
 # --- 📋 GERADOR DA FICHA OFICIAL DE VERIFICAÇÃO DO NAQH ---
 def gerar_ficha_naqh(tipo, codigo, versao, encontradas, faltantes, aprovado):
@@ -105,26 +116,28 @@ def gerar_ficha_naqh(tipo, codigo, versao, encontradas, faltantes, aprovado):
 arquivo_word = st.file_uploader("Arraste o documento WORD (.docx) aqui para Triagem e Formatação", type=["docx"])
 
 if arquivo_word is not None:
-    dados_brutos = arquivo_word.read()
+    st.info(f"⚡ Processando documento pesado de forma otimizada: **{arquivo_word.name}**")
     
-    # Extração de textos lendo diretamente o XML compactado (Velocidade instantânea à prova de travamentos)
+    # Salva o upload diretamente no disco temporário do servidor para liberar a memória RAM
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as temp_file:
+        shutil.copyfileobj(arquivo_word, temp_file)
+        caminho_temp = temp_file.name
+
     texto_corpo_xml = ""
     texto_cabecalhos_xml = ""
     
     try:
-        with zipfile.ZipFile(BytesIO(dados_brutos)) as z:
-            # Lê o texto principal do documento
+        with zipfile.ZipFile(caminho_temp, 'r') as z:
             if "word/document.xml" in z.namelist():
                 xml_content = z.read("word/document.xml").decode("utf-8", errors="ignore")
                 texto_corpo_xml = re.sub(r'<[^>]+>', ' ', xml_content)
                 
-            # Lê as tabelas ocultas de cabeçalho
             for f in z.namelist():
                 if "word/header" in f and f.endswith(".xml"):
                     xml_content = z.read(f).decode("utf-8", errors="ignore")
                     texto_cabecalhos_xml += " " + re.sub(r'<[^>]+>', ' ', xml_content)
-    except:
-        st.error("❌ Falha na leitura interna do pacote compactado (.docx). Certifique-se de que o arquivo não está corrompido.")
+    except Exception as e:
+        st.error(f"❌ Falha na leitura interna do arquivo. Erro: {str(e)}")
         st.stop()
         
     texto_corpo_limpo = limpar_texto(texto_corpo_xml)
@@ -133,17 +146,14 @@ if arquivo_word is not None:
     codigo_doc = "NÃO DETECTADO"
     versao_doc = "NÃO DETECTADA"
     
-    # Captura o Código direto do cabeçalho XML
     match_cod = re.search(r'(PROT|POP|MAN|NOR|ROT|PLANC|POL|PROG|REG)_[A-Z0-9_|-]+', texto_cabecalho_limpo)
     if match_cod:
         codigo_doc = match_cod.group(0).strip()
         
-    # Captura a Versão direto do cabeçalho XML
     match_ver = re.search(r'VERSAO\s*[:\s]*(\d+)', texto_cabecalho_limpo)
     if match_ver:
         versao_doc = match_ver.group(1).strip()
 
-    # Se falhou no cabeçalho, varre o corpo como contingência
     if codigo_doc == "NÃO DETECTADO":
         match_cod_c = re.search(r'(PROT|POP|MAN|NOR|ROT|PLANC|POL|PROG|REG)_[A-Z0-9_|-]+', texto_corpo_limpo)
         if match_cod_c:
@@ -154,7 +164,7 @@ if arquivo_word is not None:
         if match_ver_c:
             versao_doc = match_ver_c.group(1).strip()
 
-    # Triagem Avançada baseada estritamente nas primeiras linhas do texto limpo do Word
+    # Triagem Avançada
     tipo_detectado = "PROTOCOLO"
     texto_analise_tipo = texto_cabecalho_limpo + " " + texto_corpo_limpo[:1000]
     
@@ -174,5 +184,3 @@ if arquivo_word is not None:
         tipo_detectado = "MANUAL"
     elif "NORMA" in texto_analise_tipo or "NOR_" in texto_analise_tipo:
         tipo_detectado = "NORMA"
-    elif "PROTOCOLO" in texto_analise_tipo or "PROT" in texto_analise_tipo:
-        tipo_detectado = "PROTOCOLO"
