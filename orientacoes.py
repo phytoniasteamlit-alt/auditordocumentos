@@ -25,7 +25,7 @@ def limpar_texto(texto):
 # 📋 SEÇÕES OBRIGATÓRIAS (NORMA ZERO)
 # ============================================================
 SECOES_POR_TIPO = {
-    "PROT": ["1. OBJETIVO", "2. APLICABILIDADE", "3. REFERENCIAL TEÓRICO", "4. CLASSIFICAÇÃO DAS CIRURGIAS", "5. RESPONSABILIDADES", "6. MEDIDAS OBRIGATÓRIAS DE PREVENÇÃO", "7. ESTRATÉGIAS DE MONITORAMENTO", "8. REFERÊNCIAS"],
+    "PROT": ["1. OBJETIVO", "2. APLICABILIDADE", "3. REFERENCIAL TEÓRICO", "4. CLASSIFICAÇÃO DAS CIRURGIAS", "5. RESPONSABILIDADES", "6. MEDIDAS OBRIGATORIAS DE PREVENÇÃO", "7. ESTRATÉGIAS DE MONITORAMENTO", "8. REFERÊNCIAS"],
     "POP": ["1. DEFINIÇÃO", "2. APLICABILIDADE", "3. RESPONSÁVEL", "4. DESCRIÇÃO DA EXECUÇÃO", "5. MATERIAIS UTILIZADOS", "6. TARIFA", "7. REFERÊNCIAS", "8. ANEXOS"],
     "POI": ["1. INTRODUÇÃO", "2. OBJETIVO", "3. FINALIDADE", "4. ABRANGÊNCIA", "5. RESPONSABILIDADES", "6. GESTÃO DE RISCO", "7. ANEXOS", "8. REFERÊNCIAS"],
     "NOR": ["1. OBJETIVO", "2. APLICABILIDADE", "3. DESCRIÇÃO DA NORMA", "4. RESPONSÁVEL", "5. EFETIVO NO CUMPRIMENTO", "6. NORMA DE REFERÊNCIA", "7. ANEXOS"],
@@ -170,7 +170,8 @@ if enviado and arquivo_word:
     
     try:
         # Carrega o documento original na memória
-        doc_original = docx.Document(BytesIO(arquivo_word.read()))
+        conteudo_arquivo = arquivo_word.read()
+        doc_original = docx.Document(BytesIO(conteudo_arquivo))
         
         # Executa a varredura e auditoria
         rel = auditar_documento(doc_original)
@@ -189,7 +190,7 @@ if enviado and arquivo_word:
             if rel['versao']:
                 st.success(f"**Versão Localizada:** {rel['versao']}")
             else:
-                st.error("**Versão:** ❌ NÃO ENCONTRADA NO CABEÇALHO")
+                st.error("**Versão:** ❌ NÃO ENTRADA NO CABEÇALHO")
             if rel['validade']:
                 st.info(f"**Validade:** {rel['validade']}")
             else:
