@@ -3,11 +3,18 @@ import docx
 import re
 import unicodedata
 from io import BytesIO
+from datetime import datetime
 
 # ============================================================
 # 🎯 CONFIGURAÇÕES DA PÁGINA
 # ============================================================
 st.set_page_config(page_title="AUDITOR NAQH NMZ", page_icon="👨‍💻", layout="wide")
+
+# ============================================================
+# 📐 PARÂMETROS DE ESTIMATIVA DE TEMPO
+# ============================================================
+TEMPO_POR_DOC_MANUAL = 20  # minutos
+TEMPO_POR_DOC_AUTOMATICO = 1  # minuto
 
 # ============================================================
 # 📏 VALORES EXATOS — ABNT NBR 14724 / NORMA ZERO
@@ -92,7 +99,6 @@ def verificar_margens(doc):
 # ✍️ VERIFICA FONTE SEPARADA: CORPO ≠ TABELAS
 # ============================================================
 def verificar_fonte_separado(doc):
-    # --- CORPO DO TEXTO → Calibri 11 ---
     corpo_fontes = {}
     corpo_tamanhos = {}
     corpo_total = corpo_fonte_ok = corpo_tam_ok = 0
@@ -107,7 +113,6 @@ def verificar_fonte_separado(doc):
             if nome == FONTE_CORPO: corpo_fonte_ok += 1
             if tam == TAMANHO_CORPO: corpo_tam_ok += 1
     
-    # --- DENTRO DAS TABELAS → Calibri 10 ---
     tabela_fontes = {}
     tabela_tamanhos = {}
     tabela_total = tabela_fonte_ok = tabela_tam_ok = 0
@@ -117,7 +122,7 @@ def verificar_fonte_separado(doc):
         texto_tabela = ""
         for linha in tabela.rows:
             for celula in linha.cells:
-                texto_tabela += cel.text + " "
+                texto_tabela += celula.text + " "
                 for p in celula.paragraphs:
                     for run in p.runs:
                         tabela_total += 1
@@ -161,7 +166,7 @@ def listar_tabelas(doc):
     info = []
     tem_cab = False
     for i, tb in enumerate(doc.tables):
-        texto = " ".join([c.text.upper() for c in tb.rows[0].cells])
+        texto = " ".join([celula.text.upper() for celula in tb.rows[0].cells])
         eh_cab = "CODIGO" in texto or "CÓDIGO" in texto or "VERSÃO" in texto
         eh_hist = "REGISTRO HISTÓRICO" in texto or "REGISTRO HISTORICO" in texto
         if eh_cab: tem_cab = True
@@ -223,17 +228,16 @@ def gerar_ficha(tipo, codigo, versao, m, f, tb, enc, falt, aprov):
     return "\n".join(ficha).encode("utf-8")
 
 # ============================================================
-# 🧠 ESCANEAR DOCUMENTO — ERRO CORRIGIDO!
+# 🧠 ESCANEAR DOCUMENTO — TODOS OS ERROS CORRIGIDOS!
 # ============================================================
 def escanear(doc_bytes):
     doc = docx.Document(BytesIO(doc_bytes))
     texto_completo = ""
     codigo = versao = validade = None
     
-    # Ler tabelas (cabeçalho) — ✅ CORRIGIDO o erro 'NoneType' object has no attribute 'strip'
     for tb in doc.tables:
         for ln in tb.rows:
-            lt = " ".join([c.text for c in ln.cells])
+            lt = " ".join([celula.text for celula in ln.cells])
             texto_completo += lt + " "
             cod = re.search(r'CÓDIGO|Código[:\s]*[:]?\s*([A-Z]{2,5}[_\s]?[A-Z0-9]+)', lt, re.IGNORECASE)
             if cod and cod.group(1) and not codigo: 
@@ -245,11 +249,9 @@ def escanear(doc_bytes):
             if val and val.group(1) and not validade: 
                 validade = val.group(1).strip()
     
-    # Ler corpo do texto
     for p in doc.paragraphs: texto_completo += p.text + " "
     texto_limpo = limpar_texto(texto_completo)
     
-    # Detectar tipo de documento
     tipo = "PROT"
     if re.search(r'\bPROTOCOLO\b', texto_limpo): tipo = "PROT"
     elif re.search(r'\bPOP\b', texto_limpo): tipo = "POP"
@@ -261,7 +263,6 @@ def escanear(doc_bytes):
     elif re.search(r'\bROTINA|ROT\b', texto_limpo): tipo = "ROT"
     elif re.search(r'\bMANUAL|MAN\b', texto_limpo): tipo = "MAN"
     
-    # Verificar seções
     secoes_esp = SECOES_POR_TIPO[tipo]
     enc = [s for s in secoes_esp if limpar_texto(s) in texto_limpo]
     falt = [s for s in secoes_esp if limpar_texto(s) not in texto_limpo]
@@ -275,10 +276,20 @@ def escanear(doc_bytes):
     }
 
 # ============================================================
-# 🚀 INTERFACE PRINCIPAL — SEU NOME, TÍTULO E BONEQUINHO
+# ⏱️ FUNÇÃO — FORMATAR TEMPO
+# ============================================================
+def formatar_tempo(minutos_total):
+    h = int(minutos_total // 60)
+    m = int(minutos_total % 60)
+    if h > 0:
+        return f"{h}h {m}min" if m > 0 else f"{h}h"
+    return f"{m}min"
+
+# ============================================================
+# 🚀 INTERFACE PRINCIPAL — SEU NOME, TÍTULO, BONEQUINHO E RELÓGIO
 # ============================================================
 
-# Cabeçalho com título, nome e bonequinho no canto direito
+# Cabeçalho com título, nome e bonequinho
 st.markdown("""
     <style>
     .header-container {
@@ -304,7 +315,30 @@ st.markdown("""
     .header-emoji {
         font-size: 50px;
     }
+    .relogio-box {
+        background: linear-gradient(135deg, #0F766E 0%, #14B8A6 100%);
+        padding: 20px 25px;
+        border-radius: 12px;
+        margin: 15px 0;
+        color: white;
+    }
+    .economia-grande {
+        font-size: 32px;
+        font-weight: bold;
+    }
+    .base-tempo {
+        background-color: #1E293B;
+        padding: 12px 18px;
+        border-radius: 8px;
+        color: #CBD5E1;
+        font-size: 13px;
+        margin-top: 8px;
+    }
     </style>
+""", unsafe_allow_html=True)
+
+# Título principal
+st.markdown("""
     <div class="header-container">
         <div class="header-text">
             <h1>AUDITOR NAQH NMZ DE ALTA PRECISÃO</h1>
@@ -315,89 +349,139 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Upload do arquivo
-arquivo = st.file_uploader("📂 Envie o documento (.docx)", type=["docx"])
+arquivos = st.file_uploader("📂 Envie o(s) documento(s) (.docx)", type=["docx"], accept_multiple_files=True)
 
-if arquivo:
-    st.info(f"✅ Arquivo carregado: **{arquivo.name}**")
-    with st.spinner("Verificando conforme Norma Zero..."):
-        try:
-            dados = arquivo.read()
-            r = escanear(dados)
-            
-            st.markdown("---")
-            st.subheader("📋 DADOS DO DOCUMENTO")
-            c1, c2 = st.columns(2)
-            with c1: st.info(f"**Tipo:** {r['tipo']}")
-            with c2: st.success(f"**Código:** {r['codigo'] or '❌ NÃO ENCONTRADO'}")
-            st.success(f"**Versão:** {r['versao'] or '❌ NÃO ENCONTRADA'}")
-            
-            st.markdown("---")
-            st.subheader("📏 MARGENS — Esperado: Sup=3,0 / Inf=2,0 / Esq=3,0 / Dir=2,0 cm")
-            m = r["margens"]
-            col1, col2, col3, col4 = st.columns(4)
-            col1.metric("Superior", f"{m['sup']} cm", "✅" if m["ok_sup"] else "❌")
-            col2.metric("Inferior", f"{m['inf']} cm", "✅" if m["ok_inf"] else "❌")
-            col3.metric("Esquerda", f"{m['esq']} cm", "✅" if m["ok_esq"] else "❌")
-            col4.metric("Direita", f"{m['dir']} cm", "✅" if m["ok_dir"] else "❌")
-            st.success("✅ TODAS AS MARGENS CONFORME") if m["todas_ok"] else st.error("❌ MARGENS NÃO CONFORME")
-            
-            st.markdown("---")
-            st.subheader(f"✍️ CORPO DO TEXTO — Esperado: Calibri 11pt")
-            fc = r["fonte"]["corpo"]
-            st.write("**Fontes encontradas:**", ", ".join([f"{n} ({q})" for n,q in fc["fontes"].items()]))
-            st.write("**Tamanhos encontrados:**", ", ".join([f"{t}pt ({q})" for t,q in fc["tamanhos"].items()]))
-            col1, col2 = st.columns(2)
-            with col1: st.metric("Fonte Calibri", f"{fc['pct_fonte']}%", "✅ CONFORME" if fc["fonte_ok"] else "❌ DIVERGENTE")
-            with col2: st.metric("Tamanho 11pt", f"{fc['pct_tam']}%", "✅ CONFORME" if fc["tam_ok"] else "❌ DIVERGENTE")
-            
-            st.markdown("---")
-            st.subheader(f"✍️ TABELAS / FIGURAS — Esperado: Calibri 10pt")
-            ft = r["fonte"]["tabelas"]
-            if ft["fontes"]:
-                st.write("**Fontes nas Tabelas:**", ", ".join([f"{n} ({q})" for n,q in ft["fontes"].items()]))
-                st.write("**Tamanhos nas Tabelas:**", ", ".join([f"{t}pt ({q})" for t,q in ft["tamanhos"].items()]))
-                col1, col2 = st.columns(2)
-                with col1: st.metric("Fonte Calibri", f"{ft['pct_fonte']}%", "✅ CONFORME" if ft["fonte_ok"] else "⚠️ DIFERENTE")
-                with col2: st.metric("Tamanho 10pt", f"{ft['pct_tam']}%", "✅ CONFORME" if ft["tam_ok"] else "⚠️ DIFERENTE")
-                if ft["tem_registro_historico"]:
-                    st.info("📋 **Tabela de REGISTRO HISTÓRICO detectada** — verifique fonte/tamanho")
-            else:
-                st.info("Nenhuma tabela com texto detectada")
-            
-            st.markdown("---")
-            st.subheader("📊 TABELAS DO DOCUMENTO")
-            tb = r["tabelas"]
-            st.write(f"**Total de tabelas:** {tb['total']}")
-            st.success("✅ Tabela do Cabeçalho encontrada") if tb["tem_cabecalho"] else st.warning("⚠️ Tabela do Cabeçalho NÃO encontrada")
-            for tbinfo in tb["detalhes"]:
-                tipo = "📌 CABEÇALHO" if tbinfo["cab"] else "📋 REGISTRO HISTÓRICO" if tbinfo["hist"] else f"📊 Tabela {tbinfo['n']}"
-                st.write(f"{tipo}: {tbinfo['lin']} linhas × {tbinfo['col']} colunas")
-            
-            st.markdown("---")
-            st.subheader("📋 SEÇÕES")
-            for s in r["secoes_enc"]: st.success(f"✅ {s}")
-            if r["secoes_falt"]:
-                for s in r["secoes_falt"]: st.error(f"❌ {s}")
-            else:
-                st.success("✅ TODAS AS SEÇÕES ENCONTRADAS")
-            
-            st.markdown("---")
-            aprov = m["todas_ok"] and r["codigo"] and r["versao"] and not r["secoes_falt"]
-            if aprov:
-                st.success("🎉 **DOCUMENTO APROVADO CONFORME NORMA ZERO!**")
-                st.balloons()
-            else:
-                st.warning("⚠️ **DOCUMENTO COM PENDÊNCIAS** — verifique os itens acima")
-            
-            dados_formatados = aplicar_margens(dados)
-            ficha_bytes = gerar_ficha(r["tipo"], r["codigo"], r["versao"], m, r["fonte"], tb, r["secoes_enc"], r["secoes_falt"], aprov)
-            
-            nome_doc = f"{r['codigo']}_Formatado.docx" if r['codigo'] else "Documento_Formatado.docx"
-            nome_txt = f"Ficha_Verificacao_{r['codigo']}.txt" if r['codigo'] else "Ficha_Verificacao.txt"
-            
-            st.download_button("📥 DOWNLOAD — Documento formatado (.DOCX)", dados_formatados, nome_doc, 
-                              "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-            st.download_button("📄 DOWNLOAD — Ficha de verificação (.TXT)", ficha_bytes, nome_txt, "text/plain")
+if arquivos:
+    qtd = len(arquivos)
+    
+    # ⏱️ CÁLCULO DE ECONOMIA DE TEMPO
+    tempo_manual = qtd * TEMPO_POR_DOC_MANUAL
+    tempo_auditor = qtd * TEMPO_POR_DOC_AUTOMATICO
+    tempo_economizado = tempo_manual - tempo_auditor
+    
+    # 🕰️ EXIBIR RELÓGIO DE ECONOMIA
+    st.markdown(f"""
+    <div class="relogio-box">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div>
+                <h3 style="margin:0;">⏱️ ECONOMIA DE TEMPO</h3>
+                <p style="margin:5px 0 0 0;opacity:0.9;">Com base em {qtd} documento(s)</p>
+            </div>
+            <div class="economia-grande">
+                {formatar_tempo(tempo_economizado)}
+            </div>
+        </div>
+        <div style="display:flex;gap:30px;margin-top:12px;font-size:14px;">
+            <span>📝 Manual: <b>{formatar_tempo(tempo_manual)}</b></span>
+            <span>⚡ Auditor: <b>{formatar_tempo(tempo_auditor)}</b></span>
+            <span>✅ Redução: <b>{round((tempo_economizado/tempo_manual)*100)}%</b></span>
+        </div>
+    </div>
+    <div class="base-tempo">
+        📌 <b>Base de cálculo:</b> ~{TEMPO_POR_DOC_MANUAL}min/documento formatado manualmente vs. ~{TEMPO_POR_DOC_AUTOMATICO}min/documento com o Auditor. 
+        Estimativa considerando: abertura → ajuste de margens → padronização de fontes → conferência de seções → salvamento.
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("---")
+    
+    # Processar cada arquivo
+    for idx, arquivo in enumerate(arquivos, 1):
+        st.subheader(f"📄 Documento {idx} de {qtd}: {arquivo.name}")
         
-        except Exception as e:
-            st.error(f"## ❌ ERRO: {str(e)}")
+        with st.spinner(f"Verificando {arquivo.name}..."):
+            try:
+                dados = arquivo.read()
+                r = escanear(dados)
+                
+                st.markdown("---")
+                st.subheader("📋 DADOS DO DOCUMENTO")
+                c1, c2 = st.columns(2)
+                with c1: st.info(f"**Tipo:** {r['tipo']}")
+                with c2: st.success(f"**Código:** {r['codigo'] or '❌ NÃO ENCONTRADO'}")
+                st.success(f"**Versão:** {r['versao'] or '❌ NÃO ENCONTRADA'}")
+                
+                st.markdown("---")
+                st.subheader("📏 MARGENS — Esperado: Sup=3,0 / Inf=2,0 / Esq=3,0 / Dir=2,0 cm")
+                m = r["margens"]
+                col1, col2, col3, col4 = st.columns(4)
+                col1.metric("Superior", f"{m['sup']} cm", "✅" if m["ok_sup"] else "❌")
+                col2.metric("Inferior", f"{m['inf']} cm", "✅" if m["ok_inf"] else "❌")
+                col3.metric("Esquerda", f"{m['esq']} cm", "✅" if m["ok_esq"] else "❌")
+                col4.metric("Direita", f"{m['dir']} cm", "✅" if m["ok_dir"] else "❌")
+                st.success("✅ TODAS AS MARGENS CONFORME") if m["todas_ok"] else st.error("❌ MARGENS NÃO CONFORME")
+                
+                st.markdown("---")
+                st.subheader(f"✍️ CORPO DO TEXTO — Esperado: Calibri 11pt")
+                fc = r["fonte"]["corpo"]
+                st.write("**Fontes encontradas:**", ", ".join([f"{n} ({q})" for n,q in fc["fontes"].items()]))
+                st.write("**Tamanhos encontrados:**", ", ".join([f"{t}pt ({q})" for t,q in fc["tamanhos"].items()]))
+                col1, col2 = st.columns(2)
+                with col1: st.metric("Fonte Calibri", f"{fc['pct_fonte']}%", "✅ CONFORME" if fc["fonte_ok"] else "❌ DIVERGENTE")
+                with col2: st.metric("Tamanho 11pt", f"{fc['pct_tam']}%", "✅ CONFORME" if fc["tam_ok"] else "❌ DIVERGENTE")
+                
+                st.markdown("---")
+                st.subheader(f"✍️ TABELAS / FIGURAS — Esperado: Calibri 10pt")
+                ft = r["fonte"]["tabelas"]
+                if ft["fontes"]:
+                    st.write("**Fontes nas Tabelas:**", ", ".join([f"{n} ({q})" for n,q in ft["fontes"].items()]))
+                    st.write("**Tamanhos nas Tabelas:**", ", ".join([f"{t}pt ({q})" for t,q in ft["tamanhos"].items()]))
+                    col1, col2 = st.columns(2)
+                    with col1: st.metric("Fonte Calibri", f"{ft['pct_fonte']}%", "✅ CONFORME" if ft["fonte_ok"] else "⚠️ DIFERENTE")
+                    with col2: st.metric("Tamanho 10pt", f"{ft['pct_tam']}%", "✅ CONFORME" if ft["tam_ok"] else "⚠️ DIFERENTE")
+                    if ft["tem_registro_historico"]:
+                        st.info("📋 **Tabela de REGISTRO HISTÓRICO detectada** — verifique fonte/tamanho")
+                else:
+                    st.info("Nenhuma tabela com texto detectada")
+                
+                st.markdown("---")
+                st.subheader("📊 TABELAS DO DOCUMENTO")
+                tb = r["tabelas"]
+                st.write(f"**Total de tabelas:** {tb['total']}")
+                st.success("✅ Tabela do Cabeçalho encontrada") if tb["tem_cabecalho"] else st.warning("⚠️ Tabela do Cabeçalho NÃO encontrada")
+                for tbinfo in tb["detalhes"]:
+                    tipo_doc = "📌 CABEÇALHO" if tbinfo["cab"] else "📋 REGISTRO HISTÓRICO" if tbinfo["hist"] else f"📊 Tabela {tbinfo['n']}"
+                    st.write(f"{tipo_doc}: {tbinfo['lin']} linhas × {tbinfo['col']} colunas")
+                
+                st.markdown("---")
+                st.subheader("📋 SEÇÕES")
+                for s in r["secoes_enc"]: st.success(f"✅ {s}")
+                if r["secoes_falt"]:
+                    for s in r["secoes_falt"]: st.error(f"❌ {s}")
+                else:
+                    st.success("✅ TODAS AS SEÇÕES ENCONTRADAS")
+                
+                st.markdown("---")
+                aprov = m["todas_ok"] and r["codigo"] and r["versao"] and not r["secoes_falt"]
+                if aprov:
+                    st.success("🎉 **DOCUMENTO APROVADO CONFORME NORMA ZERO!**")
+                else:
+                    st.warning("⚠️ **DOCUMENTO COM PENDÊNCIAS** — verifique os itens acima")
+                
+                dados_formatados = aplicar_margens(dados)
+                ficha_bytes = gerar_ficha(r["tipo"], r["codigo"], r["versao"], m, r["fonte"], tb, r["secoes_enc"], r["secoes_falt"], aprov)
+                
+                nome_doc = f"{r['codigo']}_Formatado.docx" if r['codigo'] else f"{arquivo.name.replace('.docx','')}_Formatado.docx"
+                nome_txt = f"Ficha_{r['codigo']}.txt" if r['codigo'] else f"Ficha_{arquivo.name.replace('.docx','')}.txt"
+                
+                st.download_button(f"📥 DOWNLOAD — {nome_doc}", dados_formatados, nome_doc, 
+                                  "application/vnd.openxmlformats-officedocument.wordprocessingml.document", key=f"doc_{idx}")
+                st.download_button(f"📄 DOWNLOAD — {nome_txt}", ficha_bytes, nome_txt, "text/plain", key=f"txt_{idx}")
+            
+            except Exception as e:
+                st.error(f"## ❌ ERRO em {arquivo.name}: {str(e)}")
+        
+        st.markdown("---")
+        st.markdown("---")
+    
+    # Resumo final para apresentar à coordenadora
+    st.markdown("## 📊 RESUMO GERAL — ECONOMIA DE TEMPO")
+    st.info(f"""
+    📄 **{qtd} documento(s) processado(s)**
+    
+    ⏱️ Tempo estimado de trabalho manual: **{formatar_tempo(tempo_manual)}**
+    ⚡ Tempo gasto com o Auditor: **{formatar_tempo(tempo_auditor)}**
+    ✅ **TEMPO ECONOMIZADO: {formatar_tempo(tempo_economizado)}** — Redução de aproximadamente **{round((tempo_economizado/tempo_manual)*100)}%** do tempo de trabalho.
+    
+    📌 Base de cálculo: ~{TEMPO_POR_DOC_MANUAL}min por documento (abrir → verificar → ajustar margens → corrigir fontes → conferir seções → salvar)
+    """)
