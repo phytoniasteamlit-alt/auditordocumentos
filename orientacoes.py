@@ -168,12 +168,13 @@ with st.form("interface_auditoria_e_formatador"):
 if enviado and arquivo_word:
     st.info(f"✅ Documento recebido: **{arquivo_word.name}**")
     
+    # Inicializa variáveis para controle de escopo seguro
+    rel = None
+    conteudo_arquivo = arquivo_word.read()
+    
     try:
-        # Carrega o documento original na memória
-        conteudo_arquivo = arquivo_word.read()
+        # Carrega o documento original na memória e roda a auditoria
         doc_original = docx.Document(BytesIO(conteudo_arquivo))
-        
-        # Executa a varredura e auditoria
         rel = auditar_documento(doc_original)
         
         st.markdown("---")
@@ -190,7 +191,7 @@ if enviado and arquivo_word:
             if rel['versao']:
                 st.success(f"**Versão Localizada:** {rel['versao']}")
             else:
-                st.error("**Versão:** ❌ NÃO ENTRADA NO CABEÇALHO")
+                st.error("**Versão:** ❌ NÃO ENCONTRADA NO CABEÇALHO")
             if rel['validade']:
                 st.info(f"**Validade:** {rel['validade']}")
             else:
@@ -214,7 +215,5 @@ if enviado and arquivo_word:
                     st.error(f"• {s}")
             else:
                 st.info("• Nenhuma seção ausente!")
-        
-        st.markdown("---")
-        
-        # Executa a correção do design estrutural e das regras ABNT
+                
+    except Exception as e:
