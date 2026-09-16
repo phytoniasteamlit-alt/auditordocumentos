@@ -29,16 +29,6 @@ LIMIAR_CONFORMIDADE = 70
 # 📋 SEÇÕES POR TIPO
 # ============================================================
 SECOES_POR_TIPO = {
-    "PROT": {
-        "obrigatorias": [
-            "OBJETIVO", "APLICAÇÃO", "REFERENCIAL TEÓRICO",
-            "CLASSIFICAÇÃO DAS CIRURGIAS POR POTENCIAL DE CONTAMINAÇÃO",
-            "FATORES DE RISCO", "BENEFÍCIOS E RISCOS", "PRINCÍPIOS GERAIS",
-            "CRITÉRIOS DE ELEGIBILIDADE", "ESQUEMA PADRÃO",
-            "ESQUEMAS POR TIPO DE CIRURGIA"
-        ],
-        "opcionais": ["APÊNDICES", "ANEXOS"]
-    },
     "POP": {
         "obrigatorias": [
             "DEFINIÇÃO", "APLICABILIDADE", "RESPONSÁVEL PELA EXECUÇÃO",
@@ -61,6 +51,23 @@ SECOES_POR_TIPO = {
         ],
         "opcionais": ["ANEXOS"]
     },
+    "PLAN": {
+        "obrigatorias": [
+            "OBJETIVO", "APLICABILIDADE", "DEFINIÇÃO DE TERMOS",
+            "IDENTIFICAÇÃO DE RISCO ATUAL", "MEDIDAS DE CONTINGÊNCIA", "REFERÊNCIAS"
+        ],
+        "opcionais": ["APÊNDICES", "ANEXOS"]
+    },
+    "PROT": {
+        "obrigatorias": [
+            "OBJETIVO", "APLICAÇÃO", "REFERENCIAL TEÓRICO",
+            "CLASSIFICAÇÃO DAS CIRURGIAS POR POTENCIAL DE CONTAMINAÇÃO",
+            "FATORES DE RISCO", "BENEFÍCIOS E RISCOS", "PRINCÍPIOS GERAIS",
+            "CRITÉRIOS DE ELEGIBILIDADE", "ESQUEMA PADRÃO",
+            "ESQUEMAS POR TIPO DE CIRURGIA"
+        ],
+        "opcionais": ["APÊNDICES", "ANEXOS"]
+    },
     "REG": {
         "obrigatorias": [
             "DA FINALIDADE", "DA COMPOSIÇÃO — MEMBROS", "DO MANDATO",
@@ -73,13 +80,6 @@ SECOES_POR_TIPO = {
             "REFERENCIAL TEÓRICO", "PADRONIZAÇÃO DE ROTINAS",
             "ESTRATÉGIAS DE MONITORAMENTO", "DESCRIÇÃO DO PROGRAMA",
             "MEDIDAS EDUCACIONAIS", "REFERÊNCIAS"
-        ],
-        "opcionais": ["APÊNDICES", "ANEXOS"]
-    },
-    "PLAN": {
-        "obrigatorias": [
-            "OBJETIVO", "APLICABILIDADE", "DEFINIÇÃO DE TERMOS",
-            "IDENTIFICAÇÃO DE RISCO ATUAL", "MEDIDAS DE CONTINGÊNCIA", "REFERÊNCIAS"
         ],
         "opcionais": ["APÊNDICES", "ANEXOS"]
     },
@@ -119,94 +119,164 @@ def formatar_tempo(minutos_total):
 def calcular_pct(ok, total):
     return round((ok / total * 100), 1) if total > 0 else 100
 
-def detectar_pelo_nome(nome_arquivo):
-    """Detecta tipo pelo nome do arquivo — MAIOR PRIORIDADE"""
-    nl = limpar_texto(nome_arquivo)
+# ✅ Extrair do NOME do arquivo (sugestão)
+def extrair_do_nome(nome_arquivo):
+    dados = {"tipo": None, "codigo": None, "versao": None}
+    nome_limpo = limpar_texto(nome_arquivo)
+
     mapeia_nome = [
-        ("POP", r'\bPOP\b'),
-        ("POI", r'\bPOI\b|\bPOLITICA\b'),
-        ("NOR", r'\bNOR\b|\bNORMA\b'),
-        ("PLAN", r'\bPLAN\b|\bPLANO\b'),
-        ("PROT", r'\bPROT\b|\bPROTOCOLO\b'),
-        ("REG", r'\bREG\b|\bREGIMENTO\b'),
-        ("PROG", r'\bPROG\b|\bPROGRAMA\b'),
-        ("ROT", r'\bROT\b|\bROTINA\b'),
-        ("MAN", r'\bMAN\b|\bMANUAL\b'),
+        ("POP", r'\bPOP\b'), ("POI", r'\bPOI\b'), ("NOR", r'\bNOR\b'),
+        ("PLAN", r'\bPLAN\b'), ("PROT", r'\bPROT\b'), ("REG", r'\bREG\b'),
+        ("PROG", r'\bPROG\b'), ("ROT", r'\bROT\b'), ("MAN", r'\bMAN\b'),
     ]
     for t, p in mapeia_nome:
-        if re.search(p, nl):
-            return t
-    return None
+        if re.search(p, nome_limpo):
+            dados["tipo"] = t
+            break
+
+    m = re.search(r'\b([A-Z]{2,}\d+)\b', nome_limpo)
+    if m: dados["codigo"] = m.group(1)
+
+    padroes_ver = [r'(\d+[ºª]\s*(?:[a-zA-ZÀ-ÿ\s]+)?)', r'V(\d+(?:[.\-]\d+)*)',
+                   r'VERS[AO]?\s*(\d+(?:[.\-]\d+)*)', r'(\d+)\s*[ªº]']
+    for p in padroes_ver:
+        m = re.search(p, nome_arquivo.upper())
+        if m:
+            dados["versao"] = m.group(1).strip()
+            break
+    return dados
+
+# ✅ Extrair de QUALQUER texto (cabeçalho, corpo, rodapé)
+def extrair_de_texto(texto):
+    dados = {"codigo": None, "versao": None}
+    if not texto: return dados
+    tx_upper = texto.upper()
+
+    m = re.search(r'C[ÓO]DIGO\s*[:：=\-]?\s*([A-Z0-9_\-\/\.]+)', tx_upper)
+    if m: dados["codigo"] = m.group(1).strip()
+
+    m = re.search(r'VERS[AÃ]O\s*[:：=\-]?\s*(\d+[ºª]?\d*[ºª]?|\d+(?:[.\-]\d+)*)', tx_upper)
+    if m: dados["versao"] = m.group(1).strip()
+
+    m = re.search(r'VERSÃO\s*(\d+[ºª])', texto)
+    if m and not dados["versao"]:
+        dados["versao"] = m.group(1).strip()
+
+    return dados
+
+# ✅ LER TODO O CONTEÚDO: CABEÇALHO + CORPO + TABELAS + RODAPÉ
+def ler_conteudo_completo(doc):
+    texto_completo = ""
+    dados_encontrados = {"codigo": None, "versao": None}
+
+    # 🔴 CABEÇALHO — PRIORIDADE MÁXIMA!
+    for secao in doc.sections:
+        cab = secao.header
+        for paragrafo in cab.paragraphs:
+            texto_completo += paragrafo.text + " "
+            d = extrair_de_texto(paragrafo.text)
+            if d["codigo"] and not dados_encontrados["codigo"]:
+                dados_encontrados["codigo"] = d["codigo"]
+            if d["versao"] and not dados_encontrados["versao"]:
+                dados_encontrados["versao"] = d["versao"]
+        for tabela in cab.tables:
+            for linha in tabela.rows:
+                texto_cel = " ".join([cel.text for cel in linha.cells])
+                texto_completo += texto_cel + " "
+                d = extrair_de_texto(texto_cel)
+                if d["codigo"] and not dados_encontrados["codigo"]:
+                    dados_encontrados["codigo"] = d["codigo"]
+                if d["versao"] and not dados_encontrados["versao"]:
+                    dados_encontrados["versao"] = d["versao"]
+
+    # 🟡 CORPO — PARÁGRAFOS
+    for p in doc.paragraphs:
+        texto_completo += p.text + " "
+        d = extrair_de_texto(p.text)
+        if d["codigo"] and not dados_encontrados["codigo"]:
+            dados_encontrados["codigo"] = d["codigo"]
+        if d["versao"] and not dados_encontrados["versao"]:
+            dados_encontrados["versao"] = d["versao"]
+
+    # 🟡 TABELAS DO CORPO
+    for tb in doc.tables:
+        for ln in tb.rows:
+            texto_cel = " ".join([cel.text for cel in ln.cells])
+            texto_completo += texto_cel + " "
+            d = extrair_de_texto(texto_cel)
+            if d["codigo"] and not dados_encontrados["codigo"]:
+                dados_encontrados["codigo"] = d["codigo"]
+            if d["versao"] and not dados_encontrados["versao"]:
+                dados_encontrados["versao"] = d["versao"]
+
+    # 🟢 RODAPÉ
+    for secao in doc.sections:
+        rod = secao.footer
+        for paragrafo in rod.paragraphs:
+            texto_completo += paragrafo.text + " "
+            d = extrair_de_texto(paragrafo.text)
+            if d["codigo"] and not dados_encontrados["codigo"]:
+                dados_encontrados["codigo"] = d["codigo"]
+            if d["versao"] and not dados_encontrados["versao"]:
+                dados_encontrados["versao"] = d["versao"]
+        for tabela in rod.tables:
+            for linha in tabela.rows:
+                texto_cel = " ".join([cel.text for cel in linha.cells])
+                texto_completo += texto_cel + " "
+                d = extrair_de_texto(texto_cel)
+                if d["codigo"] and not dados_encontrados["codigo"]:
+                    dados_encontrados["codigo"] = d["codigo"]
+                if d["versao"] and not dados_encontrados["versao"]:
+                    dados_encontrados["versao"] = d["versao"]
+
+    return texto_completo, dados_encontrados
 
 # ============================================================
 # ✍️ VERIFICAR FONTE
 # ============================================================
 def verificar_fonte(doc):
-    cont_corpo = {"total":0, "fonte_ok":0, "tam_ok":0, "fontes":{}, "tams":{}}
+    cont = {"total":0, "fonte_ok":0, "tam_ok":0, "fontes":{}, "tams":{}}
+    def cont_run(run, fonte_padrao, tam_padrao):
+        nonlocal cont
+        cont["total"] += 1
+        nome = run.font.name or fonte_padrao
+        tam_pt = round(run.font.size.pt,1) if run.font.size else tam_padrao
+        cont["fontes"][nome] = cont["fontes"].get(nome,0)+1
+        cont["tams"][tam_pt] = cont["tams"].get(tam_pt,0)+1
+        if nome == fonte_padrao: cont["fonte_ok"] += 1
+        if tam_pt == tam_padrao: cont["tam_ok"] += 1
+
+    for secao in doc.sections:
+        for p in secao.header.paragraphs:
+            for r in p.runs: cont_run(r, FONTE_CORPO, TAMANHO_CORPO)
+        for p in secao.footer.paragraphs:
+            for r in p.runs: cont_run(r, FONTE_CORPO, TAMANHO_CORPO)
+
     for p in doc.paragraphs:
-        for run in p.runs:
-            cont_corpo["total"] += 1
-            nome = run.font.name or FONTE_CORPO
-            tam_pt = round(run.font.size.pt,1) if run.font.size else TAMANHO_CORPO
-            cont_corpo["fontes"][nome] = cont_corpo["fontes"].get(nome,0)+1
-            cont_corpo["tams"][tam_pt] = cont_corpo["tams"].get(tam_pt,0)+1
-            if nome == FONTE_CORPO: cont_corpo["fonte_ok"] += 1
-            if tam_pt == TAMANHO_CORPO: cont_corpo["tam_ok"] += 1
+        for r in p.runs: cont_run(r, FONTE_CORPO, TAMANHO_CORPO)
     for tb in doc.tables:
         for ln in tb.rows:
             for cel in ln.cells:
                 for p in cel.paragraphs:
-                    for run in p.runs:
-                        cont_corpo["total"] += 1
-                        nome = run.font.name or FONTE_TABELAS
-                        tam_pt = round(run.font.size.pt,1) if run.font.size else TAMANHO_TABELAS
-                        cont_corpo["fontes"][nome] = cont_corpo["fontes"].get(nome,0)+1
-                        cont_corpo["tams"][tam_pt] = cont_corpo["tams"].get(tam_pt,0)+1
-                        if nome == FONTE_TABELAS: cont_corpo["fonte_ok"] += 1
-                        if tam_pt == TAMANHO_TABELAS: cont_corpo["tam_ok"] += 1
-    pct_f = calcular_pct(cont_corpo["fonte_ok"], cont_corpo["total"])
-    pct_t = calcular_pct(cont_corpo["tam_ok"], cont_corpo["total"])
+                    for r in p.runs: cont_run(r, FONTE_TABELAS, TAMANHO_TABELAS)
+
+    pct_f = calcular_pct(cont["fonte_ok"], cont["total"])
+    pct_t = calcular_pct(cont["tam_ok"], cont["total"])
     return {
-        "corpo": {
-            "fontes": cont_corpo["fontes"], "tamanhos": cont_corpo["tams"],
-            "pct_fonte": pct_f, "pct_tam": pct_t,
-            "fonte_ok": pct_f >= LIMIAR_CONFORMIDADE,
-            "tam_ok": pct_t >= LIMIAR_CONFORMIDADE,
-        }
+        "fontes": cont["fontes"], "tamanhos": cont["tams"],
+        "pct_fonte": pct_f, "pct_tam": pct_t,
+        "fonte_ok": pct_f >= LIMIAR_CONFORMIDADE,
+        "tam_ok": pct_t >= LIMIAR_CONFORMIDADE,
     }
 
 # ============================================================
-# 🔍 ESCANEAR DOCUMENTO — ORDEM DE DETECÇÃO CORRIGIDA
+# 🔍 ESCANEAR
 # ============================================================
 def escanear(doc_bytes):
     doc = docx.Document(BytesIO(doc_bytes))
-    texto_completo = ""
-    codigo = versao = None
-
-    for tb in doc.tables:
-        for ln in tb.rows:
-            tx = " ".join([cel.text for cel in ln.cells])
-            texto_completo += tx + " "
-            if not codigo:
-                m = re.search(r'C[ÓO]DIGO\s*[:：=\-]?\s*([A-Z0-9_\-\/\.]+)', tx.upper())
-                if m: codigo = m.group(1).strip()
-            if not versao:
-                m = re.search(r'VERS[AÃ]O\s*[:：=\-]?\s*(\d+(?:[.\-]\d+)*)', tx.upper())
-                if m: versao = m.group(1).strip()
-
-    for p in doc.paragraphs:
-        texto_completo += p.text + " "
-        txu = p.text.upper()
-        if not codigo:
-            m = re.search(r'C[ÓO]DIGO\s*[:：=\-]?\s*([A-Z0-9_\-\/\.]+)', txu)
-            if m: codigo = m.group(1).strip()
-        if not versao:
-            m = re.search(r'VERS[AÃ]O\s*[:：=\-]?\s*(\d+(?:[.\-]\d+)*)', txu)
-            if m: versao = m.group(1).strip()
-
+    texto_completo, dados_doc = ler_conteudo_completo(doc)
     texto_limpo = limpar_texto(texto_completo)
 
-    # ✅ ORDEM DE PRIORIDADE CORRIGIDA — POP ANTES DE PLAN!
     tipo = "PROT"
     mapeamento = [
         ("POP", r'\bPOP\b|\bPROCEDIMENTO OPERACIONAL\b'),
@@ -224,17 +294,19 @@ def escanear(doc_bytes):
             tipo = t
             break
 
-    secoes_tipo = SECOES_POR_TIPO.get(tipo, SECOES_POR_TIPO["PROT"])
+    secoes = SECOES_POR_TIPO.get(tipo, SECOES_POR_TIPO["PROT"])
     obr_enc, obr_falt, opc_enc, opc_falt = [], [], [], []
-    for s in secoes_tipo["obrigatorias"]:
+    for s in secoes["obrigatorias"]:
         if limpar_texto(s) in texto_limpo: obr_enc.append(s)
         else: obr_falt.append(s)
-    for s in secoes_tipo["opcionais"]:
+    for s in secoes["opcionais"]:
         if limpar_texto(s) in texto_limpo: opc_enc.append(s)
         else: opc_falt.append(s)
 
     return {
-        "tipo": tipo, "codigo": codigo, "versao": versao,
+        "tipo": tipo,
+        "codigo_doc": dados_doc["codigo"],   # Do cabeçalho ✅
+        "versao_doc": dados_doc["versao"],   # Do cabeçalho ✅
         "fonte": verificar_fonte(doc),
         "secoes_obrig_enc": obr_enc, "secoes_obrig_falt": obr_falt,
         "secoes_opc_enc": opc_enc, "secoes_opc_falt": opc_falt,
@@ -261,99 +333,65 @@ def aplicar_margens(doc_bytes):
 # ============================================================
 # 📄 GERAR FICHA
 # ============================================================
-def gerar_ficha_verificacao(nome_arq, tipo, cod, ver, fonte_ok, secoes_dados, itens_manuais):
+def gerar_ficha(nome_arq, tipo, cod, ver, fonte_ok, secoes_dados, itens):
     obr_enc, obr_falt, opc_enc, opc_falt = secoes_dados
-    status_final = "✅ SIM" if (fonte_ok and len(obr_falt)==0 and all(itens_manuais.values())) else "⚠️ COM PENDÊNCIAS"
-    ficha = f"""
+    status = "✅ SIM" if (fonte_ok and len(obr_falt)==0 and all(itens.values())) else "⚠️ COM PENDÊNCIAS"
+    return f"""
 ==================================================
-          FICHA DE VERIFICAÇÃO — AUDITOR NAQH NMZ
+          FICHA DE VERIFICAÇÃO — NAQH NMZ
 ==================================================
 Arquivo: {nome_arq}
-Tipo de Documento: {tipo}
---------------------------------------------------
-DADOS DE IDENTIFICAÇÃO
+Tipo: {tipo}
 --------------------------------------------------
 Código:     {cod or 'NÃO INFORMADO'}
 Versão:     {ver or 'NÃO INFORMADO'}
 --------------------------------------------------
-CONFORMIDADE TÉCNICA — NORMA ZERO
+MARGENS: {MARGEM_ESQ_ESPERADA}/{MARGEM_DIR_ESPERADA}/{MARGEM_SUP_ESPERADA}/{MARGEM_INF_ESPERADA} cm ✅
+FONTE: {FONTE_CORPO} {TAMANHO_CORPO}pt / {FONTE_TABELAS} {TAMANHO_TABELAS}pt → {'✅' if fonte_ok else '❌'}
 --------------------------------------------------
-MARGENS (Sup {MARGEM_SUP_ESPERADA} / Inf {MARGEM_INF_ESPERADA} / Esq {MARGEM_ESQ_ESPERADA} / Dir {MARGEM_DIR_ESPERADA} cm): ✅ APLICADAS NO DOWNLOAD
-FONTE ({FONTE_CORPO} {TAMANHO_CORPO}pt / {FONTE_TABELAS} {TAMANHO_TABELAS}pt): {'✅ CONFORME' if fonte_ok else '❌ NÃO CONFORME'}
+CABEÇALHO CONFERIDO
 --------------------------------------------------
-CONFERÊNCIA MANUAL — CABEÇALHO
+""" + "\n".join(f"{k}: {'✅' if v else '❌'}" for k,v in itens.items()) + f"""
 --------------------------------------------------
-"""
-    for item, ok in itens_manuais.items():
-        ficha += f"{item}: {'✅ CONFERIDO' if ok else '❌ NÃO CONFERIDO'}\n"
-    ficha += f"""
+SEÇÕES OBRIGATÓRIAS: {len(obr_enc)}/{len(obr_enc)+len(obr_falt)}
 --------------------------------------------------
-SEÇÕES DO DOCUMENTO
+""" + "\n".join(f"✅ {s}" for s in obr_enc) + "\n".join(f"❌ {s}" for s in obr_falt) + f"""
 --------------------------------------------------
-Obrigatórias encontradas: {len(obr_enc)} / {len(obr_enc)+len(obr_falt)}
-Obrigatórias faltantes:   {len(obr_falt)}
-Opcionais encontradas:    {len(opc_enc)} / {len(opc_enc)+len(opc_falt)}
---------------------------------------------------
-RESULTADO FINAL
---------------------------------------------------
-APROVADO CONFORME NORMA ZERO: {status_final}
+APROVADO: {status}
 ==================================================
 Ezequias Santos — Agente Administrativo
-Auditor NAQH NMZ
 ==================================================
-"""
-    return ficha.encode('utf-8')
+""".encode('utf-8')
 
 # ============================================================
-# 🚀 INTERFACE PRINCIPAL
+# 🚀 INTERFACE
 # ============================================================
 st.markdown("""
     <style>
-    .header-container{{display:flex;justify-content:space-between;align-items:center;background:#0F172A;padding:15px 25px;border-radius:12px;margin-bottom:20px}}
-    .header-text h1{{color:#FFF;margin:0;font-size:28px}}
-    .header-text p{{color:#94A3B8;margin:5px 0 0 0}}
-    .header-emoji{{font-size:50px}}
-    .relogio-box{{background:linear-gradient(135deg,#0F766E,#14B8A6);padding:20px 25px;border-radius:12px;color:#FFF;margin:15px 0}}
-    .economia-grande{{font-size:32px;font-weight:bold}}
-    .base-tempo{{background:#1E293B;padding:12px 18px;border-radius:8px;color:#CBD5E1;font-size:13px;margin-top:8px}}
+    .header{{display:flex;gap:20px;background:#0F172A;padding:20px;border-radius:12px;margin-bottom:20px}}
+    .header h1{{color:#FFF;margin:0}}
+    .relogio{{background:linear-gradient(135deg,#0F766E,#14B8A6);padding:20px;border-radius:12px;color:#FFF;margin:15px 0}}
+    .destaque{{color:#10B981;font-weight:bold}}
     </style>
 """, unsafe_allow_html=True)
 
-st.markdown(f"""
-    <div class="header-container">
-        <div class="header-text">
-            <h1>AUDITOR NAQH NMZ DE ALTA PRECISÃO</h1>
-            <p>Ezequias Santos — Agente Administrativo | Margens: Esq {MARGEM_ESQ_ESPERADA} / Dir {MARGEM_DIR_ESPERADA} / Sup {MARGEM_SUP_ESPERADA} / Inf {MARGEM_INF_ESPERADA} cm • Calibri {TAMANHO_CORPO} / {TAMANHO_TABELAS}</p>
-        </div>
-        <div class="header-emoji">👨‍💻</div>
-    </div>
+st.markdown("""
+<div class="header">
+    <div><h1>👨‍💻 AUDITOR NAQH NMZ DE ALTA PRECISÃO</h1>
+    <p style="color:#94A3B8;margin:5px 0 0 0;">Leitura de Cabeçalho + Corpo + Rodapé ativada</p></div>
+</div>
 """, unsafe_allow_html=True)
 
 arquivos = st.file_uploader("📂 Envie o(s) documento(s) (.docx)", type=["docx"], accept_multiple_files=True)
 
 if arquivos:
     qtd = len(arquivos)
-    tempo_manual = qtd * TEMPO_POR_DOC_MANUAL
-    tempo_auditor = qtd * TEMPO_POR_DOC_AUTOMATICO
-    tempo_economizado = tempo_manual - tempo_auditor
-
     st.markdown(f"""
-    <div class="relogio-box">
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-            <div><h3 style="margin:0">⏱️ ECONOMIA DE TEMPO</h3><p style="margin:5px 0 0 0;opacity:0.9;">{qtd} documento(s)</p></div>
-            <div class="economia-grande">{formatar_tempo(tempo_economizado)}</div>
-        </div>
-        <div style="display:flex;gap:30px;margin-top:12px;font-size:14px;">
-            <span>📝 Manual: <b>{formatar_tempo(tempo_manual)}</b></span>
-            <span>⚡ Auditor: <b>{formatar_tempo(tempo_auditor)}</b></span>
-            <span>✅ Redução: <b>{round((tempo_economizado/tempo_manual)*100)}%</b></span>
-        </div>
-    </div>
-    <div class="base-tempo">
-        📌 Base: ~{TEMPO_POR_DOC_MANUAL}min/doc manualmente vs ~{TEMPO_POR_DOC_AUTOMATICO}min com o Auditor
+    <div class="relogio">
+    ⏱️ ECONOMIA DE TEMPO — {qtd} documento(s)<br>
+    📝 Manual: {qtd*TEMPO_POR_DOC_MANUAL}min | ⚡ Auditor: {qtd*TEMPO_POR_DOC_AUTOMATICO}min
     </div>
     """, unsafe_allow_html=True)
-
     st.markdown("---")
 
     for idx, arq in enumerate(arquivos, 1):
@@ -361,89 +399,104 @@ if arquivos:
         try:
             dados = arq.read()
             r = escanear(dados)
+            nome = extrair_do_nome(arq.name)
 
-            # ✅ PRIORIDADE: detectar pelo NOME do arquivo
-            tipo_nome = detectar_pelo_nome(arq.name)
-            if tipo_nome:
-                r["tipo"] = tipo_nome
-                st.success(f"✅ Tipo definido pelo nome do arquivo: **{tipo_nome}**")
+            # PRIORIDADE: Nome → Cabeçalho → Corpo
+            tipo_final = nome["tipo"] or r["tipo"]
+            if nome["tipo"]:
+                st.success(f"✅ Tipo pelo nome: **{tipo_final}**")
+            else:
+                st.info(f"ℹ️ Tipo pelo conteúdo: **{tipo_final}**")
 
-            st.markdown("### 📋 DADOS DO DOCUMENTO")
-            c1, c2 = st.columns(2)
-            with c1:
-                st.info(f"**Tipo Detectado:** {r['tipo']}")
+            st.markdown("### 📋 DADOS DETECTADOS")
 
-            with c2:
-                codigo_final = st.text_input("**CÓDIGO**", value=r['codigo'] or "",
-                    placeholder="Digite o código aqui", key=f"cod{idx}")
-                if r['codigo']: st.success(f"✅ Detectado: {r['codigo']}")
-                elif codigo_final: st.info("✍️ Digitado manualmente")
-                else: st.warning("⚠️ Não detectado — digite acima")
+            # CÓDIGO
+            fonte_cod = []
+            if nome["codigo"]: fonte_cod.append(f"Nome: {nome['codigo']}")
+            if r["codigo_doc"]: fonte_cod.append(f"Cabeçalho: {r['codigo_doc']}")
+            valor_cod = r["codigo_doc"] or nome["codigo"] or ""
+            codigo_final = st.text_input("**CÓDIGO**", value=valor_cod,
+                placeholder="Digite o código", key=f"cod{idx}")
+            if fonte_cod:
+                st.info(f"📰 Fontes: {' | '.join(fonte_cod)}")
 
-            versao_final = st.text_input("**VERSÃO / SÉRIE**", value=r['versao'] or "",
-                placeholder="Digite a versão/série aqui", key=f"ver{idx}")
-            if r['versao']: st.success(f"✅ Detectado: {r['versao']}")
-            elif versao_final: st.info("✍️ Digitado manualmente")
-            else: st.warning("⚠️ Não detectado — digite acima")
+            # VERSÃO — AGORA LÊ DO CABEÇALHO PRIMEIRO ✅
+            fonte_ver = []
+            if r["versao_doc"]: fonte_ver.append(f"**Cabeçalho: {r['versao_doc']}** ✅")
+            if nome["versao"]: fonte_ver.append(f"Nome: {nome['versao']}")
+            valor_ver = r["versao_doc"] or nome["versao"] or ""
+            versao_final = st.text_input("**VERSÃO / SÉRIE**", value=valor_ver,
+                placeholder="Digite a versão", key=f"ver{idx}")
+            if fonte_ver:
+                st.info(f"📰 Fontes: {' | '.join(fonte_ver)}")
 
             st.markdown("---")
-            st.info(f"📏 **MARGENS NORMA ZERO:** Serão aplicadas ao baixar ✅")
-            st.markdown("---")
 
+            # FONTE
+            f = r["fonte"]
             st.markdown(f"### ✍️ FONTE — {FONTE_CORPO} {TAMANHO_CORPO}pt / {FONTE_TABELAS} {TAMANHO_TABELAS}pt")
-            f = r["fonte"]["corpo"]
-            st.write("Fontes:", ", ".join(f"{n} ({q})" for n,q in f["fontes"].items()) or "Nenhuma")
-            st.write("Tamanhos:", ", ".join(f"{t}pt ({q})" for t,q in f["tamanhos"].items()) or "Nenhum")
+            st.write("Fontes:", ", ".join(f"{n} ({q})" for n,q in f["fontes"].items()))
+            st.write("Tamanhos:", ", ".join(f"{t}pt ({q})" for t,q in f["tamanhos"].items()))
             fonte_ok = f["fonte_ok"] and f["tam_ok"]
             st.metric("Conformidade", f"{f['pct_fonte']}%", "✅" if fonte_ok else "❌")
+
             st.markdown("---")
 
+            # CONFERÊNCIA MANUAL
             st.markdown("### ✅ CONFERÊNCIA MANUAL — CABEÇALHO")
-            st.info("💡 Confira e marque:")
-            itens_cabecalho = {
+            itens = {
                 "Cabeçalho padrão": st.checkbox("✅ Cabeçalho", key=f"cab{idx}"),
                 "Número de páginas": st.checkbox("✅ Páginas", key=f"pag{idx}"),
-                "Versão/Série no cabeçalho": st.checkbox("✅ Versão", key=f"verif{idx}"),
+                "Versão/Série no cabeçalho": st.checkbox("✅ Versão no cabeçalho", key=f"verif{idx}"),
                 "Logo do Hospital": st.checkbox("✅ Logo", key=f"logo{idx}"),
                 "Marca d'água": st.checkbox("✅ Marca d'água", key=f"marca{idx}"),
             }
+
             st.markdown("---")
 
-            st.markdown(f"### 📑 SEÇÕES — Tipo: {r['tipo']}")
-            st.info("💡 Apêndices e Anexos são OPCIONAIS")
-            secoes_usuario_ok = True
-            st.markdown("**🔴 Obrigatórias:**")
-            for s in r["secoes_obrig_enc"]: st.success(f"✅ {s}")
-            for s in r["secoes_obrig_falt"]:
-                marc = st.checkbox(f"⚠️ {s} — Não detectado (marque se encontrou)",
-                                   key=f"obr_falt_{idx}_{limpar_texto(s)}")
-                if not marc: secoes_usuario_ok = False
-            if r["secoes_opc_enc"] or r["secoes_opc_falt"]:
+            # SEÇÕES
+            st.markdown(f"### 📑 SEÇÕES — Tipo: {tipo_final}")
+            secoes = SECOES_POR_TIPO[tipo_final]
+            obr_enc, obr_falt, opc_enc, opc_falt = [], [], [], []
+            tx_limpo = ler_conteudo_completo(docx.Document(BytesIO(dados)))[0]
+            tx_limpo = limpar_texto(tx_limpo)
+            for s in secoes["obrigatorias"]:
+                if limpar_texto(s) in tx_limpo: obr_enc.append(s)
+                else: obr_falt.append(s)
+            for s in secoes["opcionais"]:
+                if limpar_texto(s) in tx_limpo: opc_enc.append(s)
+                else: opc_falt.append(s)
+
+            for s in obr_enc: st.success(f"✅ {s}")
+            secoes_ok = True
+            for s in obr_falt:
+                marc = st.checkbox(f"⚠️ {s} — Marque se encontrou", key=f"sf{idx}{limpar_texto(s)}")
+                if not marc: secoes_ok = False
+            if opc_enc:
                 st.markdown("**🟡 Opcionais:**")
-                for s in r["secoes_opc_enc"]: st.info(f"🟡 {s} — Presente")
-                for s in r["secoes_opc_falt"]: st.info(f"🟡 {s} — Opcional, sem problema")
+                for s in opc_enc: st.info(f"🟡 {s}")
 
             st.markdown("---")
-            cabecalho_ok = all(itens_cabecalho.values())
-            aprov = bool(codigo_final and versao_final and secoes_usuario_ok and cabecalho_ok and fonte_ok)
-            if aprov: st.success("✅ APROVADO CONFORME NORMA ZERO")
-            else: st.warning("⚠️ COM PENDÊNCIAS — verifique itens acima")
 
+            cab_ok = all(itens.values())
+            aprov = bool(codigo_final and versao_final and secoes_ok and cab_ok and fonte_ok)
+            if aprov: st.success("✅ APROVADO CONFORME NORMA ZERO")
+            else: st.warning("⚠️ COM PENDÊNCIAS")
+
+            # DOWNLOADS
             cod_nome = re.sub(r'[<>:"/\\|?*º°]', '-', codigo_final.strip()) if codigo_final else "DOC"
             ver_nome = re.sub(r'[<>:"/\\|?*º°]', '_', versao_final.strip()) if versao_final else "0"
-            nome_base = f"{cod_nome}_v{ver_nome}"
+            base = f"{cod_nome}_v{ver_nome}"
 
-            dados_format = aplicar_margens(dados)
-            st.download_button(f"📥 BAIXAR: {nome_base}.docx", dados_format,
-                f"{nome_base}.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                key=f"dl_doc_{idx}", type="primary")
+            doc_ok = aplicar_margens(dados)
+            st.download_button(f"📥 BAIXAR: {base}.docx", doc_ok,
+                f"{base}.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                key=f"dl{idx}", type="primary")
 
-            ficha = gerar_ficha_verificacao(arq.name, r['tipo'], codigo_final, versao_final,
-                fonte_ok, (r["secoes_obrig_enc"], r["secoes_obrig_falt"], r["secoes_opc_enc"], r["secoes_opc_falt"]),
-                itens_cabecalho)
-            st.download_button(f"📋 BAIXAR FICHA: {nome_base}_FICHA.txt", ficha,
-                f"{nome_base}_FICHA.txt", "text/plain", key=f"dl_ficha_{idx}")
+            ficha = gerar_ficha(arq.name, tipo_final, codigo_final, versao_final,
+                fonte_ok, (obr_enc, obr_falt, opc_enc, opc_falt), itens)
+            st.download_button(f"📋 BAIXAR FICHA", ficha, f"{base}_FICHA.txt", key=f"ficha{idx}")
 
         except Exception as e:
-            st.error(f"❌ Erro ao processar {arq.name}: {str(e)}")
+            st.error(f"❌ Erro: {str(e)}")
         st.markdown("---")
